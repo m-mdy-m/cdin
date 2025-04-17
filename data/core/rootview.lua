@@ -214,6 +214,18 @@ function Node:get_tab_overlapping_point(px, py)
   end
 end
 
+function Node:get_tab_close_overlapping_point(px, py)
+  if #self.views == 1 then return nil end
+  for i, _ in ipairs(self.views) do
+    local x, y, w, h = self:get_tab_rect(i)
+    local close_x = x + w - style.padding.x - style.font:get_width("x")
+    local close_w = style.font:get_width("x")
+    if px >= close_x and py >= y and px < close_x + close_w and py < y + h then
+      return i
+    end
+  end
+  return nil
+end
 
 function Node:get_child_overlapping_point(x, y)
   local child
@@ -350,8 +362,17 @@ function Node:draw_tabs()
     end
     core.push_clip_rect(x, y, w, h)
     x, w = x + style.padding.x, w - style.padding.x * 2
-    local align = style.font:get_width(text) > w and "left" or "center"
-    common.draw_text(style.font, color, text, align, x, y, w, h)
+    local close_w = style.font:get_width("x")
+    local text_w = style.font:get_width(text)
+    local available_w = w - close_w - style.padding.x
+
+    -- نمایش متن تب
+    local align = text_w > available_w and "left" or "center"
+    common.draw_text(style.font, color, text, align, x, y, available_w, h)
+
+    -- نمایش دکمه X
+    local close_x = x + w - close_w
+    common.draw_text(style.font, color, "x", "right", close_x, y, close_w, h)
     core.pop_clip_rect()
   end
 
@@ -425,6 +446,15 @@ function RootView:on_mouse_pressed(button, x, y, clicks)
     return
   end
   local node = self.root_node:get_child_overlapping_point(x, y)
+
+  local close_idx = node:get_tab_close_overlapping_point(x, y)
+  if close_idx then
+    -- ابتدا تب را فعال کرده و سپس آن را می‌بندیم
+    node:set_active_view(node.views[close_idx])
+    node:close_active_view(self.root_node)
+    return
+  end
+
   local idx = node:get_tab_overlapping_point(x, y)
   if idx then
     node:set_active_view(node.views[idx])
