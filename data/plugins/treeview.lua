@@ -7,7 +7,7 @@ local style = require "core.style"
 local View = require "core.view"
 
 config.treeview_size = 200 * SCALE
-
+config.show_hidden_files = false 
 local function get_depth(filename)
   local n = 0
   for sep in filename:gmatch("[\\/]") do
@@ -63,7 +63,6 @@ function TreeView:check_cache()
   end
 end
 
-
 function TreeView:each_item()
   return coroutine.wrap(function()
     self:check_cache()
@@ -97,7 +96,6 @@ function TreeView:each_item()
     end
   end)
 end
-
 
 function TreeView:on_mouse_moved(px, py)
   self.hovered_item = nil
