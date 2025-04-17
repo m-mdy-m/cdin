@@ -1,41 +1,9 @@
-# lite
-![screenshot](https://user-images.githubusercontent.com/3920290/81471642-6c165880-91ea-11ea-8cd1-fae7ae8f0bc4.png)
+this is my personal fork of rxi’s lite, slimmed down to the bare essentials and rid of all the crap I don’t need. poof.   
 
-A lightweight text editor written in Lua
+UI and UX are getting a makeover too. gone are the old-school menus and awkward workflows, in comes a slick, vscode‑ish vibe complete with smooth animations and a modern feel. yet underneath it’s still just a text editor—no bullshit IDE baggage, no endless background daemons chewing CPU. it looks familiar enough to give you that vscode comfort, but without all the endless loading screens and performance hits that always make me want to throw my laptop out the window.  
 
-* **[Get lite](https://github.com/rxi/lite/releases/latest)** — Download
-  for Windows and Linux
-* **[Get started](doc/usage.md)** — A quick overview on how to get started
-* **[Get plugins](https://github.com/rxi/lite-plugins)** — Add additional
-  functionality
-* **[Get color themes](https://github.com/rxi/lite-colors)** — Add additional colors
-  themes
+why? because i’m sick of paying for every new feature in these bloated beasts. i just want to write code, plain and simple. damn right it’s overkill when half your CPU is wasted on indexing shit you’ll never use.  
 
-## Overview
-lite is a lightweight text editor written mostly in Lua — it aims to provide
-something practical, pretty, *small* and fast, implemented as simply as
-possible; easy to modify and extend, or to use without doing either.
+as it stands now nothing’s been touched—this is just the starting line. coming soon: my custom plugins, tweaks, and maybe a theme or two. if you’re into lightweight editors with a bit of modern flair, feel free to grab it and run with it. otherwise, keep using your fancy-pants bloated monster and wonder why it shit the bed again this morning.  
 
-## Customization
-Additional functionality can be added through plugins which are available from
-the [plugins repository](https://github.com/rxi/lite-plugins); additional color
-themes can be found in the [colors repository](https://github.com/rxi/lite-colors).
-The editor can be customized by making changes to the
-[user module](data/user/init.lua).
-
-## Building
-You can build the project yourself on Linux using the `build.sh` script
-or on Windows using the `build.bat` script *([MinGW](https://nuwen.net/mingw.html) is required)*.
-Note that the project does not need to be rebuilt if you are only making changes
-to the Lua portion of the code.
-
-## Contributing
-Any additional functionality that can be added through a plugin should be done
-so as a plugin, after which a pull request to the
-[plugins repository](https://github.com/rxi/lite-plugins) can be made. In hopes
-of remaining lightweight, pull requests adding additional functionality to the
-core will likely not be merged. Bug reports and bug fixes are welcome.
-
-## License
-This project is free software; you can redistribute it and/or modify it under
-the terms of the MIT license. See [LICENSE](LICENSE) for details.
+at the end of the day an editor is just a tool, not some piece of art you stare at. text is text, period.
