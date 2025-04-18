@@ -39,7 +39,7 @@ static void get_exe_filename(char *buf, int sz) {
   unsigned size = sz;
   _NSGetExecutablePath(buf, &size);
 #else
-  strcpy(buf, "./lite");
+  strcpy(buf, "./cdin");
 #endif
 }
 

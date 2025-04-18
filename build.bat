@@ -11,6 +11,6 @@ gcc src/*.c src/api/*.c src/lib/lua52/*.c src/lib/stb/*.c^
     -Iwinlib/SDL2-2.0.10/x86_64-w64-mingw32/include^
     -lmingw32 -lm -lSDL2main -lSDL2 -Lwinlib/SDL2-2.0.10/x86_64-w64-mingw32/lib^
     -mwindows res.res^
-    -o lite.exe
+    -o cdin.exe
 
 echo done

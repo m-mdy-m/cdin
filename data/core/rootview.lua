@@ -10,24 +10,25 @@ local DocView = require "core.docview"
 local EmptyView = View:extend()
 
 local function draw_text(x, y, color)
-  local th = style.big_font:get_height()
-  local dh = th + style.padding.y * 2
-  x = renderer.draw_text(style.big_font, "lite", x, y + (dh - th) / 2, color)
-  x = x + style.padding.x
-  renderer.draw_rect(x, y, math.ceil(1 * SCALE), dh, color)
-  local lines = {
-    { fmt = "%s to run a command", cmd = "core:find-command" },
-    { fmt = "%s to open a file from the project", cmd = "core:find-file" },
-  }
-  th = style.font:get_height()
-  y = y + (dh - th * 2 - style.padding.y) / 2
-  local w = 0
-  for _, line in ipairs(lines) do
-    local text = string.format(line.fmt, keymap.get_binding(line.cmd))
-    w = math.max(w, renderer.draw_text(style.font, text, x + style.padding.x, y, color))
-    y = y + th + style.padding.y
-  end
-  return w, dh
+  local title = "cdin"
+  local subtitle = "a minimal & fast code editor"
+
+  local th_title = style.big_font:get_height()
+  local th_sub = style.font:get_height()
+  local dh = th_title + th_sub + style.padding.y * 3
+
+  local tx = x + style.padding.x
+  local ty = y + style.padding.y
+  local tw = renderer.draw_text(style.big_font, title, tx, ty, color)
+
+  local line_y = ty + th_title + style.padding.y / 2
+  renderer.draw_rect(tx, line_y, tw, common.round(SCALE), style.dim)
+
+  local sub_x = tx
+  local sub_y = line_y + style.padding.y
+  renderer.draw_text(style.font, subtitle, sub_x, sub_y, style.dim)
+
+  return tw, dh
 end
 
 function EmptyView:draw()

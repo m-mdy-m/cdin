@@ -5,7 +5,7 @@ lflags="-lSDL2 -lm"
 
 if [[ $* == *windows* ]]; then
   platform="windows"
-  outfile="lite.exe"
+  outfile="cdin.exe"
   compiler="x86_64-w64-mingw32-gcc"
   cflags="$cflags -DLUA_USE_POPEN -Iwinlib/SDL2-2.0.10/x86_64-w64-mingw32/include"
   lflags="$lflags -Lwinlib/SDL2-2.0.10/x86_64-w64-mingw32/lib"
@@ -13,7 +13,7 @@ if [[ $* == *windows* ]]; then
   x86_64-w64-mingw32-windres res.rc -O coff -o res.res
 else
   platform="unix"
-  outfile="lite"
+  outfile="cdin"
   compiler="gcc"
   cflags="$cflags -DLUA_USE_POSIX"
   lflags="$lflags -o $outfile"
