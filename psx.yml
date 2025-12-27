@@ -1,0 +1,30 @@
+version: 1
+project:
+  type: "" # generic
+
+rules:
+  readme: error
+  license: warning
+  gitignore: warning
+  changelog: info
+  src_folder: warning
+  docs_folder: info
+  scripts_folder: info
+  contributing: info
+  security: info
+  code_of_conduct: info
+  pull_request_template: info
+  issue_templates: info
+  editorconfig: info
+
+custom:
+  folders:
+    - path: "bin/"
+    - path: "src"
+    - path: "scripts"
+    - path: "docs"
+      structure:
+        reference: {}
+        guides: {}
+        configuration: {}
+        installation: {}
