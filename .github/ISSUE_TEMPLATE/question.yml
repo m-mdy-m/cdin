@@ -1,0 +1,31 @@
+name: ❓ Question
+description: Ask a question about the project
+title: "[QUESTION] "
+labels: ["question"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? You're in the right place 😊
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: Please describe your question clearly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Any additional context that might help us answer your question.
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Describe what you've already tried or where you've looked for answers.
