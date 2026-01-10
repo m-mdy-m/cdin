@@ -1,4 +1,4 @@
-# cdin
+# Code In (cdin)
 
 > A lightweight, fast, and hackable text editor with Vim-like keybindings
 
