@@ -89,6 +89,19 @@ _check_deps:
 	  echo ""; \
 	  exit 1; \
 	}
+	@# Verify Lua headers are accessible
+	@echo "#include <lua.h>" | $(CC) $(CFLAGS) -x c -fsyntax-only - 2>/dev/null || { \
+	  echo ""; \
+	  echo "  ERROR: Lua headers not found."; \
+	  echo "  Debian/Ubuntu : sudo apt install liblua5.4-dev"; \
+	  echo "  Arch/Manjaro  : sudo pacman -S lua"; \
+	  echo "  MSYS2         : pacman -S mingw-w64-ucrt-x86_64-lua"; \
+	  echo "  Fedora/RHEL   : sudo dnf install lua-devel"; \
+	  echo "  macOS         : brew install lua"; \
+	  echo "  or: make LUA_CFLAGS='-I/path/to/lua' LUA_LDFLAGS='-llua'"; \
+	  echo ""; \
+	  exit 1; \
+	}
 clean:
 	@echo "  CLEAN  $(BUILD_DIR)"
 	rm -rf $(BUILD_DIR)
@@ -104,6 +117,8 @@ info:
 	@echo "  PLATFORM    : $(PLATFORM)"
 	@echo "  BUILD       : $(BUILD)"
 	@echo "  SDL_VERSION : $(SDL_VERSION)"
+	@echo "  LUA_FOUND   : $(_LUA_PKG)  ($(LUA_FOUND_VERSION))"
+	@echo "  LUA         : $(LUA_VERSION)$(if $(LUA_BUNDLED), ⚠ bundled,)"
 	@echo "  CC          : $(CC)"
 	@echo "  OUT         : $(OUT)"
 	@echo "  PREFIX      : $(PREFIX)"
