@@ -19,14 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
--------------------------------------------------------------------------------
-
-This project (cdin) is a fork of lite by rxi.
-  Source: https://github.com/rxi/lite
-  License: MIT (see above)
-
-The codebase has been significantly modified and extended beyond the original
-lite source. Design decisions and UX patterns were also influenced by lite-xl.
-  Source: https://github.com/lite-xl/lite-xl
-  License: MIT
