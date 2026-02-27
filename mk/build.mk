@@ -1,20 +1,34 @@
-build: _check_deps $(OUT)
-	$(call log_ok,Built $(OUT)  [SDL$(SDL_VERSION) | Lua $(LUA_FOUND_VERSION) | $(BUILD) | $(VERSION)])
+.PHONY: build clean distclean info help run debug _check_deps
 
-$(OUT): $(OBJS)
-	$(call log_step,LD,$@)
-	@$(CC) $(OBJS) -o $@ $(LDFLAGS)
-$(BUILD_DIR)/%.c.o: %.c
+build: $(OUT)
+	@printf '\n✓ Built %s\n\n' '$(OUT)'
+
+$(OUT): _check_deps $(OBJS)
 	@mkdir -p $(dir $@)
-	$(call log_step,CC,$<)
-	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
-ifeq ($(HAS_RESOURCE),1)
-$(RES_OBJ): $(RES_SRC)
+	$(CC) $(OBJS) -o $@ $(LDFLAGS)
+
+$(OUT_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(call log_step,RC,$<)
-	@$(WINDRES) $< -O coff -o $@
-endif
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 -include $(DEPS)
+
+_check_deps:
+	@command -v $(word $(words $(CC)),$(CC)) >/dev/null || { echo 'compiler not found: $(CC)'; exit 1; }
+	@printf '#include <$(SDL_HEADER)>\n' | $(CC) $(CFLAGS) -x c -fsyntax-only - >/dev/null 2>&1 || { \
+		echo '✗ $(SDL_HEADER) not found'; \
+		echo '  apt: sudo apt install libsdl$(SDL_VERSION)-dev'; \
+		echo '  pacman: sudo pacman -S sdl$(SDL_VERSION)'; \
+		exit 1; }
+	@printf '#include <lua.h>\n' | $(CC) $(CFLAGS) -x c -fsyntax-only - >/dev/null 2>&1 || { \
+		echo '✗ lua.h not found'; \
+		echo '  apt: sudo apt install liblua5.4-dev'; \
+		echo '  pacman: sudo pacman -S lua'; \
+		exit 1; }
+
+run: build
+	@$(OUT)
+
 debug:
 	$(MAKE) BUILD=debug
 debug-san:
