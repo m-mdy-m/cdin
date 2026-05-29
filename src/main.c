@@ -14,53 +14,6 @@
 
 SDL_Window *window;
 
-
-static double get_scale(void) {
-  float dpi;
-  SDL_GetDisplayDPI(0, NULL, &dpi, NULL);
-#if _WIN32
-  return dpi / 96.0;
-#else
-  return 1.0;
-#endif
-}
-
-
-static void get_exe_filename(char *buf, int sz) {
-#if _WIN32
-  int len = GetModuleFileName(NULL, buf, sz - 1);
-  buf[len] = '\0';
-#elif __linux__
-  char path[512];
-  sprintf(path, "/proc/%d/exe", getpid());
-  int len = readlink(path, buf, sz - 1);
-  buf[len] = '\0';
-#elif __APPLE__
-  unsigned size = sz;
-  _NSGetExecutablePath(buf, &size);
-#else
-  strcpy(buf, "./cdin");
-#endif
-}
-
-
-static void init_window_icon(void) {
-#ifndef _WIN32
-  #include "../icon.inl"
-  (void) icon_rgba_len; /* unused */
-  SDL_Surface *surf = SDL_CreateRGBSurfaceFrom(
-    icon_rgba, 64, 64,
-    32, 64 * 4,
-    0x000000ff,
-    0x0000ff00,
-    0x00ff0000,
-    0xff000000);
-  SDL_SetWindowIcon(window, surf);
-  SDL_FreeSurface(surf);
-#endif
-}
-
-
 int main(int argc, char **argv) {
 #ifdef _WIN32
   HINSTANCE lib = LoadLibrary("user32.dll");
