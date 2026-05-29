@@ -14,6 +14,3 @@ const char *CDIN_APP_COMMIT =
 #else
   "unknown";
 #endif
-
-
-#include "global_config.h"
