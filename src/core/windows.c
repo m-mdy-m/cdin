@@ -32,6 +32,8 @@ void window_set_icon(SDL_Window *win) {
   if (surf) {
     SDL_SetWindowIcon(win, surf);
     SDL_DestroySurface(surf);
+  } else {
+    fprintf(stderr, "cdin: failed to create icon surface: %s\n", SDL_GetError());
   }
 #else
   (void)win;

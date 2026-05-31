@@ -59,5 +59,6 @@ void lua_run_core(lua_State *L) {
 
   if (err) {
     fprintf(stderr, "cdin: fatal Lua error: %s\n", lua_tostring(L, -1));
+    lua_close(L);
   }
 }
