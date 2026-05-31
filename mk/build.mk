@@ -30,6 +30,40 @@ run: build
 	@$(OUT)
 
 debug:
+	$(MAKE) BUILD=debug
+debug-san:
+	$(MAKE) BUILD=debug SANITIZE=1.PHONY: build clean distclean info help run debug _check_deps
+
+build: $(OUT)
+	@printf '\n✓ Built %s\n\n' '$(OUT)'
+
+$(OUT): _check_deps $(OBJS)
+	@mkdir -p $(dir $@)
+	$(CC) $(OBJS) -o $@ $(LDFLAGS)
+
+$(OUT_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(DEPS)
+
+_check_deps:
+	@command -v $(word $(words $(CC)),$(CC)) >/dev/null || { echo 'compiler not found: $(CC)'; exit 1; }
+	@printf '#include <$(SDL_HEADER)>\n' | $(CC) $(CFLAGS) -x c -fsyntax-only - >/dev/null 2>&1 || { \
+		echo '✗ $(SDL_HEADER) not found'; \
+		echo '  apt: sudo apt install libsdl$(SDL_VERSION)-dev'; \
+		echo '  pacman: sudo pacman -S sdl$(SDL_VERSION)'; \
+		exit 1; }
+	@printf '#include <lua.h>\n' | $(CC) $(CFLAGS) -x c -fsyntax-only - >/dev/null 2>&1 || { \
+		echo '✗ lua.h not found'; \
+		echo '  apt: sudo apt install liblua5.4-dev'; \
+		echo '  pacman: sudo pacman -S lua'; \
+		exit 1; }
+
+run: build
+	@$(OUT)
+
+debug:
 	@$(MAKE) BUILD=debug
 
 clean:
