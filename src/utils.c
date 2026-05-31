@@ -1,25 +1,40 @@
-static void get_exee_filename(char *buf, int size){
-#if _WIN32
-  int len = GetModuleFileName(NULL, buf, sz - 1);
+#include "utils.h"
+
+#include <SDL3/SDL.h>
+#include <stdio.h>
+#include <string.h>
+
+#ifdef _WIN32
+  #include <windows.h>
+#elif __linux__
+  #include <unistd.h>
+#elif __APPLE__
+  #include <mach-o/dyld.h>
+#endif
+
+double utils_get_scale(void) {
+#ifdef _WIN32
+  return (double)SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+#else
+  return 1.0;
+#endif
+}
+
+void utils_get_exe_filename(char *buf, int size) {
+#ifdef _WIN32
+  int len = GetModuleFileName(NULL, buf, size - 1);
   buf[len] = '\0';
 #elif __linux__
   char path[512];
-  sprintf(path, "/proc/%d/exe", getpid());
-  int len = readlink(path, buf, sz - 1);
+  snprintf(path, sizeof(path), "/proc/%d/exe", getpid());
+  int len = (int)readlink(path, buf, size - 1);
+  if (len < 0) len = 0;
   buf[len] = '\0';
 #elif __APPLE__
-  unsigned size = sz;
-  _NSGetExecutablePath(buf, &size);
+  unsigned sz = (unsigned)size;
+  _NSGetExecutablePath(buf, &sz);
 #else
-  strcpy(buf, "./cdin");
-#endif
-}
-static double get_scale(void) {
-  float dpi;
-  SDL_GetDisplayDPI(0, NULL, &dpi, NULL);
-#if _WIN32
-  return dpi / 96.0;
-#else
-  return 1.0;
+  strncpy(buf, "./cdin", size - 1);
+  buf[size - 1] = '\0';
 #endif
 }
