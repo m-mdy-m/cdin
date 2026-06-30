@@ -6,3 +6,5 @@ build/
 SDL3.dll
 test.sdl.c
 *backup/*
+cdin_code_backup/
+cdin_code_backup/*
