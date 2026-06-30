@@ -9,7 +9,6 @@ local function trim_trailing_whitespace(doc)
     local old_text = doc:get_text(i, 1, i, math.huge)
     local new_text = old_text:gsub("%s*$", "")
 
-    -- don't remove whitespace which would cause the caret to reposition
     if cline == i and ccol > #new_text then
       new_text = old_text:sub(1, ccol - 1)
     end
