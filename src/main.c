@@ -1,98 +1,135 @@
+/*
+ * main.c — cdin entry point
+ *
+ * Responsibilities:
+ *   1. Logging bootstrap
+ *   2. SDL3 init
+ *   3. Window creation (via window.h) — borderless, custom title bar
+ *   4. Renderer init
+ *   5. Lua VM bootstrap (via lua_connector.h)
+ *   6. Run the frame loop (driven from Lua)
+ *   7. Clean shutdown
+ *
+ * Keep this file short. All real logic lives in Lua (data/core/) or in
+ * the C modules it calls through the system/renderer APIs.
+ */
+
 #include <stdio.h>
-#include <SDL2/SDL.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <SDL3/SDL.h>
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+
 #include "api/api.h"
-#include "renderer.h"
+#include "core/window.h"
+#include "core/lua_connector.h"
+#include "helpers/logger.h"
+#include "initial.h"
+#include "rendrer/renderer.h"
+#include "utils.h"
 
-#ifdef _WIN32
-  #include <windows.h>
-#elif __linux__
-  #include <unistd.h>
-#elif __APPLE__
-  #include <mach-o/dyld.h>
-#endif
-
-
+/* Exposed globally so system.c / renderer.c can reach it */
 SDL_Window *window;
 
-int main(int argc, char **argv) {
-#ifdef _WIN32
-  HINSTANCE lib = LoadLibrary("user32.dll");
-  int (*SetProcessDPIAware)() = (void*) GetProcAddress(lib, "SetProcessDPIAware");
-  SetProcessDPIAware();
-#endif
 
-  SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
-  SDL_EnableScreenSaver();
-  SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+/* stderr gets INFO and above so a terminal launch shows useful status
+ * without being noisy; everything from TRACE up also goes to cdin.log
+ * next to the binary, so crashes or odd behaviour can be diagnosed
+ * after the fact instead of just vanishing. */
+static FILE *setup_logging(const char *exefile) {
+  log_set_level(LOG_INFO);
+
+  char dir[2048];
+  strncpy(dir, exefile, sizeof(dir) - 1);
+  dir[sizeof(dir) - 1] = '\0';
+
+  char *slash = strrchr(dir, '/');
+#ifdef _WIN32
+  char *bslash = strrchr(dir, '\\');
+  if (!slash || (bslash && bslash > slash)) slash = bslash;
+#endif
+  if (slash) *slash = '\0';
+
+  char log_path[2080];
+  snprintf(log_path, sizeof(log_path), "%s/cdin.log", slash ? dir : ".");
+
+  FILE *fp = fopen(log_path, "a");
+  if (fp) {
+    log_add_fp(fp, LOG_TRACE);
+  } else {
+    log_warn("could not open %s for writing, file logging disabled", log_path);
+  }
+  return fp;
+}
+
+
+int main(int argc, char **argv) {
+  char exefile[2048] = {0};
+  utils_get_exe_filename(exefile, sizeof(exefile));
+  FILE *log_fp = setup_logging(exefile);
+  log_info("cdin starting");
+
+  /* ── platform setup (DPI awareness on Windows, no-op elsewhere) ── */
+  cdin_init_setup();
+
+  /* ── SDL3 init ── */
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+    log_fatal("SDL_Init failed: %s", SDL_GetError());
+    if (log_fp) fclose(log_fp);
+    return EXIT_FAILURE;
+  }
+  SDL_SetHint("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1");
   atexit(SDL_Quit);
 
-#ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR /* Available since 2.0.8 */
-  SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
-#endif
-#if SDL_VERSION_ATLEAST(2, 0, 5)
-  SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-#endif
+  /* ── window (borderless; Lua draws its own title bar) ── */
+  SDL_DisplayID display = SDL_GetPrimaryDisplay();
+  const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(display);
+  int win_w = dm ? (int)(dm->w * 0.8f) : 1280;
+  int win_h = dm ? (int)(dm->h * 0.8f) : 800;
 
-  SDL_DisplayMode dm;
-  SDL_GetCurrentDisplayMode(0, &dm);
+  window = window_create(win_w, win_h);
+  if (!window) {
+    log_fatal("window_create failed, exiting");
+    if (log_fp) fclose(log_fp);
+    return EXIT_FAILURE;
+  }
+  window_set_icon(window);
 
-  window = SDL_CreateWindow(
-    "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w * 0.8, dm.h * 0.8,
-    SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
-  init_window_icon();
+  /* SDL3 only delivers SDL_EVENT_TEXT_INPUT once text input is
+   * explicitly started for the window (unlike SDL2, where it was on
+   * by default). Without this, typing in the editor does nothing. */
+  SDL_StartTextInput(window);
+
+  /* ── renderer (software, via SDL surface) ── */
   ren_init(window);
 
+  /* ── HiDPI scale ── */
+  double scale = utils_get_scale();
 
+  /* ── Lua VM ── */
   lua_State *L = luaL_newstate();
+  if (!L) {
+    log_fatal("failed to create Lua state");
+    SDL_DestroyWindow(window);
+    if (log_fp) fclose(log_fp);
+    return EXIT_FAILURE;
+  }
   luaL_openlibs(L);
   api_load_libs(L);
 
+  /* expose globals (ARGS, VERSION, PLATFORM, SCALE, EXEFILE, EXEDIR) */
+  lua_setup_globals(L, argc, argv, scale, exefile);
 
-  lua_newtable(L);
-  for (int i = 0; i < argc; i++) {
-    lua_pushstring(L, argv[i]);
-    lua_rawseti(L, -2, i + 1);
-  }
-  lua_setglobal(L, "ARGS");
+  /* run core — this blocks until the user quits */
+  lua_run_core(L);
 
-  lua_pushstring(L, "1.11");
-  lua_setglobal(L, "VERSION");
-
-  lua_pushstring(L, SDL_GetPlatform());
-  lua_setglobal(L, "PLATFORM");
-
-  lua_pushnumber(L, get_scale());
-  lua_setglobal(L, "SCALE");
-
-  char exename[2048];
-  get_exe_filename(exename, sizeof(exename));
-  lua_pushstring(L, exename);
-  lua_setglobal(L, "EXEFILE");
-
-
-  (void) luaL_dostring(L,
-    "local core\n"
-    "xpcall(function()\n"
-    "  SCALE = tonumber(os.getenv(\"LITE_SCALE\")) or SCALE\n"
-    "  PATHSEP = package.config:sub(1, 1)\n"
-    "  EXEDIR = EXEFILE:match(\"^(.+)[/\\\\].*$\")\n"
-    "  package.path = EXEDIR .. '/data/?.lua;' .. package.path\n"
-    "  package.path = EXEDIR .. '/data/?/init.lua;' .. package.path\n"
-    "  core = require('core')\n"
-    "  core.init()\n"
-    "  core.run()\n"
-    "end, function(err)\n"
-    "  print('Error: ' .. tostring(err))\n"
-    "  print(debug.traceback(nil, 2))\n"
-    "  if core and core.on_error then\n"
-    "    pcall(core.on_error, err)\n"
-    "  end\n"
-    "  os.exit(1)\n"
-    "end)");
-
-
+  /* ── cleanup ── */
+  log_info("cdin shutting down cleanly");
   lua_close(L);
   SDL_DestroyWindow(window);
-
+  if (log_fp) fclose(log_fp);
   return EXIT_SUCCESS;
 }
