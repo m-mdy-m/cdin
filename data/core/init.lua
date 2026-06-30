@@ -110,7 +110,6 @@ function core.init()
   core.command_view = CommandView()
   core.status_view = StatusView()
   core.title_bar = TitleBar()
-
   core.root_view.root_node:split("up", core.title_bar, true)
   core.root_view.root_node.b:split("down", core.command_view, true)
   core.root_view.root_node.b.b:split("down", core.status_view, true)
