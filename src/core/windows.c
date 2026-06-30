@@ -5,9 +5,6 @@
 
 #define MAX_HIT_BUTTONS 8
 
-/* Border thickness (logical px) reserved around the borderless window
- * for resize handles. Kept small so it doesn't feel like "fat" OS
- * chrome, but large enough to grab comfortably with a mouse. */
 #define RESIZE_BORDER 6
 
 static struct {

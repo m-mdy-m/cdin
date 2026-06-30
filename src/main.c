@@ -1,19 +1,3 @@
-/*
- * main.c — cdin entry point
- *
- * Responsibilities:
- *   1. Logging bootstrap
- *   2. SDL3 init
- *   3. Window creation (via window.h) — borderless, custom title bar
- *   4. Renderer init
- *   5. Lua VM bootstrap (via lua_connector.h)
- *   6. Run the frame loop (driven from Lua)
- *   7. Clean shutdown
- *
- * Keep this file short. All real logic lives in Lua (data/core/) or in
- * the C modules it calls through the system/renderer APIs.
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,14 +15,9 @@
 #include "rendrer/renderer.h"
 #include "utils.h"
 
-/* Exposed globally so system.c / renderer.c can reach it */
 SDL_Window *window;
 
 
-/* stderr gets INFO and above so a terminal launch shows useful status
- * without being noisy; everything from TRACE up also goes to cdin.log
- * next to the binary, so crashes or odd behaviour can be diagnosed
- * after the fact instead of just vanishing. */
 static FILE *setup_logging(const char *exefile) {
   log_set_level(LOG_INFO);
 
@@ -98,9 +77,6 @@ int main(int argc, char **argv) {
   }
   window_set_icon(window);
 
-  /* SDL3 only delivers SDL_EVENT_TEXT_INPUT once text input is
-   * explicitly started for the window (unlike SDL2, where it was on
-   * by default). Without this, typing in the editor does nothing. */
   SDL_StartTextInput(window);
 
   /* ── renderer (software, via SDL surface) ── */
