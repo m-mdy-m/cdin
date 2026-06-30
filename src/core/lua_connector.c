@@ -59,10 +59,6 @@ void lua_run_core(lua_State *L) {
   );
 
   if (err) {
-    /* luaL_dostring itself failed to even load/run the bootstrap chunk
-     * (syntax error, out of memory, etc.) — the xpcall above already
-     * handles in-editor Lua errors, so reaching here means something
-     * is fundamentally broken before the editor could start. */
     log_fatal("fatal Lua error: %s", lua_tostring(L, -1));
     lua_close(L);
   }
