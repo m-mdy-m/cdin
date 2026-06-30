@@ -1,11 +1,6 @@
 #include <stdio.h>
 #include "rencache.h"
 
-/* a cache over the software renderer -- all drawing operations are stored as
-** commands when issued. At the end of the frame we write the commands to a grid
-** of hash values, take the cells that have changed since the previous frame,
-** merge them into dirty rectangles and redraw only those regions */
-
 #define CELLS_X 80
 #define CELLS_Y 50
 #define CELL_SIZE 96
