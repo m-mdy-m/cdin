@@ -11,3 +11,9 @@ local style = require "core.style"
 -- key binding:
 -- keymap.add { ["ctrl+escape"] = "core:quit" }
 
+-- treeview: disable git status polling (e.g. huge monorepos)
+-- config.treeview_git_enabled = false
+
+-- treeview: show dotfiles by default, and bind a key to toggle them
+-- config.show_hidden_files = true
+-- keymap.add { ["ctrl+shift+h"] = "treeview:toggle-hidden" }
