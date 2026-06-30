@@ -1,6 +1,7 @@
 PREFIX ?= /usr/local
 BINDIR := $(PREFIX)/bin
-DATADIR := $(PREFIX)/share/cdin
+LIBDIR := $(PREFIX)/lib/cdin
+DATADIR := $(LIBDIR)/data
 
 BUILD ?= release
 SDL_VERSION ?= auto
@@ -70,7 +71,7 @@ endif
 
 BASE_CFLAGS := -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter $(OPT) $(VERSION_CFLAGS) -Isrc
 CFLAGS := $(BASE_CFLAGS) $(SDL_CFLAGS) $(LUA_CFLAGS)
-LDFLAGS := $(SDL_LDFLAGS) $(LUA_LDFLAGS) $(STRIP)
+LDFLAGS := $(SDL_LDFLAGS) $(LUA_LDFLAGS) -lm $(STRIP)
 
 OUT_DIR := build/$(PLATFORM)-$(BUILD)
 OUT := $(OUT_DIR)/cdin$(EXE)
