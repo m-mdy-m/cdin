@@ -95,19 +95,32 @@ function StatusView:get_items()
     local line, col = dv.doc:get_selection()
     local dirty = dv.doc:is_dirty()
 
-    return {
+    local left = {
       dirty and style.accent or style.text, style.icon_font, "f",
       style.dim, style.font, self.separator2, style.text,
-      dv.doc.filename and style.text or style.dim, dv.doc:get_name(),
-      style.text,
-      self.separator,
-      "line: ", line,
-      self.separator,
-      col > config.line_limit and style.accent or style.text, "col: ", col,
-      style.text,
-      self.separator,
-      string.format("%d%%", line / #dv.doc.lines * 100),
-    }, {
+    }
+    if dv.vim_mode then
+      table.insert(left, style.accent)
+      table.insert(left, style.font)
+      table.insert(left, "[" .. dv.vim_mode:upper() .. "]")
+      table.insert(left, style.text)
+      table.insert(left, self.separator2)
+    end
+    table.insert(left, dv.doc.filename and style.text or style.dim)
+    table.insert(left, dv.doc:get_name())
+    table.insert(left, style.text)
+    table.insert(left, self.separator)
+    table.insert(left, "line: ")
+    table.insert(left, line)
+    table.insert(left, self.separator)
+    table.insert(left, col > config.line_limit and style.accent or style.text)
+    table.insert(left, "col: ")
+    table.insert(left, col)
+    table.insert(left, style.text)
+    table.insert(left, self.separator)
+    table.insert(left, string.format("%d%%", math.floor(line / #dv.doc.lines * 100)))
+
+    return left, {
       style.icon_font, "g",
       style.font, style.dim, self.separator2, style.text,
       #dv.doc.lines, " lines",
