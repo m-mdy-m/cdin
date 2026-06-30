@@ -1,12 +1,14 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "rendrer_cache.h"
-#include "../helpers/logger.h"
+#include "rencache.h"
 
-#define CELLS_X          80
-#define CELLS_Y          50
-#define CELL_SIZE        96
+/* a cache over the software renderer -- all drawing operations are stored as
+** commands when issued. At the end of the frame we write the commands to a grid
+** of hash values, take the cells that have changed since the previous frame,
+** merge them into dirty rectangles and redraw only those regions */
+
+#define CELLS_X 80
+#define CELLS_Y 50
+#define CELL_SIZE 96
 #define COMMAND_BUF_SIZE (1024 * 512)
 
 enum { FREE_FONT, SET_CLIP, DRAW_TEXT, DRAW_RECT };
@@ -77,9 +79,7 @@ static Command *push_command(int type, int size) {
   Command *cmd = (Command *)(command_buf + command_buf_idx);
   int n = command_buf_idx + size;
   if (n > COMMAND_BUF_SIZE) {
-    log_warn("rencache: command buffer exhausted (%d/%d bytes) — dropping draw command "
-             "(type=%d size=%d)",
-             command_buf_idx, COMMAND_BUF_SIZE, type, size);
+    fprintf(stderr, "Warning: (" __FILE__ "): exhausted command buffer\n");
     return NULL;
   }
   command_buf_idx = n;
