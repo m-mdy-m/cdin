@@ -1,5 +1,8 @@
 #include <stdio.h>
-#include "rencache.h"
+#include <stdlib.h>
+#include <string.h>
+#include "rendrer_cache.h"
+#include "../helpers/logger.h"
 
 /* a cache over the software renderer -- all drawing operations are stored as
 ** commands when issued. At the end of the frame we write the commands to a grid
@@ -81,7 +84,7 @@ static Command* push_command(int type, int size) {
   Command *cmd = (Command*) (command_buf + command_buf_idx);
   int n = command_buf_idx + size;
   if (n > COMMAND_BUF_SIZE) {
-    fprintf(stderr, "Warning: (" __FILE__ "): exhausted command buffer\n");
+    log_warn("render command buffer exhausted, dropping a draw command");
     return NULL;
   }
   command_buf_idx = n;

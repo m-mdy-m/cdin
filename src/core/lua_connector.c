@@ -1,5 +1,6 @@
 #include "lua_connector.h"
-#include "../../global_config.h"
+#include "../global_config.h"
+#include "../helpers/logger.h"
 
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -41,7 +42,7 @@ void lua_run_core(lua_State *L) {
     "xpcall(function()\n"
     "  SCALE = tonumber(os.getenv('CDIN_SCALE')) or SCALE\n"
     "  PATHSEP = package.config:sub(1,1)\n"
-    "  EXEDIR = EXEFILE:match('^(.+)[/\\\\].*$')\n"
+    "  EXEDIR = EXEFILE:match('^(.+)[/\\\\\\\\].*$')\n"
     "  package.path = EXEDIR .. '/data/?.lua;' .. package.path\n"
     "  package.path = EXEDIR .. '/data/?/init.lua;' .. package.path\n"
     "  core = require('core')\n"
@@ -58,7 +59,11 @@ void lua_run_core(lua_State *L) {
   );
 
   if (err) {
-    fprintf(stderr, "cdin: fatal Lua error: %s\n", lua_tostring(L, -1));
+    /* luaL_dostring itself failed to even load/run the bootstrap chunk
+     * (syntax error, out of memory, etc.) — the xpcall above already
+     * handles in-editor Lua errors, so reaching here means something
+     * is fundamentally broken before the editor could start. */
+    log_fatal("fatal Lua error: %s", lua_tostring(L, -1));
     lua_close(L);
   }
 }
