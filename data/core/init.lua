@@ -7,6 +7,7 @@ local keymap
 local RootView
 local StatusView
 local CommandView
+local TitleBar
 local Doc
 
 local core = {}
@@ -80,6 +81,7 @@ function core.init()
   RootView = require "core.rootview"
   StatusView = require "core.statusview"
   CommandView = require "core.commandview"
+  TitleBar = require "core.titlebar"
   Doc = require "core.doc"
 
   local project_dir = EXEDIR
@@ -106,9 +108,10 @@ function core.init()
   core.root_view = RootView()
   core.command_view = CommandView()
   core.status_view = StatusView()
-
-  core.root_view.root_node:split("down", core.command_view, true)
-  core.root_view.root_node.b:split("down", core.status_view, true)
+  core.title_bar = TitleBar()
+  core.root_view.root_node:split("up", core.title_bar, true)
+  core.root_view.root_node.b:split("down", core.command_view, true)
+  core.root_view.root_node.b.b:split("down", core.status_view, true)
 
   core.add_thread(project_scan_thread)
   command.add_defaults()
@@ -126,7 +129,7 @@ function core.init()
 end
 
 
-local temp_uid = (system.get_time() * 1000) % 0xffffffff
+local temp_uid = math.floor((system.get_time() * 1000) % 0xffffffff)
 local temp_file_prefix = string.format(".lite_temp_%08x", temp_uid)
 local temp_file_counter = 0
 
