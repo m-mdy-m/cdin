@@ -1,19 +1,3 @@
-/*
- * main.c — cdin entry point
- *
- * Responsibilities:
- *   1. Logging bootstrap
- *   2. SDL3 init
- *   3. Window creation (via window.h) — borderless, custom title bar
- *   4. Renderer init
- *   5. Lua VM bootstrap (via lua_connector.h)
- *   6. Run the frame loop (driven from Lua)
- *   7. Clean shutdown
- *
- * Keep this file short. All real logic lives in Lua (data/core/) or in
- * the C modules it calls through the system/renderer APIs.
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
