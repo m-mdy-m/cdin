@@ -5,3 +5,4 @@ error.txt
 build/
 SDL3.dll
 test.sdl.c
+*backup/*
