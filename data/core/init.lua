@@ -12,54 +12,6 @@ local Doc
 
 local core = {}
 
-local YIELD_EVERY = 200 
-
-core.git_ignored = nil
-core.git_ignore_root = nil
-
-local function read_git_ignored(root)
-  local null = PATHSEP == "\\" and "NUL" or "/dev/null"
-  local cmd = string.format(
-    'git -C "%s" ls-files --others --ignored --exclude-standard --directory -z 2>%s',
-    root, null)
-  local ok, fp = pcall(io.popen, cmd)
-  if not ok or not fp then return nil end
-  local out = fp:read("*a")
-  fp:close()
-  if not out then return nil end
-
-  local t = {}
-  for path in out:gmatch("[^%z]+") do
-    path = path:gsub("/$", ""):gsub("[\r\n]+$", "")
-    if PATHSEP == "\\" then path = path:gsub("/", "\\") end
-    local abs = root .. PATHSEP .. path
-    t[abs] = true
-  end
-  return t
-end
-
-local function git_ignore_thread()
-  while true do
-    local null = PATHSEP == "\\" and "NUL" or "/dev/null"
-    local ok, fp = pcall(io.popen,
-      'git rev-parse --show-toplevel 2>' .. null)
-    local toplevel = ok and fp and fp:read("*a") or nil
-    if fp then fp:close() end
-    toplevel = toplevel and toplevel:gsub("[\r\n]+$", "")
-
-    if toplevel and toplevel ~= "" then
-      if PATHSEP == "\\" then toplevel = toplevel:gsub("/", "\\") end
-      core.git_ignore_root = toplevel
-      core.git_ignored = read_git_ignored(toplevel)
-    else
-      core.git_ignore_root = nil
-      core.git_ignored = nil
-    end
-    core.redraw = true
-    coroutine.yield(config.project_scan_rate)
-  end
-end
-
 
 local function project_scan_thread()
   local function diff_files(a, b)
@@ -76,19 +28,6 @@ local function project_scan_thread()
     return a.filename < b.filename
   end
 
-  local function is_git_ignored(abs_filename)
-    return core.git_ignored ~= nil and core.git_ignored[abs_filename] == true
-  end
-
-  local entries_since_yield = 0
-  local function maybe_yield()
-    entries_since_yield = entries_since_yield + 1
-    if entries_since_yield >= YIELD_EVERY then
-      entries_since_yield = 0
-      coroutine.yield()
-    end
-  end
-
   local function get_files(path, t)
     coroutine.yield()
     t = t or {}
@@ -97,16 +36,12 @@ local function project_scan_thread()
     local dirs, files = {}, {}
 
     for _, file in ipairs(all) do
-      maybe_yield()
       if not common.match_pattern(file, config.ignore_files) then
         local file = (path ~= "." and path .. PATHSEP or "") .. file
-        local abs = system.absolute_path(file)
-        if not (abs and is_git_ignored(abs)) then
-          local info = system.get_file_info(file)
-          if info and info.size < size_limit then
-            info.filename = file
-            table.insert(info.type == "dir" and dirs or files, info)
-          end
+        local info = system.get_file_info(file)
+        if info and info.size < size_limit then
+          info.filename = file
+          table.insert(info.type == "dir" and dirs or files, info)
         end
       end
     end
@@ -175,6 +110,7 @@ function core.init()
   core.command_view = CommandView()
   core.status_view = StatusView()
   core.title_bar = TitleBar()
+
   core.root_view.root_node:split("up", core.title_bar, true)
   core.root_view.root_node.b:split("down", core.command_view, true)
   core.root_view.root_node.b.b:split("down", core.status_view, true)
@@ -256,22 +192,16 @@ function core.load_plugins()
   return no_errors
 end
 
-local PROJECT_MODULE_CANDIDATES = {
-  ".cdin/init.lua",
-  ".cdin.lua",
-  ".lite_project.lua",
-}
 
 function core.load_project_module()
-  for _, filename in ipairs(PROJECT_MODULE_CANDIDATES) do
-    if system.get_file_info(filename) then
-      return core.try(function()
-        local fn, err = loadfile(filename)
-        if not fn then error("Error when loading project module:\n\t" .. err) end
-        fn()
-        core.log_quiet("Loaded project module (%s)", filename)
-      end)
-    end
+  local filename = ".lite_project.lua"
+  if system.get_file_info(filename) then
+    return core.try(function()
+      local fn, err = loadfile(filename)
+      if not fn then error("Error when loading project module:\n\t" .. err) end
+      fn()
+      core.log_quiet("Loaded project module")
+    end)
   end
   return true
 end
@@ -498,19 +428,16 @@ local run_threads = coroutine.wrap(function()
 
     for k, thread in pairs(core.threads) do
       if thread.wake < system.get_time() then
-        repeat
-          local _, wait = assert(coroutine.resume(thread.cr))
-          if coroutine.status(thread.cr) == "dead" then
-            if type(k) == "number" then
-              table.remove(core.threads, k)
-            else
-              core.threads[k] = nil
-            end
-            break
+        local _, wait = assert(coroutine.resume(thread.cr))
+        if coroutine.status(thread.cr) == "dead" then
+          if type(k) == "number" then
+            table.remove(core.threads, k)
+          else
+            core.threads[k] = nil
           end
-          thread.wake = wait and (system.get_time() + wait) or 0
-        until thread.wake ~= 0
-        or system.get_time() - core.frame_start >= max_time
+        elseif wait then
+          thread.wake = system.get_time() + wait
+        end
         ran_any_threads = true
       end
 
