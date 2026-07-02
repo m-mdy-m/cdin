@@ -1,158 +1,120 @@
 #!/usr/bin/env python3
 """
-scripts/gen_icon.py — generate icon.inl (the app window icon) for cdin.
-
-icon.inl is a C header fragment with two symbols, consumed by
-src/core/windows.c:
-
-    static const unsigned char icon_rgba[];   // SIZE*SIZE*4 bytes, RGBA8888
-    static const unsigned      icon_rgba_len; // == SIZE*SIZE*4
-
-This script has no dependencies beyond the Python 3 standard library —
-no Pillow, no system image libraries — so it can run anywhere `python3`
-runs, including a bare CI container. It draws the icon procedurally
-(see draw_icon() below) rather than loading an external image file.
-
 Usage:
-    python3 scripts/gen_icon.py
-    python3 scripts/gen_icon.py --size 64 --out icon.inl
-    python3 scripts/gen_icon.py --preview icon_preview.png   # also dump a
-                                                              # viewable PNG
+    python3 scripts/gen_icon.py [--size 64] [--out icon.inl] [--preview icon.png]
 
-Edit BG_COLOR / ACCENT_COLOR / draw_icon() below to change the design —
-no image editor required, it's all pixel math.
+Requires: cairosvg  (pip install cairosvg)
+The SVG source is scripts/icon.svg (same directory as this script).
 """
-
-import argparse
-import struct
-import zlib
+import argparse, struct, zlib, sys
 from pathlib import Path
 
-# ── design ──────────────────────────────────────────────────────────────
 
-BG_COLOR     = (33, 37, 46, 255)     # dark slate background
-ACCENT_COLOR = (90, 200, 160, 255)   # teal-green ">_" glyph
-CORNER_RADIUS_FRAC = 0.19            # rounded-square corner radius, as a
-                                     # fraction of the icon size
+def parse_png_rgba(data: bytes) -> tuple:
+    """Decode a PNG to raw RGBA bytes without Pillow."""
+    assert data[:8] == b'\x89PNG\r\n\x1a\n', "not a PNG"
+    pos = 8; width = height = 0; idat = []
+    color_type = bit_depth = 0
+    while pos < len(data):
+        length = struct.unpack('>I', data[pos:pos+4])[0]
+        tag    = data[pos+4:pos+8]
+        chunk  = data[pos+8:pos+8+length]
+        if tag == b'IHDR':
+            width, height = struct.unpack('>II', chunk[:8])
+            bit_depth, color_type = chunk[8], chunk[9]
+        elif tag == b'IDAT':
+            idat.append(chunk)
+        pos += 12 + length
 
+    channels = {0:1, 2:3, 3:1, 4:2, 6:4}.get(color_type, 3)
+    stride   = width * channels
+    raw      = zlib.decompress(b''.join(idat))
+    out      = bytearray()
+    idx      = 0
+    prev     = bytearray(stride)
 
-def draw_icon(size: int) -> bytearray:
-    """Return size*size*4 bytes of top-to-bottom, row-major RGBA8888."""
-    pixels = bytearray(size * size * 4)
+    for _ in range(height):
+        ftype = raw[idx]; idx += 1
+        row   = bytearray(raw[idx:idx+stride]); idx += stride
 
-    def set_px(x: int, y: int, color):
-        if 0 <= x < size and 0 <= y < size:
-            i = (y * size + x) * 4
-            pixels[i:i + 4] = bytes(color)
+        def paeth(a, b, c):
+            p = a+b-c; pa=abs(p-a); pb=abs(p-b); pc=abs(p-c)
+            return a if pa<=pb and pa<=pc else (b if pb<=pc else c)
 
-    margin = max(1, round(size * 0.0625))     # ~4px at size=64
-    radius = max(1, round(size * CORNER_RADIUS_FRAC))
+        if ftype == 1:
+            for x in range(channels, stride): row[x] = (row[x] + row[x-channels]) & 0xff
+        elif ftype == 2:
+            for x in range(stride):           row[x] = (row[x] + prev[x]) & 0xff
+        elif ftype == 3:
+            for x in range(stride):
+                a = row[x-channels] if x >= channels else 0
+                row[x] = (row[x] + (a + prev[x]) // 2) & 0xff
+        elif ftype == 4:
+            for x in range(stride):
+                a = row[x-channels]        if x >= channels else 0
+                c = prev[x-channels]       if x >= channels else 0
+                row[x] = (row[x] + paeth(a, prev[x], c)) & 0xff
 
-    # rounded-square background
-    x0, y0 = margin, margin
-    x1, y1 = size - 1 - margin, size - 1 - margin
-    for y in range(size):
-        for x in range(size):
-            if x < x0 or x > x1 or y < y0 or y > y1:
-                continue  # outside the square entirely -> transparent
-            in_corner_box = (
-                (x < x0 + radius and y < y0 + radius) or
-                (x > x1 - radius and y < y0 + radius) or
-                (x < x0 + radius and y > y1 - radius) or
-                (x > x1 - radius and y > y1 - radius)
-            )
-            if in_corner_box:
-                cx = x0 + radius if x < x0 + radius else x1 - radius
-                cy = y0 + radius if y < y0 + radius else y1 - radius
-                if (x - cx) ** 2 + (y - cy) ** 2 > radius ** 2:
-                    continue  # outside the rounded corner -> transparent
-            set_px(x, y, BG_COLOR)
+        if channels == 3:
+            for x in range(width):
+                out.extend([row[x*3], row[x*3+1], row[x*3+2], 255])
+        else:
+            out.extend(row)
+        prev = row
 
-    # ">" glyph: two diagonal strokes meeting at a point
-    def thick_line(xa, ya, xb, yb, thickness):
-        steps = max(int(round(abs(xb - xa))), int(round(abs(yb - ya))), 1)
-        for step in range(steps + 1):
-            t = step / steps
-            cx = xa + (xb - xa) * t
-            cy = ya + (yb - ya) * t
-            r = thickness / 2
-            for dy in range(-int(r) - 1, int(r) + 2):
-                for dx in range(-int(r) - 1, int(r) + 2):
-                    if dx * dx + dy * dy <= r * r:
-                        set_px(round(cx) + dx, round(cy) + dy, ACCENT_COLOR)
-
-    s = size
-    thickness = max(2, round(s * 0.078))
-    thick_line(s * 0.25, s * 0.34, s * 0.44, s * 0.50, thickness)
-    thick_line(s * 0.44, s * 0.50, s * 0.25, s * 0.66, thickness)
-
-    # "_" glyph: underscore bar
-    thick_line(s * 0.50, s * 0.66, s * 0.75, s * 0.66, thickness)
-
-    return pixels
+    return width, height, bytes(out)
 
 
-# ── icon.inl writer ─────────────────────────────────────────────────────
-
-def write_icon_inl(pixels: bytearray, size: int, out_path: Path):
-    lines = []
-    lines.append(f"/* Auto-generated by scripts/gen_icon.py — {size}x{size} RGBA icon for cdin.")
-    lines.append(" * Do not hand-edit; re-run the script instead (it's deterministic).")
-    lines.append(" * Format: top-to-bottom, row-major, 4 bytes per pixel (R,G,B,A).")
-    lines.append(" */")
-    lines.append("static const unsigned char icon_rgba[] = {")
-    for i in range(0, len(pixels), 12):
-        chunk = pixels[i:i + 12]
-        lines.append("  " + ", ".join(str(b) for b in chunk) + ",")
-    lines.append("};")
-    lines.append(f"static const unsigned icon_rgba_len = {len(pixels)};")
-    lines.append("")
+def write_icon_inl(pixels: bytes, w: int, h: int, out_path: Path):
+    lines = [
+        "/* Auto-generated from scripts/icon.svg — do not hand-edit.",
+        f" * Size: {w}x{h} RGBA (R,G,B,A byte order, row-major, top-to-bottom).",
+        " * Re-generate: python3 scripts/gen_icon.py */",
+        "static const unsigned char icon_rgba[] = {",
+    ]
+    for i in range(0, len(pixels), 16):
+        lines.append("  " + ", ".join(str(b) for b in pixels[i:i+16]) + ",")
+    lines += [
+        "};",
+        f"static const unsigned icon_rgba_len    = {len(pixels)};",
+        f"static const unsigned icon_rgba_width  = {w};",
+        f"static const unsigned icon_rgba_height = {h};",
+        "",
+    ]
     out_path.write_text("\n".join(lines))
 
 
-# ── optional PNG preview (no Pillow; hand-rolled minimal PNG encoder) ───
-
-def write_png(pixels: bytes, size: int, out_path: Path):
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return (
-            struct.pack(">I", len(data)) + tag + data
-            + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff)
-        )
-
-    raw = bytearray()
-    stride = size * 4
-    for y in range(size):
-        raw.append(0)  # no filter
-        raw.extend(pixels[y * stride:(y + 1) * stride])
-
-    sig = b"\x89PNG\r\n\x1a\n"
-    ihdr = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
-    idat = zlib.compress(bytes(raw), 9)
-    out_path.write_bytes(
-        sig + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
-    )
-
-
-# ── CLI ──────────────────────────────────────────────────────────────────
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
-    ap.add_argument("--size", type=int, default=64, help="icon size in pixels (square); default 64")
-    ap.add_argument("--out", default=None, help="output path for icon.inl (default: <repo root>/icon.inl)")
-    ap.add_argument("--preview", default=None, help="also write a PNG preview to this path")
+    ap.add_argument("--size",    type=int, default=64)
+    ap.add_argument("--out",     default=None)
+    ap.add_argument("--preview", default=None)
     args = ap.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent
-    out_path = Path(args.out) if args.out else repo_root / "icon.inl"
+    try:
+        import cairosvg
+    except ImportError:
+        sys.exit("Error: cairosvg not installed.  Run: pip install cairosvg")
 
-    pixels = draw_icon(args.size)
-    write_icon_inl(pixels, args.size, out_path)
-    print(f"wrote {out_path} ({len(pixels)} bytes of pixel data, {args.size}x{args.size})")
+    repo_root  = Path(__file__).resolve().parent.parent
+    svg_path   = Path(__file__).resolve().parent / "icon.svg"
+    out_path   = Path(args.out) if args.out else repo_root / "icon.inl"
+
+    if not svg_path.exists():
+        sys.exit(f"Error: SVG source not found at {svg_path}")
+
+    svg_data = svg_path.read_bytes()
+    png_data = cairosvg.svg2png(bytestring=svg_data,
+                                output_width=args.size,
+                                output_height=args.size)
+
+    w, h, pixels = parse_png_rgba(png_data)
+    write_icon_inl(pixels, w, h, out_path)
+    print(f"wrote {out_path}  ({w}x{h}, {len(pixels)} bytes)")
 
     if args.preview:
-        preview_path = Path(args.preview)
-        write_png(bytes(pixels), args.size, preview_path)
-        print(f"wrote preview {preview_path}")
+        Path(args.preview).write_bytes(png_data)
+        print(f"wrote preview {args.preview}")
 
 
 if __name__ == "__main__":
