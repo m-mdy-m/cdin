@@ -395,16 +395,28 @@ static int f_sleep(lua_State *L) {
 static int f_exec(lua_State *L) {
   size_t len;
   const char *cmd = luaL_checklstring(L, 1, &len);
+#ifdef _WIN32
+  int wlen = MultiByteToWideChar(CP_UTF8, 0, cmd, -1, NULL, 0);
+  wchar_t *wcmd = (wchar_t *)malloc(wlen * sizeof(wchar_t));
+  if (!wcmd) luaL_error(L, "buffer allocation failed");
+  MultiByteToWideChar(CP_UTF8, 0, cmd, -1, wcmd, wlen);
+
+  STARTUPINFOW si = { 0 };
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi = { 0 };
+  CreateProcessW(NULL, wcmd, NULL, NULL, FALSE,
+                 DETACHED_PROCESS | CREATE_NO_WINDOW,
+                 NULL, NULL, &si, &pi);
+  if (pi.hProcess) CloseHandle(pi.hProcess);
+  if (pi.hThread)  CloseHandle(pi.hThread);
+  free(wcmd);
+#else
   char *buf = malloc(len + 32);
   if (!buf) luaL_error(L, "buffer allocation failed");
-#ifdef _WIN32
-  snprintf(buf, len + 32, "cmd /c \"%s\"", cmd);
-  WinExec(buf, SW_HIDE);
-#else
   snprintf(buf, len + 32, "%s &", cmd);
   int r = system(buf); (void)r;
-#endif
   free(buf);
+#endif
   return 0;
 }
 
