@@ -212,8 +212,8 @@ local function handle_key(k)
       command.perform("doc:newline-above")
       set_mode(view, MODE_INSERT)
     elseif k == "n" then command.perform("find-replace:previous-find")
-    elseif k == "4" then command.perform("doc:move-to-end-of-line")   -- $
-    elseif k == "6" then command.perform("doc:move-to-start-of-line") -- ^
+    elseif k == "4" then command.perform("doc:move-to-end-of-line") 
+    elseif k == "6" then command.perform("doc:move-to-start-of-line") 
     elseif k == "d" then
       -- D: delete to end of line
       command.perform("doc:select-to-end-of-line")
