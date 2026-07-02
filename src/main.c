@@ -74,6 +74,14 @@ int main(int argc, char **argv) {
     win_h = dm ? (int)(dm->h * 0.8f / dscale) : 800;
   }
 
+  window = window_create(win_w, win_h);
+  if (!window) {
+    log_fatal("window_create failed, exiting");
+    if (log_fp) fclose(log_fp);
+    return EXIT_FAILURE;
+  }
+  window_set_icon(window);
+
   SDL_StartTextInput(window);
 
   ren_init(window);
