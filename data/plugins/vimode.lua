@@ -1,27 +1,34 @@
-local core    = require "core"
-local config  = require "core.config"
-local command = require "core.command"
-local keymap  = require "core.keymap"
-local DocView = require "core.docview"
+local core        = require "core"
+local config      = require "core.config"
+local command     = require "core.command"
+local keymap      = require "core.keymap"
+local DocView     = require "core.docview"
 local CommandView = require "core.commandview"
+local ex          = require "plugins.vim_ex"
+
+require "plugins.vim_fmenu"
+
+
 
 if config.vim_mode_enabled == nil then
   config.vim_mode_enabled = true
 end
 
+
+config.vim_ex_history_max = 100
+
 local MODE_NORMAL = "normal"
 local MODE_INSERT = "insert"
 local MODE_VISUAL = "visual"
 
-local PENDING_TIMEOUT = 0.6
+local PENDING_TIMEOUT = 0.6   
 
-local pending = nil
+local pending = nil   
+local history_pos = nil   
 
 local function active_docview()
-  local view = core.active_view
-  if view and view:is(DocView) and not view:is(CommandView) then
-    return view
-  end
+  local v = core.active_view
+  if v and v:is(DocView) and not v:is(CommandView) then return v end
   return nil
 end
 
@@ -33,97 +40,80 @@ local function set_mode(view, mode)
   view.vim_mode = mode
   core.redraw = true
 end
-
-
--- ── motion table ──────────────────────────────────────────────────────────
--- Each entry: { normal_cmd, visual_cmd }
 local MOTIONS = {
-  h = { "doc:move-to-previous-char",       "doc:select-to-previous-char" },
-  l = { "doc:move-to-next-char",           "doc:select-to-next-char" },
-  j = { "doc:move-to-next-line",           "doc:select-to-next-line" },
-  k = { "doc:move-to-previous-line",       "doc:select-to-previous-line" },
-  w = { "doc:move-to-next-word-end",       "doc:select-to-next-word-end" },
+  h = { "doc:move-to-previous-char",       "doc:select-to-previous-char"       },
+  l = { "doc:move-to-next-char",           "doc:select-to-next-char"           },
+  j = { "doc:move-to-next-line",           "doc:select-to-next-line"           },
+  k = { "doc:move-to-previous-line",       "doc:select-to-previous-line"       },
+  w = { "doc:move-to-next-word-end",       "doc:select-to-next-word-end"       },
   b = { "doc:move-to-previous-word-start", "doc:select-to-previous-word-start" },
+  e = { "doc:move-to-next-word-end",       "doc:select-to-next-word-end"       },
 }
 
-
--- ── ex-command handler ────────────────────────────────────────────────────
-
-local function save_all()
-  for _, doc in ipairs(core.docs) do
-    if doc.filename and doc:is_dirty() then
-      doc:save()
-    end
-  end
-end
-
-local function force_close_active_view()
-  local root = core.root_view.root_node
-  local node = core.root_view:get_active_node()
-  if #node.views > 1 then
-    local idx = node:get_view_idx(node.active_view)
-    table.remove(node.views, idx)
-    node:set_active_view(node.views[idx] or node.views[#node.views])
-  else
-    local parent = node:get_parent_node(root)
-    local is_a = (parent.a == node)
-    local other = parent[is_a and "b" or "a"]
-    if other:get_locked_size() then
-      node.views = {}
-      local EmptyView = require "core.view"
-      node:add_view(EmptyView())
-    else
-      parent:consume(other)
-      local p = parent
-      while p.type ~= "leaf" do
-        p = p[is_a and "a" or "b"]
-      end
-      p:set_active_view(p.active_view)
-    end
-  end
-  core.last_active_view = nil
-end
-
-local function submit_ex_command(text)
-  text = text:gsub("^%s+", ""):gsub("%s+$", "")
-  if text == "" then return end
-
-  if     text == "w"                              then command.perform("doc:save")
-  elseif text == "wa" or text == "wa!"            then save_all()
-  elseif text == "q"                              then command.perform("root:close")
-  elseif text == "q!"                             then force_close_active_view()
-  elseif text == "qa" or text == "qall"           then core.quit(false)
-  elseif text == "qa!" or text == "qall!"         then core.quit(true)
-  elseif text == "wq"  or text == "x"             then
-    command.perform("doc:save"); command.perform("root:close")
-  elseif text == "wqa" or text == "wqall" or text == "xa" then
-    save_all(); core.quit(false)
-  elseif text == "wqa!" or text == "wqall!"       then
-    save_all(); core.quit(true)
-  elseif text:match("^%d+$") then
-    local view = active_docview()
-    if view then
-      local line = tonumber(text)
-      view.doc:set_selection(line, 1)
-      view:scroll_to_line(line, false, true)
-    end
-  else
-    core.error("vim: unknown command \":%s\"", text)
-  end
+local function ex_suggest(text)
+  
+  local bare = text:sub(1,1) == ":" and text:sub(2) or text
+  return ex.suggest(bare)
 end
 
 local function open_ex_commandline()
-  core.command_view:enter("", submit_ex_command, function() return {} end)
+  history_pos = nil   
+
+  core.command_view:enter(
+    "",                  
+    function(text)
+      
+      ex.submit(text)
+    end,
+    ex_suggest,
+    function()           
+      history_pos = nil
+    end
+  )
+  
+  core.command_view:set_text(":")
 end
 
+local function ex_history_prev()
+  if core.active_view ~= core.command_view then return false end
+  local hist = ex.history
+  if #hist == 0 then return true end
+  if not history_pos then
+    history_pos = #hist
+  else
+    history_pos = math.max(1, history_pos - 1)
+  end
+  core.command_view:set_text(":" .. hist[history_pos])
+  return true
+end
+
+local function ex_history_next()
+  if core.active_view ~= core.command_view then return false end
+  local hist = ex.history
+  if not history_pos then return true end
+  history_pos = history_pos + 1
+  if history_pos > #hist then
+    history_pos = nil
+    core.command_view:set_text(":")
+  else
+    core.command_view:set_text(":" .. hist[history_pos])
+  end
+  return true
+end
 
 local function handle_key(k)
   if not config.vim_mode_enabled then return false end
+  
+  if core.active_view == core.command_view then
+    if k == "up"   then return ex_history_prev() end
+    if k == "down" then return ex_history_next() end
+    return false   
+  end
 
   local view = active_docview()
   if not view then return false end
-
-  if k:find("shift") or k:find("ctrl") or k:find("alt") then return false end
+  
+  if k:find("ctrl") or k:find("alt") then return false end
   if keymap.modkeys.ctrl or keymap.modkeys.alt or keymap.modkeys.altgr then
     return false
   end
@@ -141,9 +131,10 @@ local function handle_key(k)
     else
       command.perform("doc:select-none")
     end
+    pending = nil
     return true
   end
-
+  
   if mode == MODE_INSERT then
     return false
   end
@@ -158,10 +149,17 @@ local function handle_key(k)
       command.perform("doc:select-none")
       set_mode(view, MODE_NORMAL)
       return true
+    elseif k == ">" then
+      command.perform("doc:indent")
+      return true
+    elseif k == "<" then
+      command.perform("doc:unindent")
+      return true
     end
   end
 
-  if mode == MODE_NORMAL and not shift and (k == "g" or k == "d" or k == "y") then
+  if mode == MODE_NORMAL and not shift
+     and (k == "g" or k == "d" or k == "y" or k == "c") then
     if pending and pending.key == k
     and system.get_time() - pending.t < PENDING_TIMEOUT then
       pending = nil
@@ -173,6 +171,9 @@ local function handle_key(k)
         command.perform("doc:select-lines")
         command.perform("doc:copy")
         command.perform("doc:select-none")
+      elseif k == "c" then
+        command.perform("doc:delete-lines")
+        set_mode(view, MODE_INSERT)
       end
     else
       pending = { key = k, t = system.get_time() }
@@ -180,6 +181,7 @@ local function handle_key(k)
     return true
   end
 
+  
   if pending and pending.key ~= k then
     pending = nil
   end
@@ -197,8 +199,19 @@ local function handle_key(k)
       command.perform("doc:newline-above")
       set_mode(view, MODE_INSERT)
     elseif k == "n" then command.perform("find-replace:previous-find")
-    elseif k == "4" then command.perform("doc:move-to-end-of-line")   -- $ (shift+4)
-    elseif k == ";" then open_ex_commandline()                        -- : (shift+;)
+    elseif k == "4" then command.perform("doc:move-to-end-of-line")   
+    elseif k == "6" then command.perform("doc:move-to-start-of-line") 
+    elseif k == "d" then
+      
+      command.perform("doc:select-to-end-of-line")
+      command.perform("doc:cut")
+    elseif k == "j" then
+      
+      command.perform("doc:move-to-end-of-line")
+      command.perform("doc:delete")
+    elseif k == ";" then
+      
+      open_ex_commandline()
     end
     return true
   end
@@ -241,12 +254,44 @@ local function handle_key(k)
     return true
   end
 
-  if k == "p" then command.perform("doc:paste"); return true end
-  if k == "u" then command.perform("doc:undo");  return true end
+  if k == "p" then
+    command.perform("doc:paste")
+    return true
+  end
+
+  if k == "u" then command.perform("doc:undo"); return true end
+  if k == "r" then
+    
+    command.perform("doc:redo")
+    return true
+  end
 
   if k == "/" then command.perform("find-replace:find");        return true end
   if k == "n" then command.perform("find-replace:repeat-find"); return true end
+  if k == "*" then
+    
+    local doc = view.doc
+    local line, col = doc:get_selection()
+    local word = doc:get_text(line, col, line, math.huge)
+    word = word:match("^([%w_]+)") or ""
+    if word ~= "" then
+      command.perform("find-replace:find")
+      
+    end
+    return true
+  end
 
+  if k == "m" then
+    
+    command.perform("vim-fmenu:open")
+    return true
+  end
+
+  if k == "tab" then
+    
+    command.perform("root:switch-to-next-tab")
+    return true
+  end
   if #k == 1 then return true end
 
   return false
@@ -264,4 +309,18 @@ function keymap.on_key_pressed(k)
     return true
   end
   return original_on_key_pressed(k)
+end
+
+
+function core.get_vim_mode_label()
+  if not config.vim_mode_enabled then return nil end
+  local v = core.active_view
+  if v and v:is(DocView) and not v:is(CommandView) then
+    local mode = get_mode(v)
+    if     mode == MODE_INSERT then return "[INSERT]"
+    elseif mode == MODE_VISUAL then return "[VISUAL]"
+    else                            return "[NORMAL]"
+    end
+  end
+  return nil
 end
