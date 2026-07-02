@@ -1,6 +1,7 @@
 #include "api.h"
 #include "../rendrer/renderer.h"
 #include "../rendrer/rendrer_cache.h"
+#include "../helpers/logger.h"
 
 
 static RenColor checkcolor(lua_State *L, int idx, int def) {
@@ -23,7 +24,9 @@ static RenColor checkcolor(lua_State *L, int idx, int def) {
 
 static int f_show_debug(lua_State *L) {
   luaL_checkany(L, 1);
-  rencache_show_debug(lua_toboolean(L, 1));
+  bool enable = lua_toboolean(L, 1);
+  log_debug("renderer: debug overlay %s", enable ? "enabled" : "disabled");
+  rencache_show_debug(enable);
   return 0;
 }
 
@@ -101,6 +104,7 @@ static const luaL_Reg lib[] = {
 int luaopen_renderer_font(lua_State *L);
 
 int luaopen_renderer(lua_State *L) {
+  log_trace("api: opening renderer library");
   luaL_newlib(L, lib);
   luaopen_renderer_font(L);
   lua_setfield(L, -2, "font");
