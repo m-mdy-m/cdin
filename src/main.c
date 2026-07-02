@@ -51,10 +51,7 @@ int main(int argc, char **argv) {
   FILE *log_fp = setup_logging(exefile);
   log_info("cdin starting");
 
-  /* ── platform setup (DPI awareness on Windows, no-op elsewhere) ── */
   cdin_init_setup();
-
-  /* ── SDL3 init ── */
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
     log_fatal("SDL_Init failed: %s", SDL_GetError());
     if (log_fp) fclose(log_fp);
@@ -79,12 +76,10 @@ int main(int argc, char **argv) {
 
   SDL_StartTextInput(window);
 
-  /* ── renderer (software, via SDL surface) ── */
   ren_init(window);
 
   double scale = utils_get_scale();
 
-  /* ── Lua VM ── */
   lua_State *L = luaL_newstate();
   if (!L) {
     log_fatal("failed to create Lua state");
