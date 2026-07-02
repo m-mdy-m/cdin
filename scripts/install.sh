@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-#
-# scripts/install.sh — build and install cdin on Linux/macOS
-#
-# Thin wrapper around `make install`. Installs the binary and its data/
-# directory as siblings under $PREFIX/lib/cdin, with a symlink in
-# $PREFIX/bin so `cdin` ends up on PATH (see mk/install.mk for why the
-# binary and data/ must stay siblings).
-#
 # Usage:
 #   ./scripts/install.sh                  # installs to /usr/local
 #   PREFIX=$HOME/.local ./scripts/install.sh

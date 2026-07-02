@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-#
-# scripts/build.sh — build cdin on Linux/macOS
-#
-# Thin wrapper around `make build`. Exists so people (and CI) who don't
-# want to think about Makefile targets have one obvious command to run.
-#
 # Usage:
 #   ./scripts/build.sh                # release build
 #   ./scripts/build.sh debug          # debug build (BUILD=debug)
