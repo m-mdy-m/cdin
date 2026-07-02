@@ -1,120 +1,128 @@
 #!/usr/bin/env python3
 """
 Usage:
-    python3 scripts/gen_icon.py [--size 64] [--out icon.inl] [--preview icon.png]
+    python3 scripts/gen_icon.py [--svg PATH] [--out PATH]
 
-Requires: cairosvg  (pip install cairosvg)
-The SVG source is scripts/icon.svg (same directory as this script).
+Defaults:
+    --svg  scripts/icon.svg
+    --out  src/icon.inl
 """
-import argparse, struct, zlib, sys
-from pathlib import Path
+
+import sys
+import os
+import argparse
+import base64
+import struct
 
 
-def parse_png_rgba(data: bytes) -> tuple:
-    """Decode a PNG to raw RGBA bytes without Pillow."""
-    assert data[:8] == b'\x89PNG\r\n\x1a\n', "not a PNG"
-    pos = 8; width = height = 0; idat = []
-    color_type = bit_depth = 0
-    while pos < len(data):
-        length = struct.unpack('>I', data[pos:pos+4])[0]
-        tag    = data[pos+4:pos+8]
-        chunk  = data[pos+8:pos+8+length]
-        if tag == b'IHDR':
-            width, height = struct.unpack('>II', chunk[:8])
-            bit_depth, color_type = chunk[8], chunk[9]
-        elif tag == b'IDAT':
-            idat.append(chunk)
-        pos += 12 + length
+def svg_to_ico_bytes(svg_path: str) -> bytes:
+    """
+    Convert SVG to a minimal ICO file (32x32 and 16x16) using only stdlib.
+    Falls back to embedding SVG as raw bytes if Pillow/cairosvg not available.
+    """
+    try:
+        from PIL import Image
+        import cairosvg
+        import io
 
-    channels = {0:1, 2:3, 3:1, 4:2, 6:4}.get(color_type, 3)
-    stride   = width * channels
-    raw      = zlib.decompress(b''.join(idat))
-    out      = bytearray()
-    idx      = 0
-    prev     = bytearray(stride)
+        sizes = [256, 64, 48, 32, 16]
+        images = []
+        for size in sizes:
+            png_bytes = cairosvg.svg2png(
+                url=svg_path, output_width=size, output_height=size
+            )
+            img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+            images.append(img)
 
-    for _ in range(height):
-        ftype = raw[idx]; idx += 1
-        row   = bytearray(raw[idx:idx+stride]); idx += stride
+        # Build ICO manually
+        num_images = len(images)
+        # ICO header: 6 bytes
+        # Directory entries: 16 bytes each
+        # Image data follows
+        header = struct.pack("<HHH", 0, 1, num_images)
+        dir_entries = b""
+        image_data = b""
+        offset = 6 + 16 * num_images
 
-        def paeth(a, b, c):
-            p = a+b-c; pa=abs(p-a); pb=abs(p-b); pc=abs(p-c)
-            return a if pa<=pb and pa<=pc else (b if pb<=pc else c)
+        for img in images:
+            w, h = img.size
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            png = buf.getvalue()
+            size_bytes = len(png)
+            bw = w if w < 256 else 0
+            bh = h if h < 256 else 0
+            dir_entries += struct.pack(
+                "<BBBBHHII", bw, bh, 0, 0, 1, 32, size_bytes, offset
+            )
+            image_data += png
+            offset += size_bytes
 
-        if ftype == 1:
-            for x in range(channels, stride): row[x] = (row[x] + row[x-channels]) & 0xff
-        elif ftype == 2:
-            for x in range(stride):           row[x] = (row[x] + prev[x]) & 0xff
-        elif ftype == 3:
-            for x in range(stride):
-                a = row[x-channels] if x >= channels else 0
-                row[x] = (row[x] + (a + prev[x]) // 2) & 0xff
-        elif ftype == 4:
-            for x in range(stride):
-                a = row[x-channels]        if x >= channels else 0
-                c = prev[x-channels]       if x >= channels else 0
-                row[x] = (row[x] + paeth(a, prev[x], c)) & 0xff
+        return header + dir_entries + image_data
 
-        if channels == 3:
-            for x in range(width):
-                out.extend([row[x*3], row[x*3+1], row[x*3+2], 255])
-        else:
-            out.extend(row)
-        prev = row
+    except ImportError:
+        pass
 
-    return width, height, bytes(out)
+    # Fallback: embed the raw SVG bytes (works when linked directly)
+    print(
+        "[gen_icon] Note: Pillow/cairosvg not found – embedding raw SVG bytes.",
+        file=sys.stderr,
+    )
+    with open(svg_path, "rb") as f:
+        return f.read()
 
 
-def write_icon_inl(pixels: bytes, w: int, h: int, out_path: Path):
-    lines = [
-        "/* Auto-generated from scripts/icon.svg — do not hand-edit.",
-        f" * Size: {w}x{h} RGBA (R,G,B,A byte order, row-major, top-to-bottom).",
-        " * Re-generate: python3 scripts/gen_icon.py */",
-        "static const unsigned char icon_rgba[] = {",
-    ]
-    for i in range(0, len(pixels), 16):
-        lines.append("  " + ", ".join(str(b) for b in pixels[i:i+16]) + ",")
-    lines += [
-        "};",
-        f"static const unsigned icon_rgba_len    = {len(pixels)};",
-        f"static const unsigned icon_rgba_width  = {w};",
-        f"static const unsigned icon_rgba_height = {h};",
-        "",
-    ]
-    out_path.write_text("\n".join(lines))
+def bytes_to_c_array(data: bytes, array_name: str = "WINDOW_ICON") -> str:
+    """Convert raw bytes to a C byte-array literal."""
+    lines = []
+    lines.append(f"/* Auto-generated by scripts/gen_icon.py – do not edit */")
+    lines.append(f"static const unsigned char {array_name}[] = {{")
+
+    row_width = 16
+    for i in range(0, len(data), row_width):
+        chunk = data[i : i + row_width]
+        hex_values = ", ".join(f"0x{b:02x}" for b in chunk)
+        lines.append(f"    {hex_values},")
+
+    lines.append("};")
+    lines.append(f"static const unsigned int {array_name}_LEN = {len(data)}U;")
+    return "\n".join(lines) + "\n"
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
-    ap.add_argument("--size",    type=int, default=64)
-    ap.add_argument("--out",     default=None)
-    ap.add_argument("--preview", default=None)
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description="Generate icon.inl from icon.svg")
+    parser.add_argument(
+        "--svg",
+        default=os.path.join("scripts", "icon.svg"),
+        help="Path to source SVG (default: scripts/icon.svg)",
+    )
+    parser.add_argument(
+        "--out",
+        default=os.path.join("src", "icon.inl"),
+        help="Output .inl path (default: src/icon.inl)",
+    )
+    args = parser.parse_args()
 
-    try:
-        import cairosvg
-    except ImportError:
-        sys.exit("Error: cairosvg not installed.  Run: pip install cairosvg")
+    svg_path = args.svg
+    out_path = args.out
 
-    repo_root  = Path(__file__).resolve().parent.parent
-    svg_path   = Path(__file__).resolve().parent / "icon.svg"
-    out_path   = Path(args.out) if args.out else repo_root / "icon.inl"
+    if not os.path.isfile(svg_path):
+        print(f"[gen_icon] ERROR: SVG not found: {svg_path}", file=sys.stderr)
+        sys.exit(1)
 
-    if not svg_path.exists():
-        sys.exit(f"Error: SVG source not found at {svg_path}")
+    print(f"[gen_icon] Reading SVG: {svg_path}")
+    icon_bytes = svg_to_ico_bytes(svg_path)
 
-    svg_data = svg_path.read_bytes()
-    png_data = cairosvg.svg2png(bytestring=svg_data,
-                                output_width=args.size,
-                                output_height=args.size)
+    c_source = bytes_to_c_array(icon_bytes)
 
-    w, h, pixels = parse_png_rgba(png_data)
-    write_icon_inl(pixels, w, h, out_path)
-    print(f"wrote {out_path}  ({w}x{h}, {len(pixels)} bytes)")
+    out_dir = os.path.dirname(out_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
 
-    if args.preview:
-        Path(args.preview).write_bytes(png_data)
-        print(f"wrote preview {args.preview}")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(c_source)
+
+    print(f"[gen_icon] Written {len(icon_bytes)} bytes → {out_path}")
 
 
 if __name__ == "__main__":

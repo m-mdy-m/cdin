@@ -1,127 +1,205 @@
-﻿param(
-  [string]$Dest = "$env:LocalAppData\cdin",
-  [switch]$NoDesktop,
-  [switch]$NoBuild
+﻿#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Installs cdin on Windows.
+
+.DESCRIPTION
+    - Copies binary + data to %LOCALAPPDATA%\cdin  (or custom -Prefix)
+    - Adds the bin directory to the user PATH
+    - Creates a Desktop shortcut  (.lnk)
+    - Creates a Start Menu entry
+    - Optionally generates icon.inl if missing  (needs Python 3)
+.PARAMETER Uninstall
+    Remove a previous installation made by this script.
+#>
+[CmdletBinding(SupportsShouldProcess)]
+param(
+    [string]$Prefix     = (Join-Path $Env:LOCALAPPDATA "cdin"),
+    [string]$BinaryPath = "",
+    [switch]$NoPath,
+    [switch]$NoShortcut,
+    [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+function Info  ($msg) { Write-Host "[install] $msg" -ForegroundColor Cyan    }
+function Ok    ($msg) { Write-Host "[install] $msg" -ForegroundColor Green   }
+function Warn  ($msg) { Write-Host "[install] $msg" -ForegroundColor Yellow  }
+function Die   ($msg) { Write-Host "[install] ERROR: $msg" -ForegroundColor Red; exit 1 }
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectDir = Split-Path -Parent $ScriptDir
-Set-Location $ProjectDir
+$RootDir   = Split-Path -Parent $ScriptDir
+Push-Location $RootDir
 
-Write-Host ""
-Write-Host "=== cdin Windows Installer ===" -ForegroundColor Cyan
-Write-Host "  Destination: $Dest"
-Write-Host ""
+# ── UNINSTALL ─────────────────────────────────────────────────────────────────
+if ($Uninstall) {
+    Info "Uninstalling cdin from $Prefix …"
 
-# --- Build ---
-if (-not $NoBuild) {
-  $make = Get-Command make -ErrorAction SilentlyContinue
-  if (-not $make) { $make = Get-Command mingw32-make -ErrorAction SilentlyContinue }
-  if (-not $make) {
-    Write-Host " ERROR: 'make' not found." -ForegroundColor Red
-    Write-Host "  Install MSYS2 (https://www.msys2.org/) and open the MinGW64 shell."
-    Write-Host "  Then: pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-SDL3 mingw-w64-x86_64-lua"
-    exit 1
-  }
+    # Remove install directory
+    if (Test-Path $Prefix) {
+        Remove-Item -Recurse -Force $Prefix
+        Ok "Removed $Prefix"
+    }
 
-  Write-Host "==> Building cdin..." -ForegroundColor Yellow
-  & $make.Source build
-  if ($LASTEXITCODE -ne 0) { Write-Host "Build failed." -ForegroundColor Red; exit 1 }
+    # Remove from PATH
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    $binDir   = Join-Path $Prefix "bin"
+    if ($userPath -like "*$binDir*") {
+        $newPath = ($userPath -split ";" | Where-Object { $_ -ne $binDir }) -join ";"
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+        Ok "Removed $binDir from PATH"
+    }
+
+    # Remove shortcuts
+    $desktopLnk   = Join-Path ([Environment]::GetFolderPath("Desktop")) "cdin.lnk"
+    $startMenuLnk = Join-Path $Env:APPDATA "Microsoft\Windows\Start Menu\Programs\cdin.lnk"
+    foreach ($lnk in $desktopLnk, $startMenuLnk) {
+        if (Test-Path $lnk) { Remove-Item $lnk -Force; Ok "Removed $lnk" }
+    }
+
+    Ok "Uninstall complete."
+    Pop-Location
+    exit 0
 }
 
-# --- Copy files ---
-Write-Host "==> Staging files to $Dest ..." -ForegroundColor Yellow
-New-Item -ItemType Directory -Force -Path $Dest | Out-Null
-
-$Exe = "build\windows-release\cdin.exe"
-if (-not (Test-Path $Exe)) {
-  Write-Host " ERROR: $Exe not found. Did the build succeed?" -ForegroundColor Red; exit 1
+# ── locate binary ─────────────────────────────────────────────────────────────
+if ($BinaryPath -eq "") {
+    foreach ($candidate in "build\cdin.exe", "cdin.exe", ".\cdin.exe") {
+        if (Test-Path $candidate) { $BinaryPath = $candidate; break }
+    }
 }
-Copy-Item $Exe "$Dest\cdin.exe" -Force
+if ($BinaryPath -eq "" -or -not (Test-Path $BinaryPath)) {
+    Die "cdin.exe not found. Run build.bat first, or pass -BinaryPath <path>."
+}
+Info "Binary  : $BinaryPath"
+
+# ── ensure icon.inl exists (generate if missing) ──────────────────────────────
+$iconInl = "src\icon.inl"
+$iconSvg = "scripts\icon.svg"
+
+if (-not (Test-Path $iconInl)) {
+    if (Test-Path $iconSvg) {
+        $python = $null
+        foreach ($cmd in "python3", "python", "py") {
+            try {
+                $ver = & $cmd --version 2>&1
+                if ($ver -match "Python 3") { $python = $cmd; break }
+            } catch {}
+        }
+        if ($python) {
+            Info "Generating $iconInl …"
+            & $python scripts\gen_icon.py --svg $iconSvg --out $iconInl
+            if ($LASTEXITCODE -ne 0) { Warn "gen_icon.py failed – continuing without icon." }
+            else { Ok "$iconInl generated." }
+        } else {
+            Warn "Python 3 not found – $iconInl will not be generated."
+        }
+    } else {
+        Warn "$iconSvg not found – $iconInl will not be generated."
+    }
+} else {
+    Info "$iconInl already exists."
+}
+
+$binDir   = Join-Path $Prefix "bin"
+$dataDir  = Join-Path $Prefix "bin\data"
+$exeDest  = Join-Path $binDir "cdin.exe"
+
+New-Item -ItemType Directory -Force $binDir  | Out-Null
+New-Item -ItemType Directory -Force $dataDir | Out-Null
+
+Copy-Item -Force $BinaryPath $exeDest
+Ok "Installed binary → $exeDest"
 
 if (Test-Path "data") {
-  Copy-Item "data" "$Dest\data" -Recurse -Force
+    Copy-Item -Recurse -Force "data\*" $dataDir
+    Ok "Installed data   → $dataDir"
 }
 
-# Find and copy SDL3.dll
-$sdlCandidates = @(
-  "build\windows-release\SDL3.dll",
-  "SDL3.dll",
-  "C:\msys64\mingw64\bin\SDL3.dll",
-  "C:\msys2\mingw64\bin\SDL3.dll"
-)
-$sdlSrc = $sdlCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if ($sdlSrc) {
-  Copy-Item $sdlSrc "$Dest\SDL3.dll" -Force
-  Write-Host "  Copied SDL3.dll from $sdlSrc"
+$icoPath = Join-Path $Prefix "cdin.ico"
+$iconInstalled = $false
+
+function Write-MinimalIco([string]$svgPath, [string]$destIco) {
+    $python = $null
+    foreach ($cmd in "python3", "python", "py") {
+        try {
+            $ver = & $cmd --version 2>&1
+            if ($ver -match "Python 3") { $python = $cmd; break }
+        } catch {}
+    }
+    if (-not $python) { return $false }
+
+    $code = @"
+import sys, struct, io
+try:
+    from PIL import Image
+    import cairosvg
+    sizes = [256, 64, 48, 32, 16]
+    imgs = []
+    for sz in sizes:
+        png = cairosvg.svg2png(url=r'$svgPath', output_width=sz, output_height=sz)
+        imgs.append((sz, Image.open(io.BytesIO(png)).convert('RGBA')))
+    n = len(imgs)
+    header = struct.pack('<HHH', 0, 1, n)
+    dirs = b''; data = b''; off = 6 + 16*n
+    for sz, img in imgs:
+        buf = io.BytesIO(); img.save(buf, 'PNG'); png = buf.getvalue()
+        bw = sz if sz < 256 else 0
+        dirs += struct.pack('<BBBBHHII', bw, bw, 0, 0, 1, 32, len(png), off)
+        data += png; off += len(png)
+    open(r'$destIco', 'wb').write(header + dirs + data)
+    print('ok')
+except Exception as e:
+    print('skip:', e, file=sys.stderr)
+"@
+    $result = & $python -c $code 2>&1
+    return ($result -eq "ok")
+}
+
+$iconConverted = Write-MinimalIco $iconSvg $icoPath
+if ($iconConverted) {
+    Ok "Icon → $icoPath"
+    $iconInstalled = $true
 } else {
-  Write-Host "  WARNING: SDL3.dll not found. Copy it to $Dest manually." -ForegroundColor Yellow
+    Warn "Could not convert SVG to ICO (install cairosvg + Pillow for best results)."
+    $icoPath = ""
 }
 
-# --- Add to user PATH ---
-Write-Host "==> Updating PATH..." -ForegroundColor Yellow
-$currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-if ($currentPath -notlike "*$Dest*") {
-  [Environment]::SetEnvironmentVariable("PATH", "$currentPath;$Dest", "User")
-  Write-Host "  Added $Dest to user PATH."
-  Write-Host "  Open a new terminal to use the 'cdin' command."
-} else {
-  Write-Host "  Already in PATH."
+if (-not $NoPath) {
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if ($userPath -notlike "*$binDir*") {
+        [Environment]::SetEnvironmentVariable("PATH", "$binDir;$userPath", "User")
+        Ok "Added $binDir to user PATH."
+        Warn "Restart your terminal (or run: `$Env:PATH = '$binDir;' + `$Env:PATH`) to use 'cdin'."
+    } else {
+        Info "$binDir already in PATH."
+    }
 }
 
-# --- Desktop shortcut ---
-if (-not $NoDesktop) {
-  Write-Host "==> Creating shortcuts..." -ForegroundColor Yellow
+if (-not $NoShortcut) {
+    $shell = New-Object -ComObject WScript.Shell
 
-  $WshShell = New-Object -ComObject WScript.Shell
+    function New-Shortcut([string]$lnkPath, [string]$target, [string]$description, [string]$ico) {
+        $lnk = $shell.CreateShortcut($lnkPath)
+        $lnk.TargetPath       = $target
+        $lnk.WorkingDirectory = Split-Path $target
+        $lnk.Description      = $description
+        if ($ico -ne "") { $lnk.IconLocation = $ico }
+        $lnk.Save()
+    }
 
-  # Desktop
-  $DesktopPath = [Environment]::GetFolderPath("Desktop")
-  $Shortcut = $WshShell.CreateShortcut("$DesktopPath\cdin.lnk")
-  $Shortcut.TargetPath = "$Dest\cdin.exe"
-  $Shortcut.WorkingDirectory = $env:USERPROFILE
-  $Shortcut.Description = "cdin - Lightweight code editor"
-  $Shortcut.Save()
-  Write-Host "  Desktop shortcut: $DesktopPath\cdin.lnk"
-
-  # Start Menu
-  $StartMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
-  $Shortcut2 = $WshShell.CreateShortcut("$StartMenu\cdin.lnk")
-  $Shortcut2.TargetPath = "$Dest\cdin.exe"
-  $Shortcut2.WorkingDirectory = $env:USERPROFILE
-  $Shortcut2.Description = "cdin - Lightweight code editor"
-  $Shortcut2.Save()
-  Write-Host "  Start Menu shortcut created."
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $desktopLnk = Join-Path $desktop "cdin.lnk"
+    New-Shortcut $desktopLnk $exeDest "cdin – Lightweight Code Editor" $icoPath
+    Ok "Desktop shortcut → $desktopLnk"
+    $startMenu = Join-Path $Env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+    $startLnk  = Join-Path $startMenu "cdin.lnk"
+    New-Shortcut $startLnk $exeDest "cdin – Lightweight Code Editor" $icoPath
+    Ok "Start Menu entry → $startLnk"
 }
 
-$Wrapper = "$Dest\cdin.cmd"
-@"
-@echo off
-REM cdin command wrapper
-REM Usage: cdin [path|file]
-"$Dest\cdin.exe" %*
-"@ | Set-Content $Wrapper -Encoding ASCII
-
+Pop-Location
 Write-Host ""
-Write-Host "=================================================" -ForegroundColor Green
-Write-Host "  cdin installed to $Dest" -ForegroundColor Green
-Write-Host "=================================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "  Terminal (new window after install):"
-Write-Host "    cdin              open editor"
-Write-Host "    cdin .            open editor here"
-Write-Host "    cdin ..\          open one level up"
-Write-Host "    cdin file.c       open a file"
-Write-Host ""
-Write-Host "  Desktop: double-click the cdin icon"
-Write-Host ""
-
-# Show popup on success
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.MessageBox]::Show(
-  "cdin installed to:`n$Dest`n`nOpen a new terminal window to use the 'cdin' command.",
-  "cdin Installed",
-  [System.Windows.Forms.MessageBoxButtons]::OK,
-  [System.Windows.Forms.MessageBoxIcon]::Information
-) | Out-Null
+Ok "Installation complete!  Open a new terminal and run: cdin"
