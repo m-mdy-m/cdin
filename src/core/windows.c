@@ -123,13 +123,13 @@ bool window_is_maximized(SDL_Window *win) {
 void window_set_icon(SDL_Window *win) {
 #ifndef _WIN32
   /* icon.inl*/
-  #include "../../icon.inl"
-  (void)icon_rgba_len;
+  #include "../icon.inl"
+  (void)WINDOW_ICON_LEN;
 
   SDL_Surface *surf = SDL_CreateSurfaceFrom(
     64, 64,
     SDL_PIXELFORMAT_RGBA32,
-    (void *)icon_rgba,
+    (void *)WINDOW_ICON,
     64 * 4
   );
 

@@ -442,6 +442,78 @@ static int f_fuzzy_match(lua_State *L) {
   lua_pushnumber(L, score - (int)strlen(str));
   return 1;
 }
+static int f_popen(lua_State *L) {
+  const char *cmd = luaL_checkstring(L, 1);
+
+#ifdef _WIN32
+  int wlen = MultiByteToWideChar(CP_UTF8, 0, cmd, -1, NULL, 0);
+  wchar_t *wcmd = (wchar_t *)malloc(wlen * sizeof(wchar_t));
+  if (!wcmd) return luaL_error(L, "popen: out of memory");
+  MultiByteToWideChar(CP_UTF8, 0, cmd, -1, wcmd, wlen);
+
+  SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
+  HANDLE hRead, hWrite;
+  if (!CreatePipe(&hRead, &hWrite, &sa, 0)) {
+    free(wcmd);
+    lua_pushnil(L);
+    return 1;
+  }
+  SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+
+  STARTUPINFOW si = { 0 };
+  si.cb          = sizeof(si);
+  si.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+  si.wShowWindow = SW_HIDE;
+  si.hStdOutput  = hWrite;
+  si.hStdError   = hWrite;  
+  si.hStdInput   = GetStdHandle(STD_INPUT_HANDLE);
+
+  PROCESS_INFORMATION pi = { 0 };
+  BOOL ok = CreateProcessW(
+    NULL, wcmd, NULL, NULL,
+    TRUE,                         
+    CREATE_NO_WINDOW,             
+    NULL, NULL, &si, &pi);
+  free(wcmd);
+  CloseHandle(hWrite);           
+
+  if (!ok) {
+    CloseHandle(hRead);
+    lua_pushnil(L);
+    return 1;
+  }
+
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  char buf[4096];
+  DWORD nread;
+  while (ReadFile(hRead, buf, sizeof(buf), &nread, NULL) && nread > 0)
+    luaL_addlstring(&b, buf, nread);
+
+  CloseHandle(hRead);
+  WaitForSingleObject(pi.hProcess, INFINITE);
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+
+  luaL_pushresult(&b);
+  return 1;
+
+#else
+  FILE *fp = popen(cmd, "r");
+  if (!fp) { lua_pushnil(L); return 1; }
+
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  char buf[4096];
+  size_t n;
+  while ((n = fread(buf, 1, sizeof(buf), fp)) > 0)
+    luaL_addlstring(&b, buf, n);
+  pclose(fp);
+
+  luaL_pushresult(&b);
+  return 1;
+#endif
+}
 
 
 static const luaL_Reg lib[] = {
@@ -465,6 +537,7 @@ static const luaL_Reg lib[] = {
   { "get_time",              f_get_time              },
   { "sleep",                 f_sleep                 },
   { "exec",                  f_exec                  },
+  { "popen",                 f_popen                 },
   { "fuzzy_match",           f_fuzzy_match           },
   { NULL, NULL }
 };
