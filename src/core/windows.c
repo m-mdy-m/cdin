@@ -138,8 +138,6 @@ void window_set_icon(SDL_Window *win) {
     SDL_DestroySurface(surf);
   } else {
     log_error("failed to create icon surface: %s", SDL_GetError());
-  } else {
-    fprintf(stderr, "cdin: failed to create icon surface: %s\n", SDL_GetError());
   }
 #else
   (void)win;

@@ -8,29 +8,56 @@
 #include <lualib.h>
 
 #include "api/api.h"
-#include "renderer.h"
-
-#ifdef _WIN32
-  #include <windows.h>
-#elif __linux__
-  #include <unistd.h>
-#elif __APPLE__
-  #include <mach-o/dyld.h>
-#endif
-
+#include "core/window.h"
+#include "core/lua_connector.h"
+#include "helpers/logger.h"
+#include "initial.h"
+#include "rendrer/renderer.h"
+#include "utils.h"
 
 SDL_Window *window;
 
-int main(int argc, char **argv) {
-#ifdef _WIN32
-  HINSTANCE lib = LoadLibrary("user32.dll");
-  int (*SetProcessDPIAware)() = (void*) GetProcAddress(lib, "SetProcessDPIAware");
-  SetProcessDPIAware();
-#endif
 
-  SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
-  SDL_EnableScreenSaver();
-  SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+static FILE *setup_logging(const char *exefile) {
+  log_set_level(LOG_INFO);
+
+  char dir[2048];
+  strncpy(dir, exefile, sizeof(dir) - 1);
+  dir[sizeof(dir) - 1] = '\0';
+
+  char *slash = strrchr(dir, '/');
+#ifdef _WIN32
+  char *bslash = strrchr(dir, '\\');
+  if (!slash || (bslash && bslash > slash)) slash = bslash;
+#endif
+  if (slash) *slash = '\0';
+
+  char log_path[2080];
+  snprintf(log_path, sizeof(log_path), "%s/cdin.log", slash ? dir : ".");
+
+  FILE *fp = fopen(log_path, "a");
+  if (fp) {
+    log_add_fp(fp, LOG_TRACE);
+  } else {
+    log_warn("could not open %s for writing, file logging disabled", log_path);
+  }
+  return fp;
+}
+
+
+int main(int argc, char **argv) {
+  char exefile[2048] = {0};
+  utils_get_exe_filename(exefile, sizeof(exefile));
+  FILE *log_fp = setup_logging(exefile);
+  log_info("cdin starting");
+
+  cdin_init_setup();
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+    log_fatal("SDL_Init failed: %s", SDL_GetError());
+    if (log_fp) fclose(log_fp);
+    return EXIT_FAILURE;
+  }
+  SDL_SetHint("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1");
   atexit(SDL_Quit);
   SDL_DisplayID display = SDL_GetPrimaryDisplay();
   SDL_Rect usable = {0};
@@ -47,10 +74,16 @@ int main(int argc, char **argv) {
     win_h = dm ? (int)(dm->h * 0.8f / dscale) : 800;
   }
 
-  window = SDL_CreateWindow(
-    "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w * 0.8, dm.h * 0.8,
-    SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
-  init_window_icon();
+  window = window_create(win_w, win_h);
+  if (!window) {
+    log_fatal("window_create failed, exiting");
+    if (log_fp) fclose(log_fp);
+    return EXIT_FAILURE;
+  }
+  window_set_icon(window);
+
+  SDL_StartTextInput(window);
+
   ren_init(window);
 
   double scale = utils_get_scale();
