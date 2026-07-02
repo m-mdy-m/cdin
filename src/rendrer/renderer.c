@@ -32,9 +32,8 @@ struct RenFont {
   int height;
 };
 
-/* ── internal state ── */
 static SDL_Window   *window;
-static SDL_Surface  *surface;   /* window surface for software rendering */
+static SDL_Surface  *surface; 
 static struct { int left, top, right, bottom; } clip;
 
 
@@ -60,9 +59,6 @@ static const char *utf8_to_codepoint(const char *p, unsigned *dst) {
   return p + 1;
 }
 
-
-/* ── public API ── */
-
 void ren_init(SDL_Window *win) {
   assert(win);
   window = win;
@@ -72,10 +68,7 @@ void ren_init(SDL_Window *win) {
 }
 
 void ren_update_rects(RenRect *rects, int count) {
-  /* SDL3: SDL_UpdateWindowSurfaceRects takes SDL_Rect* */
   SDL_UpdateWindowSurfaceRects(window, (SDL_Rect *)rects, count);
-
-  /* Show window on first frame */
   static bool initial_frame = true;
   if (initial_frame) {
     SDL_ShowWindow(window);
@@ -91,14 +84,12 @@ void ren_set_clip_rect(RenRect rect) {
 }
 
 void ren_get_size(int *x, int *y) {
-  /* Refresh surface in case window was resized */
   surface = SDL_GetWindowSurface(window);
+  assert(surface);
   *x = surface->w;
   *y = surface->h;
 }
 
-
-/* ── image ── */
 
 RenImage *ren_new_image(int width, int height) {
   assert(width > 0 && height > 0);
@@ -114,8 +105,6 @@ void ren_free_image(RenImage *image) {
   free(image);
 }
 
-
-/* ── font / glyph ── */
 
 static GlyphSet *load_glyphset(RenFont *font, int idx) {
   GlyphSet *set = check_alloc(calloc(1, sizeof(GlyphSet)));
@@ -147,7 +136,6 @@ retry:
     set->glyphs[i].xadvance  = floorf(set->glyphs[i].xadvance);
   }
 
-  /* Convert 8-bit alpha to RGBA */
   for (int i = width * height - 1; i >= 0; i--) {
     uint8_t a = *((uint8_t *)set->image->pixels + i);
     set->image->pixels[i] = (RenColor){ .r=255, .g=255, .b=255, .a=a };
@@ -230,8 +218,6 @@ float ren_get_font_size(RenFont *font) {
 }
 
 
-/* ── pixel blending ── */
-
 static inline RenColor blend_pixel(RenColor dst, RenColor src) {
   int ia = 0xff - src.a;
   dst.r = (uint8_t)(((src.r * src.a) + (dst.r * ia)) >> 8);
@@ -249,9 +235,6 @@ static inline RenColor blend_pixel2(RenColor dst, RenColor src, RenColor color) 
   return dst;
 }
 
-
-/* ── drawing ── */
-
 void ren_draw_rect(RenRect rect, RenColor color) {
   if (color.a == 0) return;
 
@@ -262,8 +245,6 @@ void ren_draw_rect(RenRect rect, RenColor color) {
   x2 = x2 > clip.right  ? clip.right  : x2;
   y2 = y2 > clip.bottom ? clip.bottom : y2;
   if (x1 >= x2 || y1 >= y2) return;
-
-  surface = SDL_GetWindowSurface(window);
   RenColor *d = (RenColor *)surface->pixels + x1 + y1 * surface->w;
   int dr = surface->w - (x2 - x1);
 
@@ -289,7 +270,6 @@ void ren_draw_image(RenImage *image, RenRect *sub, int x, int y, RenColor color)
   if ((n = y + sub->height - clip.bottom) > 0) { sub->height -= n; }
   if (sub->width <= 0 || sub->height <= 0) return;
 
-  surface = SDL_GetWindowSurface(window);
   RenColor *s = image->pixels + sub->x + sub->y * image->width;
   RenColor *d = (RenColor *)surface->pixels + x + y * surface->w;
   int sr = image->width  - sub->width;
