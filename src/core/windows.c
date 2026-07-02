@@ -24,8 +24,6 @@ static SDL_HitTestResult SDLCALL hit_test_cb(SDL_Window *win, const SDL_Point *a
   int x = area->x;
   int y = area->y;
 
-  /* Maximized windows have no edges to grab; let the OS treat the
-   * whole thing as normal client area aside from the caption. */
   bool maximized = (SDL_GetWindowFlags(win) & SDL_WINDOW_MAXIMIZED) != 0;
 
   if (!maximized) {
@@ -43,9 +41,6 @@ static SDL_HitTestResult SDLCALL hit_test_cb(SDL_Window *win, const SDL_Point *a
     if (on_top)    return SDL_HITTEST_RESIZE_TOP;
     if (on_bottom) return SDL_HITTEST_RESIZE_BOTTOM;
   }
-
-  /* Caption buttons (minimize/maximize/close) must stay clickable,
-   * not draggable, even though they live inside the title bar strip. */
   for (int i = 0; i < hit_state.button_count; i++) {
     const WindowRect *r = &hit_state.buttons[i];
     if (x >= r->x && x < r->x + r->w && y >= r->y && y < r->y + r->h) {
@@ -65,8 +60,7 @@ SDL_Window *window_create(int w, int h) {
   SDL_Window *win = SDL_CreateWindow(
     "cdin",
     w, h,
-    SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
-    SDL_WINDOW_HIDDEN | SDL_WINDOW_BORDERLESS
+    SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_BORDERLESS
   );
 
   if (!win) {
@@ -83,10 +77,6 @@ SDL_Window *window_create(int w, int h) {
 void window_install_hittest(SDL_Window *win) {
   if (hit_state.installed || !win) return;
   if (!SDL_SetWindowHitTest(win, hit_test_cb, NULL)) {
-    /* Not fatal: the window still works, it just can't be resized by
-     * dragging an edge on platforms that don't support custom hit
-     * testing. The title bar buttons still call the regular window
-     * commands below. */
     log_warn("SDL_SetWindowHitTest failed: %s", SDL_GetError());
     return;
   }
@@ -132,7 +122,7 @@ bool window_is_maximized(SDL_Window *win) {
 
 void window_set_icon(SDL_Window *win) {
 #ifndef _WIN32
-  /* icon.inl defines: const unsigned char icon_rgba[]; const unsigned icon_rgba_len; */
+  /* icon.inl*/
   #include "../../icon.inl"
   (void)icon_rgba_len;
 
