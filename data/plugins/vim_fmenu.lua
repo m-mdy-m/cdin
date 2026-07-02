@@ -1,15 +1,4 @@
--- data/plugins/vim_fmenu.lua
---
 -- File-manager context menu for vimode, triggered by pressing `m`
--- while the TreeView has focus (or from normal-mode in DocView).
---
--- Presents a lightweight in-editor menu (rendered in CommandView)
--- for common file operations: new file, new dir, rename, copy,
--- move, delete, open.  Talks to vim_fs for the actual I/O.
---
--- Integration:
---   In vimode.lua, bind `m` in normal mode to command "vim-fmenu:open".
---   In treeview.lua keybindings add "vim-fmenu:open" to the `m` key.
 
 local core    = require "core"
 local command = require "core.command"
