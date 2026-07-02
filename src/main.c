@@ -32,12 +32,20 @@ int main(int argc, char **argv) {
   SDL_EnableScreenSaver();
   SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
   atexit(SDL_Quit);
-
-  /* ── window (borderless; Lua draws its own title bar) ── */
   SDL_DisplayID display = SDL_GetPrimaryDisplay();
-  const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(display);
-  int win_w = dm ? (int)(dm->w * 0.8f) : 1280;
-  int win_h = dm ? (int)(dm->h * 0.8f) : 800;
+  SDL_Rect usable = {0};
+  int win_w, win_h;
+  if (SDL_GetDisplayUsableBounds(display, &usable) && usable.w > 0) {
+    win_w = (int)(usable.w * 0.8f);
+    win_h = (int)(usable.h * 0.8f);
+  } else {
+    /* fallback: physical mode / content-scale — better than a hardcoded guess */
+    const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(display);
+    float dscale = SDL_GetDisplayContentScale(display);
+    if (dscale < 0.5f) dscale = 1.0f;
+    win_w = dm ? (int)(dm->w * 0.8f / dscale) : 1280;
+    win_h = dm ? (int)(dm->h * 0.8f / dscale) : 800;
+  }
 
   window = SDL_CreateWindow(
     "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w * 0.8, dm.h * 0.8,
@@ -45,10 +53,8 @@ int main(int argc, char **argv) {
   init_window_icon();
   ren_init(window);
 
-  /* ── HiDPI scale ── */
   double scale = utils_get_scale();
 
-  /* ── Lua VM ── */
   lua_State *L = luaL_newstate();
   if (!L) {
     log_fatal("failed to create Lua state");
@@ -59,13 +65,8 @@ int main(int argc, char **argv) {
   luaL_openlibs(L);
   api_load_libs(L);
 
-  /* expose globals (ARGS, VERSION, PLATFORM, SCALE, EXEFILE, EXEDIR) */
   lua_setup_globals(L, argc, argv, scale, exefile);
-
-  /* run core — this blocks until the user quits */
   lua_run_core(L);
-
-  /* ── cleanup ── */
   log_info("cdin shutting down cleanly");
   lua_close(L);
   SDL_DestroyWindow(window);

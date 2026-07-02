@@ -71,11 +71,9 @@ top:
       return 1;
 
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
-      /* Flush queued key-down events to avoid spurious tab presses */
-      SDL_FlushEvents(SDL_EVENT_KEY_DOWN, SDL_EVENT_KEY_DOWN);
+      SDL_FlushEvents(SDL_EVENT_TEXT_INPUT, SDL_EVENT_TEXT_INPUT);
       goto top;
 
-    /* ── file drop ── */
     case SDL_EVENT_DROP_FILE: {
       float mx, my;
       SDL_GetGlobalMouseState(&mx, &my);
@@ -85,9 +83,6 @@ top:
       lua_pushstring(L, e.drop.data);
       lua_pushnumber(L, mx - (float)wx);
       lua_pushnumber(L, my - (float)wy);
-      /* e.drop.data is `const char *` and owned by SDL (unlike SDL2's
-       * e.drop.file, which the caller had to SDL_free). lua_pushstring
-       * above already copied the bytes into Lua's own memory. */
       return 4;
     }
 
@@ -172,7 +167,11 @@ static int f_set_cursor(lua_State *L) {
   int opt = luaL_checkoption(L, 1, "arrow", cursor_opts);
   SDL_SystemCursor id = cursor_enums[opt];
   if (!cursor_cache[opt]) {
+    log_debug("system: creating and caching cursor \"%s\"", cursor_opts[opt]);
     cursor_cache[opt] = SDL_CreateSystemCursor(id);
+    if (!cursor_cache[opt]) {
+      log_error("system: SDL_CreateSystemCursor(\"%s\") failed: %s", cursor_opts[opt], SDL_GetError());
+    }
   }
   SDL_SetCursor(cursor_cache[opt]);
   return 0;
@@ -180,7 +179,9 @@ static int f_set_cursor(lua_State *L) {
 
 
 static int f_set_window_title(lua_State *L) {
-  SDL_SetWindowTitle(window, luaL_checkstring(L, 1));
+  const char *title = luaL_checkstring(L, 1);
+  log_trace("system: set window title to \"%s\"", title);
+  SDL_SetWindowTitle(window, title);
   return 0;
 }
 
@@ -189,6 +190,7 @@ static const char *window_opts[] = { "normal", "maximized", "fullscreen", NULL }
 
 static int f_set_window_mode(lua_State *L) {
   int n = luaL_checkoption(L, 1, "normal", window_opts);
+  log_debug("system: set window mode to \"%s\"", window_opts[n]);
   if (n == 0) {
     SDL_RestoreWindow(window);
     SDL_SetWindowFullscreen(window, false);
@@ -207,8 +209,6 @@ static int f_window_has_focus(lua_State *L) {
   return 1;
 }
 
-
-/* ── custom title bar (cdin draws its own VSCode-style caption) ── */
 
 static int f_window_minimize(lua_State *L) {
   (void)L;
@@ -229,10 +229,6 @@ static int f_window_is_maximized(lua_State *L) {
   return 1;
 }
 
-
-/* system.set_hit_regions(titlebar_height, { {x,y,w,h}, ... })
- * Called every frame the title bar's layout changes so the native
- * hit-test (window.c) knows what's draggable vs. a caption button. */
 static int f_set_hit_regions(lua_State *L) {
   int titlebar_height = (int)luaL_checknumber(L, 1);
   WindowRect buttons[8];
@@ -271,9 +267,6 @@ static int f_show_confirm_dialog(lua_State *L) {
     { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Yes" },
     { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No"  },
   };
-  /* Dark, low-saturation palette matching the editor's VEX-inspired
-   * theme, so this doesn't look like a stray Windows 98 alert box
-   * dropped on top of a dark editor. */
   SDL_MessageBoxColorScheme scheme = {
     .colors = {
       [SDL_MESSAGEBOX_COLOR_BACKGROUND]        = { 14, 14, 14 },
@@ -304,13 +297,16 @@ static int f_chdir(lua_State *L) {
   const char *path = luaL_checkstring(L, 1);
 #ifdef _WIN32
   if (_chdir(path) != 0) {
+    log_error("system.chdir(\"%s\") failed: %s", path, strerror(errno));
     luaL_error(L, "chdir() failed: %s", strerror(errno));
   }
 #else
   if (chdir(path) != 0) {
+    log_error("system.chdir(\"%s\") failed: %s", path, strerror(errno));
     luaL_error(L, "chdir() failed: %s", strerror(errno));
   }
 #endif
+  log_info("system: working directory changed to \"%s\"", path);
   return 0;
 }
 
