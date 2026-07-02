@@ -31,10 +31,8 @@ $(OUT_DIR)/%.o: %.c
 
 _check_deps:
 	@command -v $(word $(words $(CC)),$(CC)) >/dev/null || { echo 'compiler not found: $(CC)'; exit 1; }
-	@printf '#include <$(SDL_HEADER)>\n' | $(CC) $(CFLAGS) -x c -fsyntax-only - >/dev/null 2>&1 || { \
-		echo '✗ $(SDL_HEADER) not found'; \
-		echo '  apt: sudo apt install libsdl$(SDL_VERSION)-dev'; \
-		echo '  pacman: sudo pacman -S sdl$(SDL_VERSION)'; \
+	@printf '#include <SDL3/SDL.h>\n' | $(CC) $(CFLAGS) -x c -fsyntax-only - >/dev/null 2>&1 || { \
+		echo '✗ SDL3/SDL.h not found — install libsdl3-dev or set SDL3_PREFIX=/path/to/sdl3'; \
 		exit 1; }
 	@printf '#include <lua.h>\n' | $(CC) $(CFLAGS) -x c -fsyntax-only - >/dev/null 2>&1 || { \
 		echo '✗ lua.h not found'; \
@@ -66,7 +64,7 @@ info:
 	@printf '  %-12s %s\n' 'TREE' '$(if $(DIRTY),dirty,clean)'
 	@printf '  %-12s %s\n' 'PLATFORM' '$(PLATFORM)'
 	@printf '  %-12s %s\n' 'BUILD' '$(BUILD)'
-	@printf '  %-12s %s [pkg: %s]\n' 'SDL' '$(SDL_VERSION)' '$(SDL_PKG)'
+	@printf '  %-12s %s\n' 'SDL' '3 (required)'
 	@printf '  %-12s %s [pkg: %s]\n' 'LUA' '$(LUA_FOUND_VERSION)' '$(if $(LUA_PKG),$(LUA_PKG),manual)'
 	@printf '  %-12s %s\n' 'CC' '$(CC)'
 	@printf '  %-12s %s\n' 'OUT' '$(OUT)'
@@ -79,4 +77,4 @@ info:
 
 help:
 	@echo 'Targets: build (default), run, debug, clean, distclean, install, uninstall, info, help'
-	@echo 'Options: SDL_VERSION=auto|2|3 BUILD=release|debug PREFIX=/usr/local LUA_VERSION=auto|5.4'
+	@echo 'Options: SDL3_PREFIX=/path BUILD=release|debug PREFIX=/usr/local LUA_VERSION=auto|5.4'
