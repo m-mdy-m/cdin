@@ -52,12 +52,10 @@ local GIT_COLOR = {
   ["!"] = style.dim,
 }
 
+-- system.exec_capture uses Win32 CreateProcess + CREATE_NO_WINDOW on Windows,
+-- so no cmd.exe console window flashes.  Falls back to popen on Linux/macOS.
 local function run_capture(cmd)
-  local ok, fp = pcall(io.popen, cmd)
-  if not ok or not fp then return nil end
-  local out = fp:read("*a")
-  fp:close()
-  return out
+  return system.exec_capture(cmd)
 end
 
 local function parse_porcelain_line(line)
@@ -586,7 +584,7 @@ command.add(nil, {
     core.command_view:enter("New Directory", function(text)
       if text == "" then return end
       local path = (dir ~= "." and dir .. PATHSEP or "") .. text
-      local ok = os.execute((PATHSEP == "\\")
+      local ok = system.exec_wait((PATHSEP == "\\")
         and ('mkdir "' .. path .. '"')
         or  ('mkdir -p "' .. path .. '"'))
       if not ok then
@@ -640,7 +638,7 @@ command.add(nil, {
 
     for _, item in ipairs(items) do
       if item.type == "dir" then
-        os.execute((PATHSEP == "\\")
+        system.exec_wait((PATHSEP == "\\")
           and ('rmdir /s /q "' .. item.filename .. '"')
           or  ('rm -rf "' .. item.filename .. '"'))
       else

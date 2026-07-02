@@ -71,13 +71,10 @@ endif
 
 BASE_CFLAGS := -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter $(OPT) $(VERSION_CFLAGS) -Isrc
 CFLAGS := $(BASE_CFLAGS) $(SDL_CFLAGS) $(LUA_CFLAGS)
+LDFLAGS := $(SDL_LDFLAGS) $(LUA_LDFLAGS) -lm $(STRIP)
 ifeq ($(PLATFORM),windows)
-  WIN_LDFLAGS := -mwindows
-else
-  WIN_LDFLAGS :=
+  LDFLAGS += -mwindows
 endif
-
-LDFLAGS := $(SDL_LDFLAGS) $(LUA_LDFLAGS) -lm $(STRIP) $(WIN_LDFLAGS)
 
 OUT_DIR := build/$(PLATFORM)-$(BUILD)
 OUT := $(OUT_DIR)/cdin$(EXE)

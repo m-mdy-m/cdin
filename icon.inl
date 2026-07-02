@@ -1,4 +1,4 @@
-/* Auto-generated from scripts/icon.svg â€” do not hand-edit.
+/* Auto-generated from scripts/icon.svg — do not hand-edit.
  * Size: 64x64 RGBA (R,G,B,A byte order, row-major, top-to-bottom).
  * Re-generate: python3 scripts/gen_icon.py */
 static const unsigned char icon_rgba[] = {
