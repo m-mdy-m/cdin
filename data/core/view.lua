@@ -124,8 +124,8 @@ end
 
 function View:update()
   self:clamp_scroll_position()
-  self:move_towards(self.scroll, "x", self.scroll.to.x, 0.3)
-  self:move_towards(self.scroll, "y", self.scroll.to.y, 0.3)
+  self:move_towards(self.scroll, "x", self.scroll.to.x, 0.5)
+  self:move_towards(self.scroll, "y", self.scroll.to.y, 0.5)
 end
 
 

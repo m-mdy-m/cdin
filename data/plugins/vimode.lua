@@ -1,7 +1,7 @@
-local core = require "core"
-local config = require "core.config"
+local core    = require "core"
+local config  = require "core.config"
 local command = require "core.command"
-local keymap = require "core.keymap"
+local keymap  = require "core.keymap"
 local DocView = require "core.docview"
 local CommandView = require "core.commandview"
 
@@ -9,11 +9,13 @@ if config.vim_mode_enabled == nil then
   config.vim_mode_enabled = true
 end
 
-local MODE_NORMAL, MODE_INSERT, MODE_VISUAL = "normal", "insert", "visual"
+local MODE_NORMAL = "normal"
+local MODE_INSERT = "insert"
+local MODE_VISUAL = "visual"
+
 local PENDING_TIMEOUT = 0.6
 
 local pending = nil
-
 
 local function active_docview()
   local view = core.active_view
@@ -23,11 +25,9 @@ local function active_docview()
   return nil
 end
 
-
 local function get_mode(view)
   return view.vim_mode or MODE_NORMAL
 end
-
 
 local function set_mode(view, mode)
   view.vim_mode = mode
@@ -35,6 +35,8 @@ local function set_mode(view, mode)
 end
 
 
+-- ── motion table ──────────────────────────────────────────────────────────
+-- Each entry: { normal_cmd, visual_cmd }
 local MOTIONS = {
   h = { "doc:move-to-previous-char",       "doc:select-to-previous-char" },
   l = { "doc:move-to-next-char",           "doc:select-to-next-char" },
@@ -43,6 +45,10 @@ local MOTIONS = {
   w = { "doc:move-to-next-word-end",       "doc:select-to-next-word-end" },
   b = { "doc:move-to-previous-word-start", "doc:select-to-previous-word-start" },
 }
+
+
+-- ── ex-command handler ────────────────────────────────────────────────────
+
 local function save_all()
   for _, doc in ipairs(core.docs) do
     if doc.filename and doc:is_dirty() then
@@ -50,7 +56,6 @@ local function save_all()
     end
   end
 end
-
 
 local function force_close_active_view()
   local root = core.root_view.root_node
@@ -79,37 +84,22 @@ local function force_close_active_view()
   core.last_active_view = nil
 end
 
-
-local function quit_all(force)
-  core.quit(force)
-end
-
-
 local function submit_ex_command(text)
   text = text:gsub("^%s+", ""):gsub("%s+$", "")
   if text == "" then return end
 
-  if text == "w" then
-    command.perform("doc:save")
-  elseif text == "wa" or text == "wa!" then
-    save_all()
-  elseif text == "q" then
-    command.perform("root:close")
-  elseif text == "q!" then
-    force_close_active_view()
-  elseif text == "qa" or text == "qall" then
-    quit_all(false)
-  elseif text == "qa!" or text == "qall!" then
-    quit_all(true)
-  elseif text == "wq" or text == "x" then
-    command.perform("doc:save")
-    command.perform("root:close")
+  if     text == "w"                              then command.perform("doc:save")
+  elseif text == "wa" or text == "wa!"            then save_all()
+  elseif text == "q"                              then command.perform("root:close")
+  elseif text == "q!"                             then force_close_active_view()
+  elseif text == "qa" or text == "qall"           then core.quit(false)
+  elseif text == "qa!" or text == "qall!"         then core.quit(true)
+  elseif text == "wq"  or text == "x"             then
+    command.perform("doc:save"); command.perform("root:close")
   elseif text == "wqa" or text == "wqall" or text == "xa" then
-    save_all()
-    quit_all(false)
-  elseif text == "wqa!" or text == "wqall!" then
-    save_all()
-    quit_all(true)
+    save_all(); core.quit(false)
+  elseif text == "wqa!" or text == "wqall!"       then
+    save_all(); core.quit(true)
   elseif text:match("^%d+$") then
     local view = active_docview()
     if view then
@@ -122,8 +112,7 @@ local function submit_ex_command(text)
   end
 end
 
-
-local function open_command_line()
+local function open_ex_commandline()
   core.command_view:enter("", submit_ex_command, function() return {} end)
 end
 
@@ -139,25 +128,24 @@ local function handle_key(k)
     return false
   end
 
-  local mode = get_mode(view)
+  local mode  = get_mode(view)
   local shift = keymap.modkeys.shift
 
   if k == "escape" then
     if mode == MODE_INSERT then
       set_mode(view, MODE_NORMAL)
       command.perform("doc:move-to-previous-char")
-      return true
     elseif mode == MODE_VISUAL then
       set_mode(view, MODE_NORMAL)
       command.perform("doc:select-none")
-      return true
+    else
+      command.perform("doc:select-none")
     end
-    open_command_line()
     return true
   end
 
   if mode == MODE_INSERT then
-    return false -- everything else is just typing
+    return false
   end
 
   if mode == MODE_VISUAL and not shift then
@@ -174,7 +162,8 @@ local function handle_key(k)
   end
 
   if mode == MODE_NORMAL and not shift and (k == "g" or k == "d" or k == "y") then
-    if pending and pending.key == k and system.get_time() - pending.t < PENDING_TIMEOUT then
+    if pending and pending.key == k
+    and system.get_time() - pending.t < PENDING_TIMEOUT then
       pending = nil
       if k == "g" then
         command.perform("doc:move-to-start-of-doc")
@@ -185,18 +174,18 @@ local function handle_key(k)
         command.perform("doc:copy")
         command.perform("doc:select-none")
       end
-      return true
+    else
+      pending = { key = k, t = system.get_time() }
     end
-    pending = { key = k, t = system.get_time() }
     return true
   end
+
   if pending and pending.key ~= k then
-    pending = nil -- abandoned combo; handle this key normally below
+    pending = nil
   end
 
   if shift then
-    if k == "g" then
-      command.perform("doc:move-to-end-of-doc")
+    if     k == "g" then command.perform("doc:move-to-end-of-doc")
     elseif k == "i" then
       command.perform("doc:move-to-start-of-line")
       set_mode(view, MODE_INSERT)
@@ -207,12 +196,9 @@ local function handle_key(k)
       command.perform("doc:move-to-start-of-line")
       command.perform("doc:newline-above")
       set_mode(view, MODE_INSERT)
-    elseif k == "n" then
-      command.perform("find-replace:previous-find")
-    elseif k == "4" then -- $ (shift+4): end of line
-      command.perform("doc:move-to-end-of-line")
-    elseif k == ";" then -- : (shift+;): ex command line
-      open_command_line()
+    elseif k == "n" then command.perform("find-replace:previous-find")
+    elseif k == "4" then command.perform("doc:move-to-end-of-line")   -- $ (shift+4)
+    elseif k == ";" then open_ex_commandline()                        -- : (shift+;)
     end
     return true
   end
@@ -230,47 +216,52 @@ local function handle_key(k)
       set_mode(view, MODE_VISUAL)
     end
     return true
-  elseif k == "0" then
-    command.perform("doc:move-to-start-of-line")
-    return true
-  elseif k == "x" then
-    command.perform("doc:select-to-next-char")
-    command.perform("doc:cut")
-    return true
-  elseif k == "p" then
-    command.perform("doc:paste")
-    return true
-  elseif k == "u" then
-    command.perform("doc:undo")
-    return true
-  elseif k == "i" then
-    set_mode(view, MODE_INSERT)
-    return true
-  elseif k == "a" then
+  end
+
+  if k == "i" then set_mode(view, MODE_INSERT); return true end
+
+  if k == "a" then
     command.perform("doc:move-to-next-char")
     set_mode(view, MODE_INSERT)
     return true
-  elseif k == "o" then
+  end
+
+  if k == "o" then
     command.perform("doc:move-to-end-of-line")
     command.perform("doc:newline")
     set_mode(view, MODE_INSERT)
     return true
-  elseif k == "/" then
-    command.perform("find-replace:find")
-    return true
-  elseif k == "n" then
-    command.perform("find-replace:repeat-find")
+  end
+
+  if k == "0" then command.perform("doc:move-to-start-of-line"); return true end
+
+  if k == "x" then
+    command.perform("doc:select-to-next-char")
+    command.perform("doc:cut")
     return true
   end
 
+  if k == "p" then command.perform("doc:paste"); return true end
+  if k == "u" then command.perform("doc:undo");  return true end
+
+  if k == "/" then command.perform("find-replace:find");        return true end
+  if k == "n" then command.perform("find-replace:repeat-find"); return true end
+
   if #k == 1 then return true end
+
   return false
 end
 
 
 local original_on_key_pressed = keymap.on_key_pressed
+
 function keymap.on_key_pressed(k)
   local ok, handled = core.try(handle_key, k)
-  if ok and handled then return true end
+  if ok and handled then
+    if system.suppress_next_textinput then
+      system.suppress_next_textinput()
+    end
+    return true
+  end
   return original_on_key_pressed(k)
 end
