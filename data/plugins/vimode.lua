@@ -8,8 +8,6 @@ local ex          = require "plugins.vim_ex"
 
 require "plugins.vim_fmenu"
 
-
-
 if config.vim_mode_enabled == nil then
   config.vim_mode_enabled = true
 end
@@ -49,6 +47,7 @@ local MOTIONS = {
   b = { "doc:move-to-previous-word-start", "doc:select-to-previous-word-start" },
   e = { "doc:move-to-next-word-end",       "doc:select-to-next-word-end"       },
 }
+
 
 local function ex_suggest(text)
   
@@ -101,40 +100,55 @@ local function ex_history_next()
   return true
 end
 
+
 local function handle_key(k)
   if not config.vim_mode_enabled then return false end
-  
+
   if core.active_view == core.command_view then
     if k == "up"   then return ex_history_prev() end
     if k == "down" then return ex_history_next() end
-    return false   
+    return false
   end
 
-  local view = active_docview()
-  if not view then return false end
-  
   if k:find("ctrl") or k:find("alt") then return false end
   if keymap.modkeys.ctrl or keymap.modkeys.alt or keymap.modkeys.altgr then
     return false
   end
 
-  local mode  = get_mode(view)
   local shift = keymap.modkeys.shift
 
-  if k == "escape" then
-    if mode == MODE_INSERT then
-      set_mode(view, MODE_NORMAL)
-      command.perform("doc:move-to-previous-char")
-    elseif mode == MODE_VISUAL then
-      set_mode(view, MODE_NORMAL)
-      command.perform("doc:select-none")
-    else
-      command.perform("doc:select-none")
-    end
-    pending = nil
+  if shift and k == ";" or k == "escape" then
+    open_ex_commandline()
     return true
   end
-  
+  if k == "m" then
+    command.perform("vim-fmenu:open")
+    return true
+  end
+  local view = active_docview()
+
+  if k == "escape" then
+    if view then
+      local mode = get_mode(view)
+      if mode == MODE_INSERT then
+        set_mode(view, MODE_NORMAL)
+        command.perform("doc:move-to-previous-char")
+      elseif mode == MODE_VISUAL then
+        set_mode(view, MODE_NORMAL)
+        command.perform("doc:select-none")
+      else
+        command.perform("doc:select-none")
+      end
+      pending = nil
+      return true  
+    end
+    return false
+  end
+
+  if not view then return false end
+
+  local mode = get_mode(view)
+
   if mode == MODE_INSERT then
     return false
   end
@@ -181,7 +195,6 @@ local function handle_key(k)
     return true
   end
 
-  
   if pending and pending.key ~= k then
     pending = nil
   end
@@ -199,19 +212,16 @@ local function handle_key(k)
       command.perform("doc:newline-above")
       set_mode(view, MODE_INSERT)
     elseif k == "n" then command.perform("find-replace:previous-find")
-    elseif k == "4" then command.perform("doc:move-to-end-of-line")   
-    elseif k == "6" then command.perform("doc:move-to-start-of-line") 
+    elseif k == "4" then command.perform("doc:move-to-end-of-line")   -- $
+    elseif k == "6" then command.perform("doc:move-to-start-of-line") -- ^
     elseif k == "d" then
-      
+      -- D: delete to end of line
       command.perform("doc:select-to-end-of-line")
       command.perform("doc:cut")
     elseif k == "j" then
-      
+      -- J: join next line
       command.perform("doc:move-to-end-of-line")
       command.perform("doc:delete")
-    elseif k == ";" then
-      
-      open_ex_commandline()
     end
     return true
   end
@@ -261,7 +271,6 @@ local function handle_key(k)
 
   if k == "u" then command.perform("doc:undo"); return true end
   if k == "r" then
-    
     command.perform("doc:redo")
     return true
   end
@@ -269,26 +278,21 @@ local function handle_key(k)
   if k == "/" then command.perform("find-replace:find");        return true end
   if k == "n" then command.perform("find-replace:repeat-find"); return true end
   if k == "*" then
-    
     local doc = view.doc
     local line, col = doc:get_selection()
     local word = doc:get_text(line, col, line, math.huge)
     word = word:match("^([%w_]+)") or ""
     if word ~= "" then
       command.perform("find-replace:find")
-      
     end
     return true
   end
 
   if k == "m" then
-    
     command.perform("vim-fmenu:open")
     return true
   end
-
   if k == "tab" then
-    
     command.perform("root:switch-to-next-tab")
     return true
   end
@@ -310,7 +314,6 @@ function keymap.on_key_pressed(k)
   end
   return original_on_key_pressed(k)
 end
-
 
 function core.get_vim_mode_label()
   if not config.vim_mode_enabled then return nil end
