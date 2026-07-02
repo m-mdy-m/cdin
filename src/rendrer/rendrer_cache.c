@@ -1,8 +1,5 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "rendrer_cache.h"
-#include "../helpers/logger.h"
+#include "rencache.h"
 
 #define CELLS_X          80
 #define CELLS_Y          50
@@ -77,9 +74,7 @@ static Command *push_command(int type, int size) {
   Command *cmd = (Command *)(command_buf + command_buf_idx);
   int n = command_buf_idx + size;
   if (n > COMMAND_BUF_SIZE) {
-    log_warn("rencache: command buffer exhausted (%d/%d bytes) — dropping draw command "
-             "(type=%d size=%d)",
-             command_buf_idx, COMMAND_BUF_SIZE, type, size);
+    fprintf(stderr, "Warning: (" __FILE__ "): exhausted command buffer\n");
     return NULL;
   }
   command_buf_idx = n;
