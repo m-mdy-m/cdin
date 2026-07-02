@@ -64,18 +64,20 @@ function Doc:reset_syntax()
   end
 end
 
-
 function Doc:load(filename)
   local fp = assert( io.open(filename, "rb") )
   self:reset()
   self.filename = filename
   self.lines = {}
   for line in fp:lines() do
-    if line:byte(-1) == 13 then
-      line = line:sub(1, -2)
+    local text = line
+
+    if text:byte(-1) == 13 then
+      text = text:sub(1, -2)
       self.crlf = true
     end
-    table.insert(self.lines, line .. "\n")
+
+    table.insert(self.lines, text .. "\n")
   end
   if #self.lines == 0 then
     table.insert(self.lines, "\n")
@@ -89,8 +91,13 @@ function Doc:save(filename)
   filename = filename or assert(self.filename, "no filename set to default to")
   local fp = assert( io.open(filename, "wb") )
   for _, line in ipairs(self.lines) do
-    if self.crlf then line = line:gsub("\n", "\r\n") end
-    fp:write(line)
+    local text = line
+
+    if self.crlf then
+      text = text:gsub("\n", "\r\n")
+    end
+
+    fp:write(text)
   end
   fp:close()
   self.filename = filename or self.filename

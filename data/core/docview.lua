@@ -181,8 +181,11 @@ end
 
 
 function DocView:scroll_to_make_visible(line, col)
-  local min = self:get_line_height() * (line - 1)
-  local max = self:get_line_height() * (line + 2) - self.size.y
+  local lh = self:get_line_height()
+  local visible_lines = math.max(1, math.floor(self.size.y / lh))
+  local margin = math.min(config.scrolloff, math.floor((visible_lines - 1) / 2))
+  local min = lh * (line - 1 - margin)
+  local max = lh * (line + margin + 1) - self.size.y
   self.scroll.to.y = math.min(self.scroll.to.y, min)
   self.scroll.to.y = math.max(self.scroll.to.y, max)
   local gw = self:get_gutter_width()
@@ -327,9 +330,7 @@ function DocView:draw_line_body(idx, x, y)
   -- draw line's text
   self:draw_line_text(idx, x, y)
 
-  -- draw caret if it overlaps this line
   if line == idx and core.active_view == self
-  and self.blink_timer < blink_period / 2
   and system.window_has_focus() then
     local lh = self:get_line_height()
     local x1 = x + self:get_col_x_offset(line, col)
@@ -341,12 +342,18 @@ end
 function DocView:draw_line_gutter(idx, x, y)
   local color = style.line_number
   local line1, _, line2, _ = self.doc:get_selection(true)
-  if idx >= line1 and idx <= line2 then
+  local on_caret_line = idx >= line1 and idx <= line2
+  if on_caret_line then
     color = style.line_number2
   end
+  local number = idx
+  if config.line_number_relative and not on_caret_line then
+    number = math.abs(idx - line1)
+  end
+
   local yoffset = self:get_line_text_y_offset()
   x = x + style.padding.x
-  renderer.draw_text(self:get_font(), idx, x, y + yoffset, color)
+  renderer.draw_text(self:get_font(), number, x, y + yoffset, color)
 end
 
 

@@ -11,7 +11,6 @@ local function doc()
   return core.active_view.doc
 end
 
-
 local previous_finds
 local last_doc
 local last_fn, last_text

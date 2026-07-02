@@ -613,8 +613,6 @@ command.add(nil, {
         core.error("treeview: rename failed: %s", err or "unknown error")
         return
       end
-      -- keep any open doc on this file pointed at its new path instead
-      -- of silently turning into a "file no longer exists" buffer
       for _, doc in ipairs(core.docs) do
         if doc.filename and system.absolute_path(doc.filename) == item.abs_filename then
           doc.filename = new_path
@@ -626,7 +624,6 @@ command.add(nil, {
     end)
     core.command_view:set_text(item.name, true)
   end,
-
   ["treeview:delete"] = function()
     local items = selected_items()
     if #items == 0 then return end
@@ -680,16 +677,10 @@ command.add(function() return core.active_view == view end, {
 keymap.add {
   ["up"] = "treeview:select-previous",
   ["down"] = "treeview:select-next",
-  ["k"] = "treeview:select-previous",   -- vim-style; harmless to also
-  ["j"] = "treeview:select-next",       -- bind globally since these
-                                         -- only fire when the tree's
-                                         -- predicate matches
   ["return"] = "treeview:open-cursor-item",
   ["keypad enter"] = "treeview:open-cursor-item",
   ["left"] = "treeview:collapse-or-parent",
   ["right"] = "treeview:expand-or-child",
-  ["h"] = "treeview:collapse-or-parent",
-  ["l"] = "treeview:expand-or-child",
 }
 
 keymap.add {
