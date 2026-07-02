@@ -4,7 +4,9 @@ config.project_scan_rate = 5
 config.fps = 60
 config.max_log_items = 80
 config.message_timeout = 3
-config.mouse_wheel_scroll = 50 * SCALE
+
+config.mouse_wheel_scroll = 54 * SCALE
+
 config.file_size_limit = 10
 config.ignore_files = "^%."
 config.symbol_pattern = "[%a_][%w_]*"
@@ -17,5 +19,9 @@ config.indent_size = 2
 config.tab_type = "soft"
 config.line_limit = 80
 config.vim_mode_enabled = true
+
+config.scrolloff = 5
+
+config.line_number_relative = false
 
 return config
