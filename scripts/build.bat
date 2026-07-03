@@ -51,8 +51,6 @@ set "ICON_INL=src\icon.inl"
 if exist "%ICON_SVG%" (
     set "DO_GEN=0"
     if not exist "%ICON_INL%" set "DO_GEN=1"
-    REM Simple timestamp check: if gen_icon.py is newer, regenerate
-    REM (Full timestamp compare needs PowerShell; we just always regenerate if .inl missing)
     if "!DO_GEN!"=="1" (
         echo [build] Generating %ICON_INL% from %ICON_SVG% ...
         "%PYTHON%" scripts\gen_icon.py --svg "%ICON_SVG%" --out "%ICON_INL%"
@@ -62,7 +60,7 @@ if exist "%ICON_SVG%" (
         )
         echo [build] %ICON_INL% generated.
     ) else (
-        echo [build] %ICON_INL% already exists.
+        echo [build] %ICON_INL% already exists, skipping generation.
     )
 ) else (
     echo [build] WARNING: %ICON_SVG% not found – skipping icon generation.
@@ -108,8 +106,59 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [build] Build complete!
-if exist "build\cdin.exe" echo [build] Binary: build\cdin.exe
+set "OUT_DIR=build\windows-%BUILD_TYPE%"
+set "EXE=%OUT_DIR%\cdin.exe"
+
+if exist "%EXE%" (
+    echo [build] Collecting runtime DLLs into %OUT_DIR% ...
+
+    REM SDL3.dll
+    set "SDL3_DLL="
+    for /f "delims=" %%F in ('where SDL3.dll 2^>nul') do if not defined SDL3_DLL set "SDL3_DLL=%%F"
+    if not defined SDL3_DLL (
+        REM Fallback: scan common MinGW bin paths
+        for %%D in (
+            "C:\msys64\mingw64\bin\SDL3.dll"
+            "C:\mingw64\bin\SDL3.dll"
+            "C:\mingw\bin\SDL3.dll"
+        ) do if exist %%D if not defined SDL3_DLL set "SDL3_DLL=%%~D"
+    )
+    if defined SDL3_DLL (
+        copy /Y "!SDL3_DLL!" "%OUT_DIR%\" >nul
+        echo [build]   SDL3.dll  ^<-- !SDL3_DLL!
+    ) else (
+        echo [build] WARNING: SDL3.dll not found – add its directory to PATH
+        echo                  or copy it manually to %OUT_DIR%\
+    )
+
+    REM lua*.dll  (lua55.dll / lua54.dll / lua5.4.dll / lua.dll)
+    set "LUA_DLL="
+    for %%N in (lua55.dll lua54.dll lua5.4.dll lua53.dll lua5.3.dll lua.dll) do (
+        if not defined LUA_DLL (
+            for /f "delims=" %%F in ('where %%N 2^>nul') do if not defined LUA_DLL set "LUA_DLL=%%F"
+            if not defined LUA_DLL (
+                for %%D in (
+                    "C:\msys64\mingw64\bin\%%N"
+                    "C:\mingw64\bin\%%N"
+                    "C:\mingw\bin\%%N"
+                ) do if exist %%D if not defined LUA_DLL set "LUA_DLL=%%~D"
+            )
+        )
+    )
+    if defined LUA_DLL (
+        copy /Y "!LUA_DLL!" "%OUT_DIR%\" >nul
+        echo [build]   lua dll   ^<-- !LUA_DLL!
+    ) else (
+        echo [build] WARNING: Lua DLL not found – add its directory to PATH
+        echo                  or copy it manually to %OUT_DIR%\
+    )
+
+    echo [build] Build complete!
+    echo [build] Binary: %EXE%
+) else (
+    echo [build] Build complete! (binary path unknown)
+)
+
 popd
 goto :eof
 

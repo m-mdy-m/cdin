@@ -73,4 +73,4 @@ MAKE_FLAGS=(
 info "Running make ${MAKE_FLAGS[*]} …"
 make "${MAKE_FLAGS[@]}"
 
-ok "Build complete.  Binary: $(find . -maxdepth 2 -name 'cdin' -o -name 'cdin.exe' 2>/dev/null | head -1)"
+ok "Build complete.  Binary: $(find build -maxdepth 2 \( -name 'cdin' -o -name 'cdin.exe' \) 2>/dev/null | head -1)"

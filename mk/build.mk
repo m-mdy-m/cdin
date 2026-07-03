@@ -1,13 +1,10 @@
 .PHONY: build clean distclean info help run debug debug-san _check_deps
 
-# windows.c embeds the window icon from this generated header; see
-# scripts/gen_icon.py. Generated automatically so a fresh checkout just
-# builds — nobody should have to know this step exists.
-ICON_INL := icon.inl
+ICON_INL := src/icon.inl
 
-$(ICON_INL): scripts/gen_icon.py
+$(ICON_INL): scripts/gen_icon.py scripts/icon.svg
 	@command -v python3 >/dev/null || { echo '✗ python3 not found (needed to generate $(ICON_INL))'; exit 1; }
-	python3 scripts/gen_icon.py --out $(ICON_INL)
+	python3 scripts/gen_icon.py --svg scripts/icon.svg --out $(ICON_INL)
 
 build: $(OUT)
 	@if [ -d data ] && [ ! -e $(OUT_DIR)/data ]; then \
@@ -54,6 +51,7 @@ clean:
 
 distclean:
 	rm -rf build
+	rm -f $(ICON_INL)
 
 info:
 	@echo ''
@@ -68,6 +66,7 @@ info:
 	@printf '  %-12s %s [pkg: %s]\n' 'LUA' '$(LUA_FOUND_VERSION)' '$(if $(LUA_PKG),$(LUA_PKG),manual)'
 	@printf '  %-12s %s\n' 'CC' '$(CC)'
 	@printf '  %-12s %s\n' 'OUT' '$(OUT)'
+	@printf '  %-12s %s\n' 'ICON_INL' '$(ICON_INL)'
 	@printf '  %-12s %s\n' 'PREFIX' '$(PREFIX)'
 	@printf '  %-12s %s\n' 'SRCS' '$(words $(SRCS)) files'
 	@printf '  %-12s %s\n' 'CFLAGS' '$(CFLAGS)'
