@@ -99,32 +99,65 @@ jobs:
           }
           Write-Host "Generated $pngCount PNG icons"
 
-          # Build a multi-size .ico for Windows shortcuts
-          python - << 'PYEOF'
+          $py = @'
           import sys, struct, io, os
-          try:
-              from PIL import Image
-              import cairosvg
-              sizes = [256, 64, 48, 32, 16]
-              imgs = []
-              for sz in sizes:
-                  png = cairosvg.svg2png(url='scripts/icon.svg', output_width=sz, output_height=sz)
-                  imgs.append((sz, Image.open(io.BytesIO(png)).convert('RGBA')))
-              n = len(imgs)
-              header = struct.pack('<HHH', 0, 1, n)
-              dirs = b''; data = b''; off = 6 + 16 * n
-              for sz, img in imgs:
-                  buf = io.BytesIO(); img.save(buf, 'PNG'); png = buf.getvalue()
-                  bw = sz if sz < 256 else 0
-                  dirs += struct.pack('<BBBBHHII', bw, bw, 0, 0, 1, 32, len(png), off)
-                  data += png; off += len(png)
-              os.makedirs('scripts', exist_ok=True)
-              open('scripts/cdin.ico', 'wb').write(header + dirs + data)
-              print(f'[ico] cdin.ico written ({len(header+dirs+data):,} bytes, sizes: {[s for s,_ in imgs]})')
-          except Exception as e:
-              print(f'[ico] WARNING: could not build .ico: {e}', file=sys.stderr)
-              sys.exit(1)
-          PYEOF
+          from PIL import Image
+          import cairosvg
+
+          sizes = [256, 64, 48, 32, 16]
+          imgs = []
+
+          for sz in sizes:
+              png = cairosvg.svg2png(
+                  url="scripts/icon.svg",
+                  output_width=sz,
+                  output_height=sz
+              )
+              imgs.append((sz, Image.open(io.BytesIO(png)).convert("RGBA")))
+
+          n = len(imgs)
+
+          header = struct.pack("<HHH", 0, 1, n)
+
+          dirs = b""
+          data = b""
+          offset = 6 + 16 * n
+
+          for sz, img in imgs:
+              buf = io.BytesIO()
+              img.save(buf, "PNG")
+              png = buf.getvalue()
+
+              bw = sz if sz < 256 else 0
+
+              dirs += struct.pack(
+                  "<BBBBHHII",
+                  bw,
+                  bw,
+                  0,
+                  0,
+                  1,
+                  32,
+                  len(png),
+                  offset
+              )
+
+              data += png
+              offset += len(png)
+
+          os.makedirs("scripts", exist_ok=True)
+
+          with open("scripts/cdin.ico", "wb") as f:
+              f.write(header + dirs + data)
+
+          print("cdin.ico written")
+          '@
+
+          $py | Set-Content temp_icon.py
+
+          python temp_icon.py
+
+          Remove-Item temp_icon.py
 
       # ── 5. Build ───────────────────────────────────────────────────────────
       - name: Build release binary
