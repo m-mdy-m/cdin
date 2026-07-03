@@ -155,6 +155,8 @@ jobs:
             mingw-w64-x86_64-python
             mingw-w64-x86_64-lua
             mingw-w64-x86_64-cairo
+            mingw-w64-x86_64-python-pip
+            mingw-w64-x86_64-python-pillow
             make
             git
             unzip
