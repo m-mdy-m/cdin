@@ -191,7 +191,9 @@ jobs:
       # Generate icon.inl + PNGs using MSYS2 Python (has Cairo via mingw64)
       - name: Generate icon assets
         run: |
-          pip install --quiet cairosvg Pillow
+          python3 -m ensurepip || true
+          python3 -m pip install --upgrade pip
+          python3 -m pip install cairosvg pillow
           python3 scripts/gen_icon.py \
             --svg       scripts/icon.svg \
             --out       src/icon.inl \
