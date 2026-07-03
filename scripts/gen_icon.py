@@ -1,128 +1,224 @@
 #!/usr/bin/env python3
 """
-Usage:
-    python3 scripts/gen_icon.py [--svg PATH] [--out PATH]
+gen_icon.py – Generate icon assets for cdin from a source SVG.
 
-Defaults:
-    --svg  scripts/icon.svg
-    --out  src/icon.inl
+Outputs
+-------
+1. src/icon.inl          – C byte-array (ICO multi-size) embedded in the binary
+2. scripts/icons/        – Pre-rendered PNG files at standard sizes:
+       cdin-16.png  cdin-22.png  cdin-24.png  cdin-32.png
+       cdin-48.png  cdin-64.png  cdin-128.png cdin-256.png
+       cdin-512.png cdin-1024.png
+
+The PNG directory is committed to the repo and bundled in release tarballs so
+that install.sh can copy icons directly without needing rsvg-convert or
+ImageMagick on the end-user's machine.
+
+Usage
+-----
+    python3 scripts/gen_icon.py [--svg PATH] [--out PATH] [--icons-dir PATH]
+
+Defaults
+--------
+    --svg       scripts/icon.svg
+    --out       src/icon.inl
+    --icons-dir scripts/icons
 """
 
 import sys
 import os
 import argparse
-import base64
 import struct
 
 
-def svg_to_ico_bytes(svg_path: str) -> bytes:
+# ---------------------------------------------------------------------------
+# PNG sizes to pre-render
+# ---------------------------------------------------------------------------
+PNG_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512, 1024]
+
+# Sizes embedded in the ICO (Windows icon; 256 is the max ICO entry)
+ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
+
+
+# ---------------------------------------------------------------------------
+# Helpers: SVG → PNG bytes  (requires cairosvg + Pillow)
+# ---------------------------------------------------------------------------
+
+def _svg_to_png_bytes(svg_path: str, size: int) -> bytes:
+    """Render *svg_path* to a square PNG of *size* × *size* pixels."""
+    import cairosvg
+    return cairosvg.svg2png(url=svg_path, output_width=size, output_height=size)
+
+
+# ---------------------------------------------------------------------------
+# Build ICO from PNG blobs
+# ---------------------------------------------------------------------------
+
+def _build_ico(png_blobs: list[tuple[int, bytes]]) -> bytes:
     """
-    Convert SVG to a minimal ICO file (32x32 and 16x16) using only stdlib.
-    Falls back to embedding SVG as raw bytes if Pillow/cairosvg not available.
+    Pack a list of (size, png_bytes) pairs into a valid ICO file.
+    Sizes ≥ 256 are stored as 0 in the directory entry (ICO spec).
     """
-    try:
-        from PIL import Image
-        import cairosvg
-        import io
+    import io
+    from PIL import Image
 
-        sizes = [256, 64, 48, 32, 16]
-        images = []
-        for size in sizes:
-            png_bytes = cairosvg.svg2png(
-                url=svg_path, output_width=size, output_height=size
-            )
-            img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
-            images.append(img)
+    num = len(png_blobs)
+    header = struct.pack("<HHH", 0, 1, num)  # reserved, type=ICO, count
+    dir_entries = b""
+    image_data = b""
+    offset = 6 + 16 * num
 
-        # Build ICO manually
-        num_images = len(images)
-        # ICO header: 6 bytes
-        # Directory entries: 16 bytes each
-        # Image data follows
-        header = struct.pack("<HHH", 0, 1, num_images)
-        dir_entries = b""
-        image_data = b""
-        offset = 6 + 16 * num_images
+    for size, png_bytes in png_blobs:
+        # Re-encode through Pillow to guarantee a clean RGBA PNG
+        img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        clean_png = buf.getvalue()
 
-        for img in images:
-            w, h = img.size
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            png = buf.getvalue()
-            size_bytes = len(png)
-            bw = w if w < 256 else 0
-            bh = h if h < 256 else 0
-            dir_entries += struct.pack(
-                "<BBBBHHII", bw, bh, 0, 0, 1, 32, size_bytes, offset
-            )
-            image_data += png
-            offset += size_bytes
+        bw = size if size < 256 else 0
+        bh = size if size < 256 else 0
+        dir_entries += struct.pack(
+            "<BBBBHHII",
+            bw, bh,   # width, height (0 = 256)
+            0,         # colour count
+            0,         # reserved
+            1,         # colour planes
+            32,        # bits per pixel
+            len(clean_png),
+            offset,
+        )
+        image_data += clean_png
+        offset += len(clean_png)
 
-        return header + dir_entries + image_data
-
-    except ImportError:
-        pass
-
-    # Fallback: embed the raw SVG bytes (works when linked directly)
-    print(
-        "[gen_icon] Note: Pillow/cairosvg not found – embedding raw SVG bytes.",
-        file=sys.stderr,
-    )
-    with open(svg_path, "rb") as f:
-        return f.read()
+    return header + dir_entries + image_data
 
 
-def bytes_to_c_array(data: bytes, array_name: str = "WINDOW_ICON") -> str:
-    """Convert raw bytes to a C byte-array literal."""
-    lines = []
-    lines.append(f"/* Auto-generated by scripts/gen_icon.py – do not edit */")
-    lines.append(f"static const unsigned char {array_name}[] = {{")
+# ---------------------------------------------------------------------------
+# C array serialiser
+# ---------------------------------------------------------------------------
 
-    row_width = 16
-    for i in range(0, len(data), row_width):
-        chunk = data[i : i + row_width]
-        hex_values = ", ".join(f"0x{b:02x}" for b in chunk)
-        lines.append(f"    {hex_values},")
-
+def _bytes_to_c_array(data: bytes, array_name: str = "WINDOW_ICON") -> str:
+    lines = [
+        "/* Auto-generated by scripts/gen_icon.py – do not edit */",
+        f"static const unsigned char {array_name}[] = {{",
+    ]
+    row = 16
+    for i in range(0, len(data), row):
+        chunk = data[i : i + row]
+        lines.append("    " + ", ".join(f"0x{b:02x}" for b in chunk) + ",")
     lines.append("};")
     lines.append(f"static const unsigned int {array_name}_LEN = {len(data)}U;")
     return "\n".join(lines) + "\n"
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Generate icon.inl from icon.svg")
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate icon.inl (C array) and pre-rendered PNGs from icon.svg",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
     parser.add_argument(
         "--svg",
         default=os.path.join("scripts", "icon.svg"),
-        help="Path to source SVG (default: scripts/icon.svg)",
+        help="Source SVG (default: scripts/icon.svg)",
     )
     parser.add_argument(
         "--out",
         default=os.path.join("src", "icon.inl"),
         help="Output .inl path (default: src/icon.inl)",
     )
+    parser.add_argument(
+        "--icons-dir",
+        default=os.path.join("scripts", "icons"),
+        help="Directory for pre-rendered PNGs (default: scripts/icons)",
+    )
+    parser.add_argument(
+        "--no-inl",
+        action="store_true",
+        help="Skip generating icon.inl (only render PNGs)",
+    )
+    parser.add_argument(
+        "--no-png",
+        action="store_true",
+        help="Skip rendering PNG files (only generate icon.inl)",
+    )
     args = parser.parse_args()
 
     svg_path = args.svg
     out_path = args.out
+    icons_dir = args.icons_dir
 
     if not os.path.isfile(svg_path):
         print(f"[gen_icon] ERROR: SVG not found: {svg_path}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[gen_icon] Reading SVG: {svg_path}")
-    icon_bytes = svg_to_ico_bytes(svg_path)
+    # ── check for cairosvg / Pillow ──────────────────────────────────────────
+    try:
+        import cairosvg  # noqa: F401
+        from PIL import Image  # noqa: F401
+        has_libs = True
+    except ImportError:
+        has_libs = False
 
-    c_source = bytes_to_c_array(icon_bytes)
+    # ── render PNGs ─────────────────────────────────────────────────────────
+    png_cache: dict[int, bytes] = {}  # size → raw PNG bytes
 
-    out_dir = os.path.dirname(out_path)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    if not args.no_png:
+        if not has_libs:
+            print(
+                "[gen_icon] WARNING: cairosvg / Pillow not found.\n"
+                "           Install with:  pip install cairosvg Pillow\n"
+                "           PNG icons will NOT be generated.",
+                file=sys.stderr,
+            )
+        else:
+            os.makedirs(icons_dir, exist_ok=True)
+            print(f"[gen_icon] Rendering PNGs → {icons_dir}/")
+            for sz in PNG_SIZES:
+                png_bytes = _svg_to_png_bytes(svg_path, sz)
+                png_cache[sz] = png_bytes
+                dest = os.path.join(icons_dir, f"cdin-{sz}.png")
+                with open(dest, "wb") as fh:
+                    fh.write(png_bytes)
+                print(f"[gen_icon]   cdin-{sz:>4}.png  ({len(png_bytes):>7,} bytes)")
+            print(f"[gen_icon] {len(PNG_SIZES)} PNG files written to {icons_dir}/")
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(c_source)
+    # ── generate icon.inl ────────────────────────────────────────────────────
+    if not args.no_inl:
+        if has_libs:
+            # Render ICO sizes (reuse cache when available)
+            ico_blobs: list[tuple[int, bytes]] = []
+            for sz in ICO_SIZES:
+                if sz in png_cache:
+                    ico_blobs.append((sz, png_cache[sz]))
+                else:
+                    ico_blobs.append((sz, _svg_to_png_bytes(svg_path, sz)))
 
-    print(f"[gen_icon] Written {len(icon_bytes)} bytes -> {out_path}")
+            icon_bytes = _build_ico(ico_blobs)
+            method = f"ICO ({', '.join(str(s) for s in ICO_SIZES)}px)"
+        else:
+            # Fallback: embed raw SVG bytes
+            print(
+                "[gen_icon] Fallback: embedding raw SVG bytes in icon.inl.",
+                file=sys.stderr,
+            )
+            with open(svg_path, "rb") as fh:
+                icon_bytes = fh.read()
+            method = "raw SVG (fallback)"
+
+        c_source = _bytes_to_c_array(icon_bytes)
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(c_source)
+        print(
+            f"[gen_icon] icon.inl written → {out_path}  "
+            f"({len(icon_bytes):,} bytes, {method})"
+        )
+
 
 if __name__ == "__main__":
     main()

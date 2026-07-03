@@ -61,6 +61,7 @@ fi
 
 # ---------- install icon -------------------------------------------------------
 ICON_DIR="$PREFIX/share/icons/hicolor"
+ICON_INSTALLED=0
 
 install_icon_size() {
     local size="$1"
@@ -70,39 +71,47 @@ install_icon_size() {
     cp "$src_png" "$dest/cdin.png"
 }
 
-SVG_SRC="scripts/icon.svg"
-ICON_INSTALLED=0
+ICONS_DIR=""
+for candidate in scripts/icons icons bin/icons; do
+    [[ -d "$candidate" ]] && { ICONS_DIR="$candidate"; break; }
+done
 
-# Prefer converting SVG to multiple PNG sizes
-if command -v rsvg-convert &>/dev/null && [[ -f "$SVG_SRC" ]]; then
-    for sz in 16 32 48 64 128 256; do
-        TMP_PNG="/tmp/cdin_${sz}.png"
-        rsvg-convert -w "$sz" -h "$sz" "$SVG_SRC" -o "$TMP_PNG" 2>/dev/null && \
-            install_icon_size "$sz" "$TMP_PNG"
+if [[ -n "$ICONS_DIR" ]]; then
+    for sz in 16 22 24 32 48 64 128 256 512; do
+        PNG="$ICONS_DIR/cdin-${sz}.png"
+        [[ -f "$PNG" ]] && install_icon_size "$sz" "$PNG"
     done
-    # Also install scalable SVG
-    SCALABLE_DIR="$ICON_DIR/scalable/apps"
-    mkdir -p "$SCALABLE_DIR"
-    cp "$SVG_SRC" "$SCALABLE_DIR/cdin.svg"
+    SVG_SRC="scripts/icon.svg"
+    if [[ -f "$SVG_SRC" ]]; then
+        SCALABLE_DIR="$ICON_DIR/scalable/apps"
+        mkdir -p "$SCALABLE_DIR"
+        cp "$SVG_SRC" "$SCALABLE_DIR/cdin.svg"
+    fi
     ICON_INSTALLED=1
     ok "Installed icons  → $ICON_DIR"
-elif command -v convert &>/dev/null && [[ -f "$SVG_SRC" ]]; then
-    for sz in 16 32 48 64 128 256; do
+elif command -v rsvg-convert &>/dev/null && [[ -f "scripts/icon.svg" ]]; then
+    # Fallback: convert SVG on-the-fly with rsvg-convert
+    for sz in 16 22 24 32 48 64 128 256; do
         TMP_PNG="/tmp/cdin_${sz}.png"
-        convert -background none "$SVG_SRC" -resize "${sz}x${sz}" "$TMP_PNG" 2>/dev/null && \
+        rsvg-convert -w "$sz" -h "$sz" "scripts/icon.svg" -o "$TMP_PNG" 2>/dev/null && \
+            install_icon_size "$sz" "$TMP_PNG"
+    done
+    SCALABLE_DIR="$ICON_DIR/scalable/apps"
+    mkdir -p "$SCALABLE_DIR"
+    cp "scripts/icon.svg" "$SCALABLE_DIR/cdin.svg"
+    ICON_INSTALLED=1
+    ok "Installed icons  → $ICON_DIR"
+elif command -v convert &>/dev/null && [[ -f "scripts/icon.svg" ]]; then
+    for sz in 16 22 24 32 48 64 128 256; do
+        TMP_PNG="/tmp/cdin_${sz}.png"
+        convert -background none "scripts/icon.svg" -resize "${sz}x${sz}" "$TMP_PNG" 2>/dev/null && \
             install_icon_size "$sz" "$TMP_PNG"
     done
     ICON_INSTALLED=1
     ok "Installed icons  → $ICON_DIR"
 else
-    warn "rsvg-convert / ImageMagick not found – icon not converted to PNG."
-    if [[ -f "$SVG_SRC" ]]; then
-        SCALABLE_DIR="$ICON_DIR/scalable/apps"
-        mkdir -p "$SCALABLE_DIR"
-        cp "$SVG_SRC" "$SCALABLE_DIR/cdin.svg"
-        ICON_INSTALLED=1
-        info "Installed SVG icon → $SCALABLE_DIR/cdin.svg"
-    fi
+    warn "Pre-rendered icons not found and no SVG converter available – icon skipped."
+    warn "Re-run: pip install cairosvg Pillow && python3 scripts/gen_icon.py"
 fi
 
 # ---------- .desktop file (Linux / WSL GUI) -----------------------------------

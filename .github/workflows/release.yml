@@ -60,9 +60,14 @@ jobs:
           sudo ldconfig
           pkg-config --modversion sdl3
 
-      # ── icon.inl ──────────────────────────────────────────────────────────
-      - name: Generate src/icon.inl
-        run: python3 scripts/gen_icon.py --svg scripts/icon.svg --out src/icon.inl
+      # ── icon assets (icon.inl + pre-rendered PNGs) ───────────────────────
+      - name: Generate icon assets
+        run: |
+          pip install --quiet cairosvg Pillow
+          python3 scripts/gen_icon.py \
+            --svg       scripts/icon.svg \
+            --out       src/icon.inl \
+            --icons-dir scripts/icons
 
       # ── build ─────────────────────────────────────────────────────────────
       - name: make
@@ -95,6 +100,12 @@ jobs:
           cp "$BIN"         "${DIR}/bin/cdin"
           chmod 755         "${DIR}/bin/cdin"
           [[ -d data ]]  && cp -r data       "${DIR}/bin/"
+          # Bundle pre-rendered PNG icons so install.sh needs no external converter
+          if [[ -d scripts/icons ]]; then
+            mkdir -p "${DIR}/scripts"
+            cp -r scripts/icons "${DIR}/scripts/"
+          fi
+          [[ -f scripts/icon.svg ]] && { mkdir -p "${DIR}/scripts"; cp scripts/icon.svg "${DIR}/scripts/"; }
           cp scripts/install.sh              "${DIR}/"
           chmod 755         "${DIR}/install.sh"
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
@@ -176,9 +187,14 @@ jobs:
           PC
           pkg-config --modversion sdl3
 
-      # ── icon.inl ──────────────────────────────────────────────────────────
+      # ── icon.inl (ICO only; no PNG pre-render needed for Windows) ──────────
       - name: Generate src/icon.inl
-        run: python3 scripts/gen_icon.py --svg scripts/icon.svg --out src/icon.inl
+        run: |
+          pip install --quiet cairosvg Pillow
+          python3 scripts/gen_icon.py \
+            --svg   scripts/icon.svg \
+            --out   src/icon.inl \
+            --no-png
 
       # ── build ─────────────────────────────────────────────────────────────
       - name: make

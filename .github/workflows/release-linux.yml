@@ -57,9 +57,14 @@ jobs:
           sudo ldconfig
           echo "SDL3 installed: $(pkg-config --modversion sdl3)"
 
-      # ── 3. Generate icon inline header ─────────────────────────────────────
-      - name: Generate src/icon.inl
-        run: python3 scripts/gen_icon.py --svg scripts/icon.svg --out src/icon.inl
+      # ── 3. Generate icon inline header + pre-rendered PNGs ─────────────────
+      - name: Generate icon assets
+        run: |
+          pip install --quiet cairosvg Pillow
+          python3 scripts/gen_icon.py \
+            --svg       scripts/icon.svg \
+            --out       src/icon.inl \
+            --icons-dir scripts/icons
 
       # ── 4. Build ───────────────────────────────────────────────────────────
       - name: Build release binary
@@ -108,6 +113,13 @@ jobs:
             mkdir -p "${PKG_DIR}/bin/data"
             cp -a data/. "${PKG_DIR}/bin/data/"
           fi
+
+          # Bundle pre-rendered PNG icons so install.sh needs no external converter
+          if [[ -d scripts/icons ]]; then
+            mkdir -p "${PKG_DIR}/scripts"
+            cp -r scripts/icons "${PKG_DIR}/scripts/"
+          fi
+          [[ -f scripts/icon.svg ]] && { mkdir -p "${PKG_DIR}/scripts"; cp scripts/icon.svg "${PKG_DIR}/scripts/"; }
 
           cp scripts/install.sh "${PKG_DIR}/"
           chmod 755 "${PKG_DIR}/install.sh"

@@ -8,3 +8,6 @@ test.sdl.c
 backup/*
 cdin_code_backup/
 cdin_code_backup/*
+# Auto-generated icon C array 
+./src/icon.inl
+*icon.inl*
