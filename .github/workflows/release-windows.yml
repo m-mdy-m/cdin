@@ -94,7 +94,7 @@ jobs:
         run: |
           python3 scripts/gen_icon.py \
             --svg        scripts/icon.svg \
-            --icons-dir scripts/icons \
+            --from-pngs  scripts/icons \
             --out        src/icon.inl \
             --no-png
 

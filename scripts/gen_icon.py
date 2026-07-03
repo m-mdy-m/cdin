@@ -16,7 +16,11 @@ ImageMagick on the end-user's machine.
 
 Usage
 -----
+    # Full generation (requires cairosvg + Pillow):
     python3 scripts/gen_icon.py [--svg PATH] [--out PATH] [--icons-dir PATH]
+
+    # Windows / rsvg-convert path (requires Pillow only):
+    python3 scripts/gen_icon.py --from-pngs scripts/icons --out src/icon.inl --no-png
 
 Defaults
 --------
@@ -54,7 +58,7 @@ def _svg_to_png_bytes(svg_path: str, size: int) -> bytes:
 # Build ICO from PNG blobs
 # ---------------------------------------------------------------------------
 
-def _build_ico(png_blobs: list[tuple[int, bytes]]) -> bytes:
+def _build_ico(png_blobs: list) -> bytes:
     """
     Pack a list of (size, png_bytes) pairs into a valid ICO file.
     Sizes ≥ 256 are stored as 0 in the directory entry (ICO spec).
@@ -137,6 +141,16 @@ def main() -> None:
         help="Directory for pre-rendered PNGs (default: scripts/icons)",
     )
     parser.add_argument(
+        "--from-pngs",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Load pre-rendered PNGs from DIR instead of rendering via cairosvg. "
+            "Expects files named cdin-<N>.png (e.g. cdin-256.png). "
+            "Useful on platforms where cairosvg is unavailable (e.g. Windows with rsvg-convert)."
+        ),
+    )
+    parser.add_argument(
         "--no-inl",
         action="store_true",
         help="Skip generating icon.inl (only render PNGs)",
@@ -160,15 +174,41 @@ def main() -> None:
     try:
         import cairosvg  # noqa: F401
         from PIL import Image  # noqa: F401
-        has_libs = True
+        has_cairosvg = True
     except ImportError:
-        has_libs = False
+        has_cairosvg = False
 
-    # ── render PNGs ─────────────────────────────────────────────────────────
-    png_cache: dict[int, bytes] = {}  # size -> raw PNG bytes
+    try:
+        from PIL import Image  # noqa: F401
+        has_pillow = True
+    except ImportError:
+        has_pillow = False
 
-    if not args.no_png:
-        if not has_libs:
+    # ── load pre-existing PNGs if --from-pngs is given ──────────────────────
+    png_cache: dict = {}  # size -> raw PNG bytes
+
+    if args.from_pngs is not None:
+        from_dir = args.from_pngs
+        if not os.path.isdir(from_dir):
+            print(f"[gen_icon] ERROR: --from-pngs directory not found: {from_dir}", file=sys.stderr)
+            sys.exit(1)
+        print(f"[gen_icon] Loading pre-rendered PNGs from {from_dir}/")
+        loaded = 0
+        for sz in sorted(set(PNG_SIZES + ICO_SIZES)):
+            png_path = os.path.join(from_dir, f"cdin-{sz}.png")
+            if os.path.isfile(png_path):
+                with open(png_path, "rb") as fh:
+                    png_cache[sz] = fh.read()
+                print(f"[gen_icon]   cdin-{sz:>4}.png  ({len(png_cache[sz]):>7,} bytes)  loaded")
+                loaded += 1
+        if loaded == 0:
+            print(f"[gen_icon] ERROR: no cdin-*.png files found in {from_dir}", file=sys.stderr)
+            sys.exit(1)
+        print(f"[gen_icon] Loaded {loaded} PNG files")
+
+    # ── render PNGs via cairosvg (unless skipped or using --from-pngs) ───────
+    if not args.no_png and args.from_pngs is None:
+        if not has_cairosvg:
             print(
                 "[gen_icon] WARNING: cairosvg / Pillow not found.\n"
                 "           Install with:  pip install cairosvg Pillow\n"
@@ -189,15 +229,29 @@ def main() -> None:
 
     # ── generate icon.inl ────────────────────────────────────────────────────
     if not args.no_inl:
-        if has_libs:
-            # Render ICO sizes (reuse cache when available)
-            ico_blobs: list[tuple[int, bytes]] = []
+        # Prefer png_cache (from --from-pngs or cairosvg), fall back to raw SVG
+        if png_cache and has_pillow:
+            ico_blobs = []
+            for sz in ICO_SIZES:
+                if sz in png_cache:
+                    ico_blobs.append((sz, png_cache[sz]))
+                elif has_cairosvg:
+                    ico_blobs.append((sz, _svg_to_png_bytes(svg_path, sz)))
+                else:
+                    print(f"[gen_icon] WARNING: no PNG for size {sz}, skipping from ICO", file=sys.stderr)
+            if ico_blobs:
+                icon_bytes = _build_ico(ico_blobs)
+                method = f"ICO ({', '.join(str(s) for s, _ in ico_blobs)}px)"
+            else:
+                print("[gen_icon] ERROR: no PNG blobs available for ICO", file=sys.stderr)
+                sys.exit(1)
+        elif has_cairosvg and has_pillow:
+            ico_blobs = []
             for sz in ICO_SIZES:
                 if sz in png_cache:
                     ico_blobs.append((sz, png_cache[sz]))
                 else:
                     ico_blobs.append((sz, _svg_to_png_bytes(svg_path, sz)))
-
             icon_bytes = _build_ico(ico_blobs)
             method = f"ICO ({', '.join(str(s) for s in ICO_SIZES)}px)"
         else:
