@@ -167,7 +167,7 @@ jobs:
           done
 
           cd dist
-          7z a -tzip "${PKG_NAME}.zip" "${PKG_NAME}/" > /dev/null
+          zip a -tzip "${PKG_NAME}.zip" "${PKG_NAME}/" > /dev/null
           echo "PKG_PATH=dist/${PKG_NAME}.zip" >> "$GITHUB_ENV"
           echo "Zip: $(du -sh ${PKG_NAME}.zip | cut -f1)"
 
