@@ -105,7 +105,8 @@ jobs:
           chmod 755 "${PKG_DIR}/bin/cdin"
 
           if [[ -d data ]]; then
-            cp -r data "${PKG_DIR}/bin/data"
+            mkdir -p "${PKG_DIR}/bin/data"
+            cp -a data/. "${PKG_DIR}/bin/data/"
           fi
 
           cp scripts/install.sh "${PKG_DIR}/"
