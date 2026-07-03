@@ -152,9 +152,6 @@ jobs:
             mingw-w64-x86_64-make
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-python
-            mingw-w64-x86_64-python-pip
-            mingw-w64-x86_64-python-pillow
-            mingw-w64-x86_64-python-cairosvg
             mingw-w64-x86_64-lua
             make
             git
@@ -190,7 +187,7 @@ jobs:
           PC
           pkg-config --modversion sdl3
 
-      # ── icon.inl (ICO only; cairosvg+Pillow installed via pacman above) ──────
+      # ── icon.inl ──────────────────────────────────────────────────────────────
       - name: Generate src/icon.inl
         run: |
           python3 scripts/gen_icon.py \
