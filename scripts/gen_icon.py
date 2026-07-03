@@ -122,8 +122,7 @@ def main():
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(c_source)
 
-    print(f"[gen_icon] Written {len(icon_bytes)} bytes → {out_path}")
-
+    print(f"[gen_icon] Written {len(icon_bytes)} bytes -> {out_path}")
 
 if __name__ == "__main__":
     main()
