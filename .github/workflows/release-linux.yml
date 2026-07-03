@@ -1,0 +1,274 @@
+name: Release – Linux
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-linux:
+    name: Build (Linux x86_64)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc make pkg-config python3 \
+            liblua5.4-dev \
+            cmake ninja-build \
+            libwayland-dev libxkbcommon-dev \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libpulse-dev libasound2-dev \
+            libdbus-1-dev libx11-dev libxext-dev \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            wget ca-certificates
+
+      - name: Install SDL3 from source
+        run: |
+          SDL_VER="3.2.14"
+          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VER}/SDL3-${SDL_VER}.tar.gz"
+          tar xf "SDL3-${SDL_VER}.tar.gz"
+          cd "SDL3-${SDL_VER}"
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF \
+            -DSDL_TEST=OFF \
+            -DSDL_TESTS=OFF
+          sudo cmake --build build --parallel $(nproc)
+          sudo cmake --install build
+          sudo ldconfig
+          echo "SDL3 installed: $(pkg-config --modversion sdl3)"
+
+      # ── 3. Generate icon inline header ─────────────────────────────────────
+      - name: Generate src/icon.inl
+        run: python3 scripts/gen_icon.py --svg scripts/icon.svg --out src/icon.inl
+
+      # ── 4. Build ───────────────────────────────────────────────────────────
+      - name: Build release binary
+        run: |
+          make -j$(nproc) \
+            BUILD=release \
+            PLATFORM=linux \
+            SDL_VERSION=3
+
+      # ── 5. Verify ──────────────────────────────────────────────────────────
+      - name: Verify binary
+        run: |
+          BIN="$(find build/linux-release -maxdepth 1 -name 'cdin' | head -1)"
+          if [[ -z "$BIN" ]]; then
+            echo "::error::Binary not found under build/linux-release/"
+            find build/ -type f 2>/dev/null || echo "(build/ empty)"
+            exit 1
+          fi
+          file "$BIN"
+          echo "Binary: $BIN  ($(du -sh "$BIN" | cut -f1))"
+          echo "BIN_PATH=$BIN" >> "$GITHUB_ENV"
+
+      # ── 6. Package ─────────────────────────────────────────────────────────
+      - name: Determine version
+        id: version
+        run: |
+          # Use the tag if triggered by a tag push, otherwise use the short SHA
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VER="${GITHUB_REF#refs/tags/}"
+          else
+            VER="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Package tarball
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          PKG_NAME="cdin-${VER}-linux-x86_64"
+          PKG_DIR="dist/${PKG_NAME}"
+
+          mkdir -p "${PKG_DIR}/bin"
+          cp "${BIN_PATH}" "${PKG_DIR}/bin/cdin"
+          chmod 755 "${PKG_DIR}/bin/cdin"
+
+          # Include the data directory (Lua core + plugins + user config)
+          if [[ -d data ]]; then
+            cp -r data "${PKG_DIR}/"
+          fi
+
+          # Convenience install script
+          cp scripts/install.sh "${PKG_DIR}/"
+          chmod 755 "${PKG_DIR}/install.sh"
+
+          # Docs
+          for f in README.md CHANGELOG.md LICENSE NOTICE; do
+            [[ -f "$f" ]] && cp "$f" "${PKG_DIR}/"
+          done
+
+          tar -C dist -czf "dist/${PKG_NAME}.tar.gz" "${PKG_NAME}"
+          echo "PKG_PATH=dist/${PKG_NAME}.tar.gz" >> "$GITHUB_ENV"
+          echo "PKG_NAME=${PKG_NAME}"             >> "$GITHUB_ENV"
+          echo "Tarball: $(du -sh dist/${PKG_NAME}.tar.gz | cut -f1)"
+
+      # ── 7. Upload artifact (always, even on failure) ────────────────────────
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdin-linux-x86_64
+          path: dist/*.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Job 2 – Create / update the GitHub Release (tag pushes only)
+  # ───────────────────────────────────────────────────────────────────────────
+  create-release:
+    name: Publish GitHub Release
+    needs: build-linux
+    if: always() && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+        continue-on-error: true
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release
+          if [[ -d artifacts ]]; then
+            find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) \
+              -exec cp {} release/ \;
+          fi
+          echo "Release assets:"
+          ls -lh release/ || echo "(none)"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine prerelease flag
+        id: pre
+        run: |
+          if [[ "${{ steps.version.outputs.VERSION }}" == *-* ]]; then
+            echo "flag=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine contributors since last tag
+        id: contributors
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+          REPO="${{ github.repository }}"
+
+          PREV_TAG=$(git tag --sort=v:refname \
+            | grep -B1 "^${CURRENT_TAG}$" \
+            | head -1)
+
+          if [[ -z "$PREV_TAG" || "$PREV_TAG" == "$CURRENT_TAG" ]]; then
+            HEADER="## Contributors"
+            CONTRIB=$(gh api "repos/${REPO}/contributors?per_page=100" \
+              --jq '.[].login' \
+              | grep -v 'github-actions\[bot\]' \
+              | sed 's/^/- @/')
+          else
+            HEADER="## Contributors (${PREV_TAG} → ${CURRENT_TAG})"
+            CONTRIB=$(git log "${PREV_TAG}..${CURRENT_TAG}" --format='%H' \
+              | while read -r sha; do
+                  gh api "repos/${REPO}/commits/${sha}" \
+                    --jq '.author.login // empty' 2>/dev/null
+                done \
+              | grep -v '^$' \
+              | grep -v 'github-actions\[bot\]' \
+              | sort -u \
+              | sed 's/^/- @/')
+          fi
+
+          {
+            echo "header=${HEADER}"
+            echo "list<<EOF"
+            echo "${CONTRIB}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          CHANGELOG="CHANGELOG.md"
+
+          if [[ -f "$CHANGELOG" ]] && grep -q "## \[${VERSION}\]" "$CHANGELOG"; then
+            sed -n "/## \[${VERSION}\]/,/^## \[/p" "$CHANGELOG" \
+              | sed '$d' > release_body.md
+          else
+            {
+              echo "## Release ${{ github.ref_name }}"
+              echo ""
+              echo "See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+            } > release_body.md
+          fi
+
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "## Installation"
+            echo ""
+            echo "### Linux (x86_64)"
+            echo ""
+            echo "\`\`\`bash"
+            echo "tar xzf cdin-v${VERSION}-linux-x86_64.tar.gz"
+            echo "cd cdin-v${VERSION}-linux-x86_64"
+            echo "bash install.sh           # installs to ~/.local by default"
+            echo "# or:"
+            echo "sudo bash install.sh --prefix=/usr/local"
+            echo "\`\`\`"
+            echo ""
+            echo "> **SDL3 runtime** — if SDL3.so is missing on your system, run:"
+            echo "> \`sudo apt install libsdl3-0\`  (Ubuntu 24.04+) or build from source."
+            echo ""
+            echo "---"
+            echo ""
+            echo "${{ steps.contributors.outputs.header }}"
+            echo ""
+            echo "${{ steps.contributors.outputs.list }}"
+          } >> release_body.md
+
+          echo "--- release_body.md ---"
+          cat release_body.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.ref_name }}
+          name:       "cdin ${{ github.ref_name }}"
+          body_path:  release_body.md
+          files:      release/*
+          draft:      false
+          prerelease: ${{ steps.pre.outputs.flag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

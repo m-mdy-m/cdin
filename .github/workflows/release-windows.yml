@@ -1,0 +1,322 @@
+name: Release – Windows
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Build (Windows x86_64 / MinGW)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}   # All steps run inside MSYS2 shell
+
+    steps:
+      # ── 1. Source ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed so mk/version.mk can read git tags
+
+      # ── 2. Set up MSYS2 + MinGW-w64 toolchain ─────────────────────────────
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-lua
+            make
+            git
+
+      # ── 3. Install SDL3 (pre-built MinGW binaries from SDL release) ────────
+      - name: Install SDL3 (MinGW pre-built)
+        run: |
+          SDL_VER="3.2.14"
+          SDL_ZIP="SDL3-devel-${SDL_VER}-mingw.zip"
+          SDL_URL="https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VER}/${SDL_ZIP}"
+
+          curl -fsSL -o "${SDL_ZIP}" "${SDL_URL}"
+          unzip -q "${SDL_ZIP}" -d /tmp/sdl3
+
+          SDL_ROOT="/tmp/sdl3/SDL3-${SDL_VER}/x86_64-w64-mingw32"
+
+          # Copy headers and libs into MinGW sysroot so pkg-config / gcc find them
+          cp -r "${SDL_ROOT}/include/"* /mingw64/include/
+          cp -r "${SDL_ROOT}/lib/"*     /mingw64/lib/
+          cp -r "${SDL_ROOT}/bin/"*     /mingw64/bin/
+
+          # Drop the .pc file so pkg-config works
+          mkdir -p /mingw64/lib/pkgconfig
+          cat > /mingw64/lib/pkgconfig/sdl3.pc << 'PC'
+          prefix=/mingw64
+          exec_prefix=${prefix}
+          libdir=${prefix}/lib
+          includedir=${prefix}/include
+
+          Name: SDL3
+          Description: Simple DirectMedia Layer
+          Version: SDL_VER_PLACEHOLDER
+          Libs: -L${libdir} -lSDL3
+          Cflags: -I${includedir}
+          PC
+          # patch version placeholder
+          sed -i "s/SDL_VER_PLACEHOLDER/${SDL_VER}/" /mingw64/lib/pkgconfig/sdl3.pc
+          pkg-config --modversion sdl3 && echo "SDL3 pkg-config OK"
+
+      # ── 4. Generate icon inline header ─────────────────────────────────────
+      - name: Generate src/icon.inl
+        run: python3 scripts/gen_icon.py --svg scripts/icon.svg --out src/icon.inl
+
+      # ── 5. Build ───────────────────────────────────────────────────────────
+      - name: Build release binary
+        run: |
+          mingw32-make -j$(nproc) \
+            BUILD=release \
+            PLATFORM=windows \
+            SDL_VERSION=3 \
+            CC=x86_64-w64-mingw32-gcc
+
+      # ── 6. Verify ──────────────────────────────────────────────────────────
+      - name: Verify binary
+        run: |
+          EXE="$(find build/windows-release -maxdepth 1 -name 'cdin.exe' | head -1)"
+          if [[ -z "$EXE" ]]; then
+            echo "::error::cdin.exe not found under build/windows-release/"
+            find build/ -type f 2>/dev/null || echo "(build/ empty)"
+            exit 1
+          fi
+          file "$EXE"
+          echo "Binary: $EXE  ($(du -sh "$EXE" | cut -f1))"
+          echo "EXE_PATH=$EXE" >> "$GITHUB_ENV"
+
+      # ── 7. Collect runtime DLLs ────────────────────────────────────────────
+      - name: Collect SDL3.dll and Lua DLL
+        run: |
+          OUT_DIR="$(dirname "$EXE_PATH")"
+
+          # SDL3.dll
+          SDL_DLL="$(find /mingw64/bin -name 'SDL3.dll' | head -1)"
+          if [[ -n "$SDL_DLL" ]]; then
+            cp "$SDL_DLL" "$OUT_DIR/"
+            echo "Copied $(basename $SDL_DLL)"
+          else
+            echo "::warning::SDL3.dll not found in MinGW bin"
+          fi
+
+          # lua*.dll  — lua54.dll or similar
+          LUA_DLL="$(find /mingw64/bin -name 'lua*.dll' | sort | head -1)"
+          if [[ -n "$LUA_DLL" ]]; then
+            cp "$LUA_DLL" "$OUT_DIR/"
+            echo "Copied $(basename $LUA_DLL)"
+          else
+            echo "::warning::Lua DLL not found in MinGW bin"
+          fi
+
+          echo "Contents of $OUT_DIR:"
+          ls -lh "$OUT_DIR"
+
+      # ── 8. Package ─────────────────────────────────────────────────────────
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VER="${GITHUB_REF#refs/tags/}"
+          else
+            VER="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Package zip
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          PKG_NAME="cdin-${VER}-windows-x86_64"
+          PKG_DIR="dist/${PKG_NAME}"
+
+          mkdir -p "${PKG_DIR}"
+
+          # Binary + DLLs
+          cp "${EXE_PATH}"                         "${PKG_DIR}/cdin.exe"
+          cp "$(dirname ${EXE_PATH})"/*.dll        "${PKG_DIR}/" 2>/dev/null || true
+
+          # Data directory (Lua core + plugins)
+          if [[ -d data ]]; then
+            cp -r data "${PKG_DIR}/"
+          fi
+
+          # Install script
+          cp scripts/install.ps1 "${PKG_DIR}/"
+
+          # Docs
+          for f in README.md CHANGELOG.md LICENSE NOTICE; do
+            [[ -f "$f" ]] && cp "$f" "${PKG_DIR}/"
+          done
+
+          cd dist
+          7z a -tzip "${PKG_NAME}.zip" "${PKG_NAME}/" > /dev/null
+          echo "PKG_PATH=dist/${PKG_NAME}.zip" >> "$GITHUB_ENV"
+          echo "Zip: $(du -sh ${PKG_NAME}.zip | cut -f1)"
+
+      # ── 9. Upload artifact ─────────────────────────────────────────────────
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdin-windows-x86_64
+          path: dist/*.zip
+          if-no-files-found: warn
+          retention-days: 14
+
+  create-release:
+    name: Publish GitHub Release
+    needs: build-windows
+    if: always() && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+        continue-on-error: true
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release
+          if [[ -d artifacts ]]; then
+            find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) \
+              -exec cp {} release/ \;
+          fi
+          echo "Release assets:"
+          ls -lh release/ || echo "(none)"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine prerelease flag
+        id: pre
+        run: |
+          if [[ "${{ steps.version.outputs.VERSION }}" == *-* ]]; then
+            echo "flag=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine contributors since last tag
+        id: contributors
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+          REPO="${{ github.repository }}"
+
+          PREV_TAG=$(git tag --sort=v:refname \
+            | grep -B1 "^${CURRENT_TAG}$" \
+            | head -1)
+
+          if [[ -z "$PREV_TAG" || "$PREV_TAG" == "$CURRENT_TAG" ]]; then
+            HEADER="## Contributors"
+            CONTRIB=$(gh api "repos/${REPO}/contributors?per_page=100" \
+              --jq '.[].login' \
+              | grep -v 'github-actions\[bot\]' \
+              | sed 's/^/- @/')
+          else
+            HEADER="## Contributors (${PREV_TAG} → ${CURRENT_TAG})"
+            CONTRIB=$(git log "${PREV_TAG}..${CURRENT_TAG}" --format='%H' \
+              | while read -r sha; do
+                  gh api "repos/${REPO}/commits/${sha}" \
+                    --jq '.author.login // empty' 2>/dev/null
+                done \
+              | grep -v '^$' \
+              | grep -v 'github-actions\[bot\]' \
+              | sort -u \
+              | sed 's/^/- @/')
+          fi
+
+          {
+            echo "header=${HEADER}"
+            echo "list<<EOF"
+            echo "${CONTRIB}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          CHANGELOG="CHANGELOG.md"
+
+          if [[ -f "$CHANGELOG" ]] && grep -q "## \[${VERSION}\]" "$CHANGELOG"; then
+            sed -n "/## \[${VERSION}\]/,/^## \[/p" "$CHANGELOG" \
+              | sed '$d' > release_body.md
+          else
+            {
+              echo "## Release ${{ github.ref_name }}"
+              echo ""
+              echo "See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+            } > release_body.md
+          fi
+
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "## Installation"
+            echo ""
+            echo "### Windows (x86_64)"
+            echo ""
+            echo "1. Download \`cdin-v${VERSION}-windows-x86_64.zip\`"
+            echo "2. Extract the zip"
+            echo "3. Open PowerShell inside the folder and run:"
+            echo ""
+            echo "\`\`\`powershell"
+            echo ".\\install.ps1"
+            echo "# Optional flags:"
+            echo ".\\install.ps1 -RegisterFileTypes   # set cdin as default for text/code files"
+            echo ".\\install.ps1 -NoShortcut           # skip desktop shortcut"
+            echo ".\\install.ps1 -Prefix C:\\Tools\\cdin  # custom install location"
+            echo "\`\`\`"
+            echo ""
+            echo "> The installer copies \`cdin.exe\`, \`SDL3.dll\`, and the Lua DLL to"
+            echo "> \`%LOCALAPPDATA%\\cdin\\bin\` and adds that to your user PATH."
+            echo ""
+            echo "---"
+            echo ""
+            echo "${{ steps.contributors.outputs.header }}"
+            echo ""
+            echo "${{ steps.contributors.outputs.list }}"
+          } >> release_body.md
+
+          echo "--- release_body.md ---"
+          cat release_body.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.ref_name }}
+          name:       "cdin ${{ github.ref_name }}"
+          body_path:  release_body.md
+          files:      release/*
+          draft:      false
+          prerelease: ${{ steps.pre.outputs.flag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

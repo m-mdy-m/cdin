@@ -1,0 +1,392 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SDL_VERSION: "3.2.14"
+
+jobs:
+  build-linux:
+    name: Build – Linux x86_64
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── apt dependencies ───────────────────────────────────────────────────
+      - name: Install apt dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc make pkg-config python3 \
+            liblua5.4-dev \
+            cmake ninja-build \
+            libwayland-dev libxkbcommon-dev \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libpulse-dev libasound2-dev \
+            libdbus-1-dev \
+            libx11-dev libxext-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxi-dev \
+            wget ca-certificates
+
+      # ── SDL3 from source (not in Ubuntu 22.04 apt) ────────────────────────
+      - name: Build & install SDL3
+        run: |
+          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/SDL3-${SDL_VERSION}.tar.gz"
+          tar xf "SDL3-${SDL_VERSION}.tar.gz"
+          cmake -S "SDL3-${SDL_VERSION}" -B /tmp/sdl3-build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF \
+            -DSDL_TEST=OFF  -DSDL_TESTS=OFF
+          sudo cmake --build /tmp/sdl3-build --parallel $(nproc)
+          sudo cmake --install /tmp/sdl3-build
+          sudo ldconfig
+          pkg-config --modversion sdl3
+
+      # ── icon.inl ──────────────────────────────────────────────────────────
+      - name: Generate src/icon.inl
+        run: python3 scripts/gen_icon.py --svg scripts/icon.svg --out src/icon.inl
+
+      # ── build ─────────────────────────────────────────────────────────────
+      - name: make
+        run: make -j$(nproc) BUILD=release PLATFORM=linux SDL_VERSION=3
+
+      # ── verify ────────────────────────────────────────────────────────────
+      - name: Verify binary
+        run: |
+          BIN="$(find build/linux-release -maxdepth 1 -name 'cdin' | head -1)"
+          [[ -z "$BIN" ]] && { echo "::error::Binary not found"; find build/ -type f; exit 1; }
+          file "$BIN"
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+
+      # ── resolve package name ───────────────────────────────────────────────
+      - name: Resolve version
+        id: ver
+        run: |
+          VER="${GITHUB_REF#refs/tags/}"
+          [[ "$VER" == refs/* ]] && VER="dev-$(git rev-parse --short HEAD)"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      # ── package tarball ───────────────────────────────────────────────────
+      - name: Package
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          NAME="cdin-${VER}-linux-x86_64"
+          DIR="dist/${NAME}"
+          mkdir -p "${DIR}/bin"
+
+          cp "$BIN"         "${DIR}/bin/cdin"
+          chmod 755         "${DIR}/bin/cdin"
+          [[ -d data ]]  && cp -r data       "${DIR}/"
+          cp scripts/install.sh              "${DIR}/"
+          chmod 755         "${DIR}/install.sh"
+          for f in README.md CHANGELOG.md LICENSE NOTICE; do
+            [[ -f "$f" ]] && cp "$f" "${DIR}/"
+          done
+
+          tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
+          echo "Tarball: $(du -sh dist/${NAME}.tar.gz | cut -f1)"
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-package
+          path: dist/*.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 1b – Windows x86_64 (MinGW-w64 via MSYS2)
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-windows:
+    name: Build – Windows x86_64
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── MSYS2 + MinGW-w64 toolchain ───────────────────────────────────────
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-lua
+            make
+            git
+            unzip
+            curl
+
+      # ── SDL3 pre-built MinGW binaries ─────────────────────────────────────
+      - name: Install SDL3 (MinGW pre-built)
+        run: |
+          ZIP="SDL3-devel-${SDL_VERSION}-mingw.zip"
+          URL="https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/${ZIP}"
+          curl -fsSL -o "${ZIP}" "${URL}"
+          unzip -q "${ZIP}" -d /tmp/sdl3
+
+          ROOT="/tmp/sdl3/SDL3-${SDL_VERSION}/x86_64-w64-mingw32"
+          cp -r "${ROOT}/include/"* /mingw64/include/
+          cp -r "${ROOT}/lib/"*     /mingw64/lib/
+          cp -r "${ROOT}/bin/"*     /mingw64/bin/
+
+          mkdir -p /mingw64/lib/pkgconfig
+          sed "s/@VER@/${SDL_VERSION}/" > /mingw64/lib/pkgconfig/sdl3.pc << 'PC'
+          prefix=/mingw64
+          exec_prefix=${prefix}
+          libdir=${prefix}/lib
+          includedir=${prefix}/include
+
+          Name: SDL3
+          Description: Simple DirectMedia Layer
+          Version: @VER@
+          Libs: -L${libdir} -lSDL3
+          Cflags: -I${includedir}
+          PC
+          pkg-config --modversion sdl3
+
+      # ── icon.inl ──────────────────────────────────────────────────────────
+      - name: Generate src/icon.inl
+        run: python3 scripts/gen_icon.py --svg scripts/icon.svg --out src/icon.inl
+
+      # ── build ─────────────────────────────────────────────────────────────
+      - name: make
+        run: |
+          mingw32-make -j$(nproc) \
+            BUILD=release \
+            PLATFORM=windows \
+            SDL_VERSION=3 \
+            CC=x86_64-w64-mingw32-gcc
+
+      # ── verify ────────────────────────────────────────────────────────────
+      - name: Verify binary
+        run: |
+          EXE="$(find build/windows-release -maxdepth 1 -name 'cdin.exe' | head -1)"
+          [[ -z "$EXE" ]] && { echo "::error::cdin.exe not found"; find build/ -type f; exit 1; }
+          file "$EXE"
+          echo "EXE=$EXE" >> "$GITHUB_ENV"
+
+      # ── collect DLLs ──────────────────────────────────────────────────────
+      - name: Collect runtime DLLs
+        run: |
+          DIR="$(dirname "$EXE")"
+          SDL_DLL="$(find /mingw64/bin -name 'SDL3.dll' | head -1)"
+          LUA_DLL="$(find /mingw64/bin -name 'lua*.dll' | sort | head -1)"
+          [[ -n "$SDL_DLL" ]] && { cp "$SDL_DLL" "$DIR/"; echo "SDL3.dll: OK"; } \
+                              || echo "::warning::SDL3.dll not found"
+          [[ -n "$LUA_DLL" ]] && { cp "$LUA_DLL" "$DIR/"; echo "lua dll: OK"; } \
+                              || echo "::warning::Lua DLL not found"
+
+      # ── resolve version ───────────────────────────────────────────────────
+      - name: Resolve version
+        id: ver
+        run: |
+          VER="${GITHUB_REF#refs/tags/}"
+          [[ "$VER" == refs/* ]] && VER="dev-$(git rev-parse --short HEAD)"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      # ── package zip ───────────────────────────────────────────────────────
+      - name: Package
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          NAME="cdin-${VER}-windows-x86_64"
+          DIR="dist/${NAME}"
+          mkdir -p "${DIR}"
+
+          cp "$EXE"            "${DIR}/cdin.exe"
+          EXE_DIR="$(dirname "$EXE")"
+          ls "${EXE_DIR}"/*.dll 2>/dev/null && cp "${EXE_DIR}"/*.dll "${DIR}/" || true
+
+          [[ -d data ]] && cp -r data "${DIR}/"
+          cp scripts/install.ps1 "${DIR}/"
+          for f in README.md CHANGELOG.md LICENSE NOTICE; do
+            [[ -f "$f" ]] && cp "$f" "${DIR}/"
+          done
+
+          cd dist
+          7z a -tzip "${NAME}.zip" "${NAME}/" > /dev/null
+          echo "Zip: $(du -sh ${NAME}.zip | cut -f1)"
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: dist/*.zip
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 2 – Collect both packages and publish a single GitHub Release
+  # ═══════════════════════════════════════════════════════════════════════════
+  create-release:
+    name: Publish GitHub Release
+    needs: [build-linux, build-windows]
+    if: always() && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── collect all built packages ─────────────────────────────────────────
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+        continue-on-error: true
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release
+          if [[ -d artifacts ]]; then
+            find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) \
+              -exec cp {} release/ \;
+          fi
+          echo "Release assets:"
+          ls -lh release/ || echo "(none)"
+
+      # ── metadata ──────────────────────────────────────────────────────────
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine prerelease flag
+        id: pre
+        run: |
+          [[ "${{ steps.version.outputs.VERSION }}" == *-* ]] \
+            && echo "flag=true" >> "$GITHUB_OUTPUT" \
+            || echo "flag=false" >> "$GITHUB_OUTPUT"
+
+      # ── contributors ──────────────────────────────────────────────────────
+      - name: Determine contributors
+        id: contributors
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+          REPO="${{ github.repository }}"
+          PREV_TAG=$(git tag --sort=v:refname | grep -B1 "^${CURRENT_TAG}$" | head -1)
+
+          if [[ -z "$PREV_TAG" || "$PREV_TAG" == "$CURRENT_TAG" ]]; then
+            HEADER="## Contributors"
+            CONTRIB=$(gh api "repos/${REPO}/contributors?per_page=100" \
+              --jq '.[].login' \
+              | grep -v 'github-actions\[bot\]' \
+              | sed 's/^/- @/')
+          else
+            HEADER="## Contributors (${PREV_TAG} → ${CURRENT_TAG})"
+            CONTRIB=$(git log "${PREV_TAG}..${CURRENT_TAG}" --format='%H' \
+              | while read -r sha; do
+                  gh api "repos/${REPO}/commits/${sha}" \
+                    --jq '.author.login // empty' 2>/dev/null
+                done \
+              | grep -v '^$' | grep -v 'github-actions\[bot\]' \
+              | sort -u | sed 's/^/- @/')
+          fi
+          { echo "header=${HEADER}"; echo "list<<EOF"; echo "${CONTRIB}"; echo "EOF"; } \
+            >> "$GITHUB_OUTPUT"
+
+      # ── release notes ─────────────────────────────────────────────────────
+      - name: Build release notes
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          CHANGELOG="CHANGELOG.md"
+
+          if [[ -f "$CHANGELOG" ]] && grep -q "## \[${VERSION}\]" "$CHANGELOG"; then
+            sed -n "/## \[${VERSION}\]/,/^## \[/p" "$CHANGELOG" | sed '$d' > release_body.md
+          else
+            printf '## Release %s\n\nSee [CHANGELOG](https://github.com/%s/blob/main/CHANGELOG.md) for details.\n' \
+              "${{ github.ref_name }}" "${{ github.repository }}" > release_body.md
+          fi
+
+          cat >> release_body.md << NOTES
+
+          ---
+
+          ## Installation
+
+          ### Linux (x86_64)
+
+          \`\`\`bash
+          tar xzf cdin-v${VERSION}-linux-x86_64.tar.gz
+          cd cdin-v${VERSION}-linux-x86_64
+          bash install.sh                         # → ~/.local  (no sudo)
+          # or system-wide:
+          sudo bash install.sh --prefix=/usr/local
+          \`\`\`
+
+          > **SDL3 runtime** — needed at runtime if not already installed:
+          > - Ubuntu 24.04+: \`sudo apt install libsdl3-0\`
+          > - Other distros: see [SDL3 releases](https://github.com/libsdl-org/SDL/releases)
+
+          ### Windows (x86_64)
+
+          1. Download \`cdin-v${VERSION}-windows-x86_64.zip\` and extract it.
+          2. Open **PowerShell** inside the extracted folder and run:
+
+          \`\`\`powershell
+          .\\install.ps1
+          # Optional:
+          .\\install.ps1 -RegisterFileTypes   # set as default for text/code files
+          .\\install.ps1 -Prefix C:\\Tools\\cdin # custom location
+          \`\`\`
+
+          > The installer copies \`cdin.exe\`, \`SDL3.dll\`, and the Lua DLL into
+          > \`%LOCALAPPDATA%\\cdin\\bin\` and adds that folder to your **user PATH**.
+
+          ---
+
+          ${{ steps.contributors.outputs.header }}
+
+          ${{ steps.contributors.outputs.list }}
+          NOTES
+
+          echo "--- release_body.md ---"
+          cat release_body.md
+
+      # ── publish ───────────────────────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.ref_name }}
+          name:       "cdin ${{ github.ref_name }}"
+          body_path:  release_body.md
+          files:      release/*
+          draft:      false
+          prerelease: ${{ steps.pre.outputs.flag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
