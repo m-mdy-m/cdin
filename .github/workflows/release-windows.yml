@@ -43,11 +43,9 @@ jobs:
             mingw-w64-x86_64-make
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-python
-            mingw-w64-x86_64-python-pip
             mingw-w64-x86_64-python-pillow
-            mingw-w64-x86_64-python-cairosvg
+            mingw-w64-x86_64-librsvg
             mingw-w64-x86_64-lua
-            mingw-w64-x86_64-cairo
             make
             unzip
             zip
@@ -81,37 +79,42 @@ jobs:
           sed -i "s/SDL_VER_PLACEHOLDER/${SDL_VERSION}/" /mingw64/lib/pkgconfig/sdl3.pc
           pkg-config --modversion sdl3 && echo "SDL3 pkg-config OK"
 
-      # Icon generation runs inside MSYS2 where Cairo is available via mingw64
-      - name: Generate icon assets
+      - name: Generate PNG icons with rsvg-convert
         run: |
-          python3 scripts/gen_icon.py \
-            --svg       scripts/icon.svg \
-            --out       src/icon.inl \
-            --icons-dir scripts/icons
-
-          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
-          if [[ "$PNG_COUNT" -eq 0 ]]; then
-            echo "::error::Icon PNGs were not generated"
-            exit 1
-          fi
+          mkdir -p scripts/icons
+          for sz in 16 22 24 32 48 64 128 256 512 1024; do
+            rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
+              -o "scripts/icons/cdin-${sz}.png"
+            echo "  cdin-${sz}.png: OK"
+          done
+          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' | wc -l)
           echo "Generated ${PNG_COUNT} PNG icons"
 
-      # Build .ico from the pre-rendered PNGs (pure Pillow, no Cairo needed)
+      - name: Generate src/icon.inl from pre-rendered PNGs
+        run: |
+          python3 scripts/gen_icon.py \
+            --svg        scripts/icon.svg \
+            --from-pngs  scripts/icons \
+            --out        src/icon.inl \
+            --no-png
+
       - name: Build cdin.ico
         run: |
           python3 - << 'PYEOF'
           import struct, io, os
           from PIL import Image
 
-          sizes   = [256, 64, 48, 32, 16]
-          ico_dir = "scripts/icons"
+          sizes    = [256, 64, 48, 32, 16]
+          ico_dir  = "scripts/icons"
           out_path = "scripts/cdin.ico"
 
           imgs = []
           for sz in sizes:
               png_path = os.path.join(ico_dir, f"cdin-{sz}.png")
               with open(png_path, "rb") as f:
-                  imgs.append((sz, Image.open(f).convert("RGBA")))
+                  img = Image.open(f)
+                  img.load()
+                  imgs.append((sz, img.convert("RGBA")))
 
           n      = len(imgs)
           header = struct.pack("<HHH", 0, 1, n)
@@ -202,7 +205,7 @@ jobs:
 
           cp scripts/install.ps1 "${PKG_DIR}/"
 
-          # Bundle pre-built .ico (install.ps1 uses it for shortcuts)
+          # Bundle pre-built .ico (install.ps1 uses it for desktop/Start Menu shortcuts)
           [[ -f scripts/cdin.ico ]] && cp scripts/cdin.ico "${PKG_DIR}/" && echo "Bundled cdin.ico"
 
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
