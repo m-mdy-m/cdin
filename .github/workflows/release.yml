@@ -190,7 +190,7 @@ jobs:
       # ── icon.inl (ICO only; no PNG pre-render needed for Windows) ──────────
       - name: Generate src/icon.inl
         run: |
-          pip install --quiet cairosvg Pillow
+          python3 -m pip install --quiet cairosvg Pillow
           python3 scripts/gen_icon.py \
             --svg   scripts/icon.svg \
             --out   src/icon.inl \
