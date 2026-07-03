@@ -41,7 +41,7 @@ ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 
 # ---------------------------------------------------------------------------
-# Helpers: SVG → PNG bytes  (requires cairosvg + Pillow)
+# Helpers: SVG -> PNG bytes  (requires cairosvg + Pillow)
 # ---------------------------------------------------------------------------
 
 def _svg_to_png_bytes(svg_path: str, size: int) -> bytes:
@@ -165,7 +165,7 @@ def main() -> None:
         has_libs = False
 
     # ── render PNGs ─────────────────────────────────────────────────────────
-    png_cache: dict[int, bytes] = {}  # size → raw PNG bytes
+    png_cache: dict[int, bytes] = {}  # size -> raw PNG bytes
 
     if not args.no_png:
         if not has_libs:
@@ -177,7 +177,7 @@ def main() -> None:
             )
         else:
             os.makedirs(icons_dir, exist_ok=True)
-            print(f"[gen_icon] Rendering PNGs → {icons_dir}/")
+            print(f"[gen_icon] Rendering PNGs -> {icons_dir}/")
             for sz in PNG_SIZES:
                 png_bytes = _svg_to_png_bytes(svg_path, sz)
                 png_cache[sz] = png_bytes
@@ -215,7 +215,7 @@ def main() -> None:
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(c_source)
         print(
-            f"[gen_icon] icon.inl written → {out_path}  "
+            f"[gen_icon] icon.inl written -> {out_path}  "
             f"({len(icon_bytes):,} bytes, {method})"
         )
 
