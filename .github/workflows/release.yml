@@ -94,7 +94,7 @@ jobs:
 
           cp "$BIN"         "${DIR}/bin/cdin"
           chmod 755         "${DIR}/bin/cdin"
-          [[ -d data ]]  && cp -r data       "${DIR}/"
+          [[ -d data ]]  && cp -r data       "${DIR}/bin/"
           cp scripts/install.sh              "${DIR}/"
           chmod 755         "${DIR}/install.sh"
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
@@ -234,7 +234,7 @@ jobs:
           done
 
           cd dist
-          7z a -tzip "${NAME}.zip" "${NAME}/" > /dev/null
+          zip -r "${NAME}.zip" "${NAME}/" > /dev/null
           echo "Zip: $(du -sh ${NAME}.zip | cut -f1)"
 
       - name: Upload artifact
