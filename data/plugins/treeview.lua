@@ -205,6 +205,9 @@ end
 local STATUS_RANK = { ["U"] = 5, ["M"] = 4, ["A"] = 3, ["D"] = 2, ["R"] = 2, ["?"] = 1 }
 
 function TreeView:get_status(item)
+  if not item or not item.abs_filename then
+    return nil
+  end
   if not git_root then return nil end
   if item.type == "file" then
     local rel = item.abs_filename:sub(#git_root + 2)

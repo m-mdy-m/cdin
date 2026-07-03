@@ -187,6 +187,7 @@ function M.submit(raw)
   if text:sub(1,1) == ":" then text = text:sub(2) end
   if text == "" then return end
 
+  if text:sub(1,1) == "!" then
     local cmd = text:sub(2):gsub("^%s+","")
     if cmd == "" then
       core.error("ex: empty shell command")
@@ -204,6 +205,7 @@ function M.submit(raw)
   local arg1   = tokens[2]
   local arg2   = tokens[3]
 
+  if cmd == "w" or cmd == "w!" then
     command.perform("doc:save")
 
   elseif cmd == "wa" or cmd == "wa!" then
@@ -231,6 +233,7 @@ function M.submit(raw)
   elseif cmd == "wqa!" or cmd == "wqall!" then
     save_all(); core.quit(true)
 
+  elseif cmd == "e" or cmd == "edit" then
     if not arg1 then core.error("ex: :e requires a path"); return end
     open_file(arg1, false)
 
@@ -238,6 +241,7 @@ function M.submit(raw)
     if not arg1 then core.error("ex: :new requires a path"); return end
     open_file(arg1, true)
 
+  elseif cmd == "mkdir" then
     if not arg1 then core.error("ex: :mkdir requires a path"); return end
     local ok, err = fs.mkdir(arg1)
     if ok then
@@ -303,6 +307,7 @@ function M.submit(raw)
       core.error("ex: %s", err)
     end
 
+  elseif cmd == "ls" then
     show_ls(arg1)
 
   elseif cmd == "pwd" then
@@ -323,6 +328,7 @@ function M.submit(raw)
   elseif cmd == "help" or cmd == "h" then
     show_help()
 
+  elseif text:match("^%d+$") then
     local view = active_docview()
     if view then
       local line = tonumber(text)
@@ -334,8 +340,6 @@ function M.submit(raw)
     core.error('vim: unknown command ":%s"', text)
   end
 end
-
-
 
 function M.suggest(text)
   if text:sub(1,1) == ":" then text = text:sub(2) end
