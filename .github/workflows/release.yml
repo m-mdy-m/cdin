@@ -145,6 +145,7 @@ jobs:
             make
             git
             unzip
+            zip
             curl
 
       # ── SDL3 pre-built MinGW binaries ─────────────────────────────────────
