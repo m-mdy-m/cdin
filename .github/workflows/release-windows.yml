@@ -78,25 +78,29 @@ jobs:
           sed -i "s/SDL_VER_PLACEHOLDER/${SDL_VER}/" /mingw64/lib/pkgconfig/sdl3.pc
           pkg-config --modversion sdl3 && echo "SDL3 pkg-config OK"
 
-      # ── 4. Generate icon inline header + pre-rendered PNGs + .ico ──────────
+      # ── 4. Generate icon assets (runs outside MSYS2 so pip/cairosvg work) ──
       - name: Generate icon assets
+        shell: pwsh
         run: |
-          pip install --quiet cairosvg Pillow
-          python3 scripts/gen_icon.py \
-            --svg       scripts/icon.svg \
-            --out       src/icon.inl \
+          # Use the system Python that ships with windows-latest (not MSYS2 python)
+          python -m pip install --quiet cairosvg Pillow
+
+          # Generate icon.inl (C byte-array) + pre-rendered PNGs
+          python scripts/gen_icon.py `
+            --svg       scripts/icon.svg `
+            --out       src/icon.inl `
             --icons-dir scripts/icons
 
-          # Verify PNGs were generated
-          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
-          if [[ "$PNG_COUNT" -eq 0 ]]; then
-            echo "::error::Icon PNGs were not generated"
+          # Verify PNGs were actually produced
+          $pngCount = (Get-ChildItem scripts/icons -Filter 'cdin-*.png' -ErrorAction SilentlyContinue).Count
+          if ($pngCount -eq 0) {
+            Write-Host "::error::Icon PNGs were not generated"
             exit 1
-          fi
-          echo "Generated ${PNG_COUNT} PNG icons"
+          }
+          Write-Host "Generated $pngCount PNG icons"
 
-          # Build a proper multi-size .ico for Windows shortcuts
-          python3 - <<'PYEOF'
+          # Build a multi-size .ico for Windows shortcuts
+          python - << 'PYEOF'
           import sys, struct, io, os
           try:
               from PIL import Image
@@ -119,6 +123,7 @@ jobs:
               print(f'[ico] cdin.ico written ({len(header+dirs+data):,} bytes, sizes: {[s for s,_ in imgs]})')
           except Exception as e:
               print(f'[ico] WARNING: could not build .ico: {e}', file=sys.stderr)
+              sys.exit(1)
           PYEOF
 
       # ── 5. Build ───────────────────────────────────────────────────────────
