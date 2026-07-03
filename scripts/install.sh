@@ -29,7 +29,7 @@ done
 info "Prefix  : $PREFIX"
 
 if [[ -z "$BINARY_SRC" ]]; then
-    for candidate in build/cdin cdin ./cdin; do
+    for candidate in build/cdin cdin ./cdin bin/cdin; do
         [[ -f "$candidate" ]] && { BINARY_SRC="$candidate"; break; }
     done
 fi
