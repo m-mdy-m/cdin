@@ -104,16 +104,13 @@ jobs:
           cp "${BIN_PATH}" "${PKG_DIR}/bin/cdin"
           chmod 755 "${PKG_DIR}/bin/cdin"
 
-          # Include the data directory (Lua core + plugins + user config)
           if [[ -d data ]]; then
-            cp -r data "${PKG_DIR}/"
+            cp -r data "${PKG_DIR}/bin/data"
           fi
 
-          # Convenience install script
           cp scripts/install.sh "${PKG_DIR}/"
           chmod 755 "${PKG_DIR}/install.sh"
 
-          # Docs
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
             [[ -f "$f" ]] && cp "$f" "${PKG_DIR}/"
           done

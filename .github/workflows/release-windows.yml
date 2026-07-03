@@ -41,6 +41,7 @@ jobs:
             mingw-w64-x86_64-lua
             make
             git
+            unzip
 
       # ── 3. Install SDL3 (pre-built MinGW binaries from SDL release) ────────
       - name: Install SDL3 (MinGW pre-built)

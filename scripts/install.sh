@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-cd "$ROOT_DIR"
+cd "$SCRIPT_DIR"
 
 info()  { printf '\033[1;34m[install]\033[0m %s\n' "$*"; }
 ok()    { printf '\033[1;32m[install]\033[0m %s\n' "$*"; }
@@ -29,7 +26,7 @@ done
 info "Prefix  : $PREFIX"
 
 if [[ -z "$BINARY_SRC" ]]; then
-    for candidate in build/cdin cdin ./cdin bin/cdin; do
+    for candidate in build/cdin cdin ./cdin bin/cdin build/linux-release/cdin; do
         [[ -f "$candidate" ]] && { BINARY_SRC="$candidate"; break; }
     done
 fi
@@ -45,11 +42,21 @@ install -m 755 "$BINARY_SRC" "$BIN_DIR/cdin"
 ok "Installed binary → $BIN_DIR/cdin"
 
 # ---------- install data files ------------------------------------------------
-SHARE_DIR="$PREFIX/share/cdin"
-if [[ -d "data" ]]; then
-    mkdir -p "$SHARE_DIR"
-    cp -r data/. "$SHARE_DIR/"
-    ok "Installed data   → $SHARE_DIR"
+DATA_DIR="$BIN_DIR/data"
+
+# support both old and new packaging layouts
+if [[ -d "bin/data" ]]; then
+    SRC_DATA="bin/data"
+elif [[ -d "data" ]]; then
+    SRC_DATA="data"
+else
+    SRC_DATA=""
+fi
+
+if [[ -n "$SRC_DATA" ]]; then
+    mkdir -p "$DATA_DIR"
+    cp -r "$SRC_DATA"/. "$DATA_DIR/"
+    ok "Installed data   → $DATA_DIR"
 fi
 
 # ---------- install icon -------------------------------------------------------
