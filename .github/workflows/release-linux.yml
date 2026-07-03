@@ -13,7 +13,13 @@ concurrency:
   group: release-linux-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SDL_VERSION: "3.2.14"
+
 jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 1 – Build
+  # ═══════════════════════════════════════════════════════════════════════════
   build-linux:
     name: Build (Linux x86_64)
     runs-on: ubuntu-22.04
@@ -22,13 +28,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  
+          fetch-depth: 0
 
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            gcc make pkg-config python3 \
+            gcc make pkg-config python3 python3-pip \
             liblua5.4-dev \
             cmake ninja-build \
             libwayland-dev libxkbcommon-dev \
@@ -40,24 +46,19 @@ jobs:
 
       - name: Install SDL3 from source
         run: |
-          SDL_VER="3.2.14"
-          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VER}/SDL3-${SDL_VER}.tar.gz"
-          tar xf "SDL3-${SDL_VER}.tar.gz"
-          cd "SDL3-${SDL_VER}"
-          cmake -S . -B build \
+          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/SDL3-${SDL_VERSION}.tar.gz"
+          tar xf "SDL3-${SDL_VERSION}.tar.gz"
+          cmake -S "SDL3-${SDL_VERSION}" -B /tmp/sdl3-build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr/local \
-            -DSDL_SHARED=ON \
-            -DSDL_STATIC=OFF \
-            -DSDL_TEST=OFF \
-            -DSDL_TESTS=OFF
-          sudo cmake --build build --parallel $(nproc)
-          sudo cmake --install build
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF \
+            -DSDL_TEST=OFF  -DSDL_TESTS=OFF
+          sudo cmake --build /tmp/sdl3-build --parallel $(nproc)
+          sudo cmake --install /tmp/sdl3-build
           sudo ldconfig
           echo "SDL3 installed: $(pkg-config --modversion sdl3)"
 
-      # ── 3. Generate icon inline header + pre-rendered PNGs ─────────────────
       - name: Generate icon assets
         run: |
           pip install --quiet cairosvg Pillow
@@ -65,7 +66,6 @@ jobs:
             --svg       scripts/icon.svg \
             --out       src/icon.inl \
             --icons-dir scripts/icons
-          # Verify PNGs were actually generated
           PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
           if [[ "$PNG_COUNT" -eq 0 ]]; then
             echo "::error::Icon PNGs were not generated – check cairosvg/Pillow install"
@@ -74,7 +74,6 @@ jobs:
           echo "Generated ${PNG_COUNT} PNG icons:"
           ls -lh scripts/icons/
 
-      # ── 4. Build ───────────────────────────────────────────────────────────
       - name: Build release binary
         run: |
           make -j$(nproc) \
@@ -82,7 +81,6 @@ jobs:
             PLATFORM=linux \
             SDL_VERSION=3
 
-      # ── 5. Verify ──────────────────────────────────────────────────────────
       - name: Verify binary
         run: |
           BIN="$(find build/linux-release -maxdepth 1 -name 'cdin' | head -1)"
@@ -95,11 +93,9 @@ jobs:
           echo "Binary: $BIN  ($(du -sh "$BIN" | cut -f1))"
           echo "BIN_PATH=$BIN" >> "$GITHUB_ENV"
 
-      # ── 6. Package ─────────────────────────────────────────────────────────
       - name: Determine version
         id: version
         run: |
-          # Use the tag if triggered by a tag push, otherwise use the short SHA
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VER="${GITHUB_REF#refs/tags/}"
           else
@@ -145,7 +141,6 @@ jobs:
           echo "PKG_NAME=${PKG_NAME}"             >> "$GITHUB_ENV"
           echo "Tarball: $(du -sh dist/${PKG_NAME}.tar.gz | cut -f1)"
 
-      # ── 7. Upload artifact (always, even on failure) ────────────────────────
       - name: Upload build artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -155,9 +150,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # ───────────────────────────────────────────────────────────────────────────
-  # Job 2 – Create / update the GitHub Release (tag pushes only)
-  # ───────────────────────────────────────────────────────────────────────────
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 2 – Publish GitHub Release (tag pushes only)
+  # ═══════════════════════════════════════════════════════════════════════════
   create-release:
     name: Publish GitHub Release
     needs: build-linux
@@ -193,11 +188,9 @@ jobs:
       - name: Determine prerelease flag
         id: pre
         run: |
-          if [[ "${{ steps.version.outputs.VERSION }}" == *-* ]]; then
-            echo "flag=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "flag=false" >> "$GITHUB_OUTPUT"
-          fi
+          [[ "${{ steps.version.outputs.VERSION }}" == *-* ]] \
+            && echo "flag=true"  >> "$GITHUB_OUTPUT" \
+            || echo "flag=false" >> "$GITHUB_OUTPUT"
 
       - name: Determine contributors since last tag
         id: contributors
@@ -207,7 +200,6 @@ jobs:
         run: |
           CURRENT_TAG="${GITHUB_REF#refs/tags/}"
           REPO="${{ github.repository }}"
-
           PREV_TAG=$(git tag --sort=v:refname \
             | grep -B1 "^${CURRENT_TAG}$" \
             | head -1)
@@ -230,58 +222,47 @@ jobs:
               | sort -u \
               | sed 's/^/- @/')
           fi
+          { echo "header=${HEADER}"; echo "list<<EOF"; echo "${CONTRIB}"; echo "EOF"; } \
+            >> "$GITHUB_OUTPUT"
 
-          {
-            echo "header=${HEADER}"
-            echo "list<<EOF"
-            echo "${CONTRIB}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Extract release notes from CHANGELOG.md
+      - name: Build release notes
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           CHANGELOG="CHANGELOG.md"
 
           if [[ -f "$CHANGELOG" ]] && grep -q "## \[${VERSION}\]" "$CHANGELOG"; then
-            sed -n "/## \[${VERSION}\]/,/^## \[/p" "$CHANGELOG" \
-              | sed '$d' > release_body.md
+            sed -n "/## \[${VERSION}\]/,/^## \[/p" "$CHANGELOG" | sed '$d' > release_body.md
           else
-            {
-              echo "## Release ${{ github.ref_name }}"
-              echo ""
-              echo "See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
-            } > release_body.md
+            printf '## Release %s\n\nSee [CHANGELOG](https://github.com/%s/blob/main/CHANGELOG.md) for details.\n' \
+              "${{ github.ref_name }}" "${{ github.repository }}" > release_body.md
           fi
 
-          {
-            echo ""
-            echo "---"
-            echo ""
-            echo "## Installation"
-            echo ""
-            echo "### Linux (x86_64)"
-            echo ""
-            echo "\`\`\`bash"
-            echo "tar xzf cdin-v${VERSION}-linux-x86_64.tar.gz"
-            echo "cd cdin-v${VERSION}-linux-x86_64"
-            echo "bash install.sh           # installs to ~/.local by default"
-            echo "# or:"
-            echo "sudo bash install.sh --prefix=/usr/local"
-            echo "\`\`\`"
-            echo ""
-            echo "> **SDL3 runtime** — if SDL3.so is missing on your system, run:"
-            echo "> \`sudo apt install libsdl3-0\`  (Ubuntu 24.04+) or build from source."
-            echo ""
-            echo "---"
-            echo ""
-            echo "${{ steps.contributors.outputs.header }}"
-            echo ""
-            echo "${{ steps.contributors.outputs.list }}"
-          } >> release_body.md
+          cat >> release_body.md << NOTES
 
-          echo "--- release_body.md ---"
-          cat release_body.md
+          ---
+
+          ## Installation
+
+          ### Linux (x86_64)
+
+          \`\`\`bash
+          tar xzf cdin-v${VERSION}-linux-x86_64.tar.gz
+          cd cdin-v${VERSION}-linux-x86_64
+          bash install.sh           # installs to ~/.local by default
+          # or system-wide:
+          sudo bash install.sh --prefix=/usr/local
+          \`\`\`
+
+          > **SDL3 runtime** — if SDL3 is not installed on your system:
+          > - Ubuntu 24.04+: \`sudo apt install libsdl3-0\`
+          > - Other distros: see [SDL3 releases](https://github.com/libsdl-org/SDL/releases)
+
+          ---
+
+          ${{ steps.contributors.outputs.header }}
+
+          ${{ steps.contributors.outputs.list }}
+          NOTES
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

@@ -1,4 +1,5 @@
 name: Release – Windows
+
 on:
   push:
     tags:
@@ -12,22 +13,26 @@ concurrency:
   group: release-windows-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SDL_VERSION: "3.2.14"
+
 jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 1 – Build
+  # ═══════════════════════════════════════════════════════════════════════════
   build-windows:
     name: Build (Windows x86_64 / MinGW)
     runs-on: windows-latest
     defaults:
       run:
-        shell: msys2 {0}   # All steps run inside MSYS2 shell
+        shell: msys2 {0}
 
     steps:
-      # ── 1. Source ──────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # needed so mk/version.mk can read git tags
+          fetch-depth: 0
 
-      # ── 2. Set up MSYS2 + MinGW-w64 toolchain ─────────────────────────────
       - name: Set up MSYS2
         uses: msys2/setup-msys2@v2
         with:
@@ -38,29 +43,28 @@ jobs:
             mingw-w64-x86_64-make
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-python
+            mingw-w64-x86_64-python-pip
+            mingw-w64-x86_64-python-pillow
+            mingw-w64-x86_64-python-cairosvg
             mingw-w64-x86_64-lua
+            mingw-w64-x86_64-cairo
             make
             unzip
             zip
 
-      # ── 3. Install SDL3 (pre-built MinGW binaries from SDL release) ────────
       - name: Install SDL3 (MinGW pre-built)
         run: |
-          SDL_VER="3.2.14"
-          SDL_ZIP="SDL3-devel-${SDL_VER}-mingw.zip"
-          SDL_URL="https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VER}/${SDL_ZIP}"
+          SDL_ZIP="SDL3-devel-${SDL_VERSION}-mingw.zip"
+          SDL_URL="https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/${SDL_ZIP}"
 
           curl -fsSL -o "${SDL_ZIP}" "${SDL_URL}"
           unzip -q "${SDL_ZIP}" -d /tmp/sdl3
 
-          SDL_ROOT="/tmp/sdl3/SDL3-${SDL_VER}/x86_64-w64-mingw32"
-
-          # Copy headers and libs into MinGW sysroot so pkg-config / gcc find them
+          SDL_ROOT="/tmp/sdl3/SDL3-${SDL_VERSION}/x86_64-w64-mingw32"
           cp -r "${SDL_ROOT}/include/"* /mingw64/include/
           cp -r "${SDL_ROOT}/lib/"*     /mingw64/lib/
           cp -r "${SDL_ROOT}/bin/"*     /mingw64/bin/
 
-          # Drop the .pc file so pkg-config works
           mkdir -p /mingw64/lib/pkgconfig
           cat > /mingw64/lib/pkgconfig/sdl3.pc << 'PC'
           prefix=/mingw64
@@ -74,92 +78,62 @@ jobs:
           Libs: -L${libdir} -lSDL3
           Cflags: -I${includedir}
           PC
-          # patch version placeholder
-          sed -i "s/SDL_VER_PLACEHOLDER/${SDL_VER}/" /mingw64/lib/pkgconfig/sdl3.pc
+          sed -i "s/SDL_VER_PLACEHOLDER/${SDL_VERSION}/" /mingw64/lib/pkgconfig/sdl3.pc
           pkg-config --modversion sdl3 && echo "SDL3 pkg-config OK"
 
-      # ── 4. Generate icon assets (runs outside MSYS2 so pip/cairosvg work) ──
+      # Icon generation runs inside MSYS2 where Cairo is available via mingw64
       - name: Generate icon assets
-        shell: pwsh
         run: |
-          # Use the system Python that ships with windows-latest (not MSYS2 python)
-          python -m pip install --quiet cairosvg Pillow
-
-          # Generate icon.inl (C byte-array) + pre-rendered PNGs
-          python scripts/gen_icon.py `
-            --svg       scripts/icon.svg `
-            --out       src/icon.inl `
+          python3 scripts/gen_icon.py \
+            --svg       scripts/icon.svg \
+            --out       src/icon.inl \
             --icons-dir scripts/icons
 
-          # Verify PNGs were actually produced
-          $pngCount = (Get-ChildItem scripts/icons -Filter 'cdin-*.png' -ErrorAction SilentlyContinue).Count
-          if ($pngCount -eq 0) {
-            Write-Host "::error::Icon PNGs were not generated"
+          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
+          if [[ "$PNG_COUNT" -eq 0 ]]; then
+            echo "::error::Icon PNGs were not generated"
             exit 1
-          }
-          Write-Host "Generated $pngCount PNG icons"
+          fi
+          echo "Generated ${PNG_COUNT} PNG icons"
 
-          $py = @'
-          import sys, struct, io, os
+      # Build .ico from the pre-rendered PNGs (pure Pillow, no Cairo needed)
+      - name: Build cdin.ico
+        run: |
+          python3 - << 'PYEOF'
+          import struct, io, os
           from PIL import Image
-          import cairosvg
 
-          sizes = [256, 64, 48, 32, 16]
+          sizes   = [256, 64, 48, 32, 16]
+          ico_dir = "scripts/icons"
+          out_path = "scripts/cdin.ico"
+
           imgs = []
-
           for sz in sizes:
-              png = cairosvg.svg2png(
-                  url="scripts/icon.svg",
-                  output_width=sz,
-                  output_height=sz
-              )
-              imgs.append((sz, Image.open(io.BytesIO(png)).convert("RGBA")))
+              png_path = os.path.join(ico_dir, f"cdin-{sz}.png")
+              with open(png_path, "rb") as f:
+                  imgs.append((sz, Image.open(f).convert("RGBA")))
 
-          n = len(imgs)
-
+          n      = len(imgs)
           header = struct.pack("<HHH", 0, 1, n)
-
-          dirs = b""
-          data = b""
+          dirs   = b""
+          data   = b""
           offset = 6 + 16 * n
 
           for sz, img in imgs:
               buf = io.BytesIO()
               img.save(buf, "PNG")
               png = buf.getvalue()
-
-              bw = sz if sz < 256 else 0
-
-              dirs += struct.pack(
-                  "<BBBBHHII",
-                  bw,
-                  bw,
-                  0,
-                  0,
-                  1,
-                  32,
-                  len(png),
-                  offset
-              )
-
+              bw  = sz if sz < 256 else 0
+              dirs += struct.pack("<BBBBHHII", bw, bw, 0, 0, 1, 32, len(png), offset)
               data += png
               offset += len(png)
 
-          os.makedirs("scripts", exist_ok=True)
-
-          with open("scripts/cdin.ico", "wb") as f:
+          with open(out_path, "wb") as f:
               f.write(header + dirs + data)
 
-          print("cdin.ico written")
-          '@
+          print(f"cdin.ico written ({os.path.getsize(out_path):,} bytes)")
+          PYEOF
 
-          $py | Set-Content temp_icon.py
-
-          python temp_icon.py
-
-          Remove-Item temp_icon.py
-
-      # ── 5. Build ───────────────────────────────────────────────────────────
       - name: Build release binary
         run: |
           mingw32-make -j$(nproc) \
@@ -168,7 +142,6 @@ jobs:
             SDL_VERSION=3 \
             CC=x86_64-w64-mingw32-gcc
 
-      # ── 6. Verify ──────────────────────────────────────────────────────────
       - name: Verify binary
         run: |
           EXE="$(find build/windows-release -maxdepth 1 -name 'cdin.exe' | head -1)"
@@ -181,25 +154,22 @@ jobs:
           echo "Binary: $EXE  ($(du -sh "$EXE" | cut -f1))"
           echo "EXE_PATH=$EXE" >> "$GITHUB_ENV"
 
-      # ── 7. Collect runtime DLLs ────────────────────────────────────────────
       - name: Collect SDL3.dll and Lua DLL
         run: |
           OUT_DIR="$(dirname "$EXE_PATH")"
 
-          # SDL3.dll
           SDL_DLL="$(find /mingw64/bin -name 'SDL3.dll' | head -1)"
           if [[ -n "$SDL_DLL" ]]; then
             cp "$SDL_DLL" "$OUT_DIR/"
-            echo "Copied $(basename $SDL_DLL)"
+            echo "Copied $(basename "$SDL_DLL")"
           else
             echo "::warning::SDL3.dll not found in MinGW bin"
           fi
 
-          # lua*.dll  — lua54.dll or similar
           LUA_DLL="$(find /mingw64/bin -name 'lua*.dll' | sort | head -1)"
           if [[ -n "$LUA_DLL" ]]; then
             cp "$LUA_DLL" "$OUT_DIR/"
-            echo "Copied $(basename $LUA_DLL)"
+            echo "Copied $(basename "$LUA_DLL")"
           else
             echo "::warning::Lua DLL not found in MinGW bin"
           fi
@@ -207,7 +177,6 @@ jobs:
           echo "Contents of $OUT_DIR:"
           ls -lh "$OUT_DIR"
 
-      # ── 8. Package ─────────────────────────────────────────────────────────
       - name: Determine version
         id: version
         run: |
@@ -226,22 +195,16 @@ jobs:
 
           mkdir -p "${PKG_DIR}"
 
-          # Binary + DLLs
-          cp "${EXE_PATH}"                         "${PKG_DIR}/cdin.exe"
-          cp "$(dirname ${EXE_PATH})"/*.dll        "${PKG_DIR}/" 2>/dev/null || true
+          cp "${EXE_PATH}"                          "${PKG_DIR}/cdin.exe"
+          cp "$(dirname "${EXE_PATH}")"/*.dll       "${PKG_DIR}/" 2>/dev/null || true
 
-          # Data directory (Lua core + plugins)
-          if [[ -d data ]]; then
-            cp -r data "${PKG_DIR}/"
-          fi
+          [[ -d data ]] && cp -r data "${PKG_DIR}/"
 
-          # Install script
           cp scripts/install.ps1 "${PKG_DIR}/"
 
-          # Bundle .ico for shortcuts (install.ps1 looks for cdin.ico next to itself)
+          # Bundle pre-built .ico (install.ps1 uses it for shortcuts)
           [[ -f scripts/cdin.ico ]] && cp scripts/cdin.ico "${PKG_DIR}/" && echo "Bundled cdin.ico"
 
-          # Docs
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
             [[ -f "$f" ]] && cp "$f" "${PKG_DIR}/"
           done
@@ -251,7 +214,6 @@ jobs:
           echo "PKG_PATH=dist/${PKG_NAME}.zip" >> "$GITHUB_ENV"
           echo "Zip: $(du -sh ${PKG_NAME}.zip | cut -f1)"
 
-      # ── 9. Upload artifact ─────────────────────────────────────────────────
       - name: Upload build artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -261,6 +223,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 2 – Publish GitHub Release (tag pushes only)
+  # ═══════════════════════════════════════════════════════════════════════════
   create-release:
     name: Publish GitHub Release
     needs: build-windows
@@ -296,11 +261,9 @@ jobs:
       - name: Determine prerelease flag
         id: pre
         run: |
-          if [[ "${{ steps.version.outputs.VERSION }}" == *-* ]]; then
-            echo "flag=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "flag=false" >> "$GITHUB_OUTPUT"
-          fi
+          [[ "${{ steps.version.outputs.VERSION }}" == *-* ]] \
+            && echo "flag=true"  >> "$GITHUB_OUTPUT" \
+            || echo "flag=false" >> "$GITHUB_OUTPUT"
 
       - name: Determine contributors since last tag
         id: contributors
@@ -310,7 +273,6 @@ jobs:
         run: |
           CURRENT_TAG="${GITHUB_REF#refs/tags/}"
           REPO="${{ github.repository }}"
-
           PREV_TAG=$(git tag --sort=v:refname \
             | grep -B1 "^${CURRENT_TAG}$" \
             | head -1)
@@ -333,62 +295,49 @@ jobs:
               | sort -u \
               | sed 's/^/- @/')
           fi
+          { echo "header=${HEADER}"; echo "list<<EOF"; echo "${CONTRIB}"; echo "EOF"; } \
+            >> "$GITHUB_OUTPUT"
 
-          {
-            echo "header=${HEADER}"
-            echo "list<<EOF"
-            echo "${CONTRIB}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Extract release notes from CHANGELOG.md
+      - name: Build release notes
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           CHANGELOG="CHANGELOG.md"
 
           if [[ -f "$CHANGELOG" ]] && grep -q "## \[${VERSION}\]" "$CHANGELOG"; then
-            sed -n "/## \[${VERSION}\]/,/^## \[/p" "$CHANGELOG" \
-              | sed '$d' > release_body.md
+            sed -n "/## \[${VERSION}\]/,/^## \[/p" "$CHANGELOG" | sed '$d' > release_body.md
           else
-            {
-              echo "## Release ${{ github.ref_name }}"
-              echo ""
-              echo "See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
-            } > release_body.md
+            printf '## Release %s\n\nSee [CHANGELOG](https://github.com/%s/blob/main/CHANGELOG.md) for details.\n' \
+              "${{ github.ref_name }}" "${{ github.repository }}" > release_body.md
           fi
 
-          {
-            echo ""
-            echo "---"
-            echo ""
-            echo "## Installation"
-            echo ""
-            echo "### Windows (x86_64)"
-            echo ""
-            echo "1. Download \`cdin-v${VERSION}-windows-x86_64.zip\`"
-            echo "2. Extract the zip"
-            echo "3. Open PowerShell inside the folder and run:"
-            echo ""
-            echo "\`\`\`powershell"
-            echo ".\\install.ps1"
-            echo "# Optional flags:"
-            echo ".\\install.ps1 -RegisterFileTypes   # set cdin as default for text/code files"
-            echo ".\\install.ps1 -NoShortcut           # skip desktop shortcut"
-            echo ".\\install.ps1 -Prefix C:\\Tools\\cdin  # custom install location"
-            echo "\`\`\`"
-            echo ""
-            echo "> The installer copies \`cdin.exe\`, \`SDL3.dll\`, and the Lua DLL to"
-            echo "> \`%LOCALAPPDATA%\\cdin\\bin\` and adds that to your user PATH."
-            echo ""
-            echo "---"
-            echo ""
-            echo "${{ steps.contributors.outputs.header }}"
-            echo ""
-            echo "${{ steps.contributors.outputs.list }}"
-          } >> release_body.md
+          cat >> release_body.md << NOTES
 
-          echo "--- release_body.md ---"
-          cat release_body.md
+          ---
+
+          ## Installation
+
+          ### Windows (x86_64)
+
+          1. Download \`cdin-v${VERSION}-windows-x86_64.zip\` and extract it.
+          2. Open **PowerShell** inside the extracted folder and run:
+
+          \`\`\`powershell
+          .\install.ps1
+          # Optional flags:
+          .\install.ps1 -RegisterFileTypes   # set cdin as default for text/code files
+          .\install.ps1 -NoShortcut           # skip desktop shortcut
+          .\install.ps1 -Prefix C:\Tools\cdin  # custom install location
+          \`\`\`
+
+          > The installer copies \`cdin.exe\`, \`SDL3.dll\`, and the Lua DLL to
+          > \`%LOCALAPPDATA%\cdin\bin\` and adds that to your user PATH.
+
+          ---
+
+          ${{ steps.contributors.outputs.header }}
+
+          ${{ steps.contributors.outputs.list }}
+          NOTES
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

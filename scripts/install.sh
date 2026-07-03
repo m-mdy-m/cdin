@@ -9,7 +9,7 @@ warn()  { printf '\033[1;33m[install]\033[0m %s\n' "$*"; }
 die()   { printf '\033[1;31m[install]\033[0m ERROR: %s\n' "$*" >&2; exit 1; }
 
 PREFIX="${PREFIX:-$HOME/.local}"
-BINARY_SRC="${BINARY_SRC:-}" 
+BINARY_SRC="${BINARY_SRC:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -44,7 +44,6 @@ ok "Installed binary → $BIN_DIR/cdin"
 # ---------- install data files ------------------------------------------------
 DATA_DIR="$BIN_DIR/data"
 
-# support both old and new packaging layouts
 if [[ -d "bin/data" ]]; then
     SRC_DATA="bin/data"
 elif [[ -d "data" ]]; then
@@ -59,67 +58,107 @@ if [[ -n "$SRC_DATA" ]]; then
     ok "Installed data   → $DATA_DIR"
 fi
 
-# ---------- install icon -------------------------------------------------------
-ICON_DIR="$PREFIX/share/icons/hicolor"
+# ---------- install icons -----------------------------------------------------
+HICOLOR_DIR="$PREFIX/share/icons/hicolor"
 ICON_INSTALLED=0
 
-install_icon_size() {
+install_png_size() {
     local size="$1"
     local src_png="$2"
-    local dest="$ICON_DIR/${size}x${size}/apps"
-    mkdir -p "$dest"
-    cp "$src_png" "$dest/cdin.png"
+    local dest_dir="$HICOLOR_DIR/${size}x${size}/apps"
+    mkdir -p "$dest_dir"
+    cp "$src_png" "$dest_dir/cdin.png"
 }
 
-ICONS_DIR=""
+# Locate bundled pre-rendered PNGs (checked in priority order)
+ICONS_SRC=""
 for candidate in scripts/icons icons bin/icons; do
-    [[ -d "$candidate" ]] && { ICONS_DIR="$candidate"; break; }
+    [[ -d "$candidate" ]] && { ICONS_SRC="$candidate"; break; }
 done
 
-if [[ -n "$ICONS_DIR" ]]; then
+if [[ -n "$ICONS_SRC" ]]; then
+    info "Installing icons from $ICONS_SRC …"
+    installed_count=0
     for sz in 16 22 24 32 48 64 128 256 512; do
-        PNG="$ICONS_DIR/cdin-${sz}.png"
-        [[ -f "$PNG" ]] && install_icon_size "$sz" "$PNG"
+        PNG="$ICONS_SRC/cdin-${sz}.png"
+        if [[ -f "$PNG" ]]; then
+            install_png_size "$sz" "$PNG"
+            (( installed_count++ )) || true
+        fi
     done
-    SVG_SRC="scripts/icon.svg"
-    if [[ -f "$SVG_SRC" ]]; then
-        SCALABLE_DIR="$ICON_DIR/scalable/apps"
-        mkdir -p "$SCALABLE_DIR"
-        cp "$SVG_SRC" "$SCALABLE_DIR/cdin.svg"
-    fi
+
+    # Install scalable SVG if present
+    for svg_candidate in scripts/icon.svg icon.svg; do
+        if [[ -f "$svg_candidate" ]]; then
+            SCALABLE_DIR="$HICOLOR_DIR/scalable/apps"
+            mkdir -p "$SCALABLE_DIR"
+            cp "$svg_candidate" "$SCALABLE_DIR/cdin.svg"
+            info "Installed scalable SVG → $SCALABLE_DIR/cdin.svg"
+            break
+        fi
+    done
+
+    ok "Installed $installed_count PNG icons → $HICOLOR_DIR"
     ICON_INSTALLED=1
-    ok "Installed icons  → $ICON_DIR"
+
 elif command -v rsvg-convert &>/dev/null && [[ -f "scripts/icon.svg" ]]; then
-    # Fallback: convert SVG on-the-fly with rsvg-convert
+    info "No pre-rendered PNGs found; converting SVG with rsvg-convert …"
     for sz in 16 22 24 32 48 64 128 256; do
         TMP_PNG="/tmp/cdin_${sz}.png"
-        rsvg-convert -w "$sz" -h "$sz" "scripts/icon.svg" -o "$TMP_PNG" 2>/dev/null && \
-            install_icon_size "$sz" "$TMP_PNG"
+        rsvg-convert -w "$sz" -h "$sz" "scripts/icon.svg" -o "$TMP_PNG" 2>/dev/null \
+            && install_png_size "$sz" "$TMP_PNG"
     done
-    SCALABLE_DIR="$ICON_DIR/scalable/apps"
+    SCALABLE_DIR="$HICOLOR_DIR/scalable/apps"
     mkdir -p "$SCALABLE_DIR"
     cp "scripts/icon.svg" "$SCALABLE_DIR/cdin.svg"
     ICON_INSTALLED=1
-    ok "Installed icons  → $ICON_DIR"
+    ok "Installed icons → $HICOLOR_DIR"
+
 elif command -v convert &>/dev/null && [[ -f "scripts/icon.svg" ]]; then
+    info "No pre-rendered PNGs found; converting SVG with ImageMagick …"
     for sz in 16 22 24 32 48 64 128 256; do
         TMP_PNG="/tmp/cdin_${sz}.png"
-        convert -background none "scripts/icon.svg" -resize "${sz}x${sz}" "$TMP_PNG" 2>/dev/null && \
-            install_icon_size "$sz" "$TMP_PNG"
+        convert -background none "scripts/icon.svg" -resize "${sz}x${sz}" "$TMP_PNG" 2>/dev/null \
+            && install_png_size "$sz" "$TMP_PNG"
     done
     ICON_INSTALLED=1
-    ok "Installed icons  → $ICON_DIR"
+    ok "Installed icons → $HICOLOR_DIR"
+
 else
-    warn "Pre-rendered icons not found and no SVG converter available – icon skipped."
+    warn "No pre-rendered icons found and no SVG converter available – icon skipped."
     warn "Re-run: pip install cairosvg Pillow && python3 scripts/gen_icon.py"
 fi
 
-# ---------- .desktop file (Linux / WSL GUI) -----------------------------------
+# ---------- update icon cache -------------------------------------------------
+if [[ "$ICON_INSTALLED" -eq 1 ]]; then
+    # gtk-update-icon-cache is the standard tool; rebuild every size dir we touched
+    if command -v gtk-update-icon-cache &>/dev/null; then
+        gtk-update-icon-cache -f -t "$HICOLOR_DIR" 2>/dev/null && \
+            info "Icon cache updated (gtk-update-icon-cache)" || true
+    elif command -v update-icon-caches &>/dev/null; then
+        update-icon-caches "$HICOLOR_DIR" 2>/dev/null && \
+            info "Icon cache updated (update-icon-caches)" || true
+    fi
+
+    # xdg-icon-resource: registers the icon with the XDG icon system on
+    # many DEs (GNOME, KDE, XFCE) and handles cache refresh automatically
+    if command -v xdg-icon-resource &>/dev/null; then
+        for sz in 16 22 24 32 48 64 128 256; do
+            PNG="$HICOLOR_DIR/${sz}x${sz}/apps/cdin.png"
+            [[ -f "$PNG" ]] && \
+                xdg-icon-resource install --noupdate --size "$sz" "$PNG" cdin 2>/dev/null || true
+        done
+        xdg-icon-resource forceupdate 2>/dev/null || true
+        info "Icons registered via xdg-icon-resource"
+    fi
+fi
+
+# ---------- .desktop file -----------------------------------------------------
 DESKTOP_DIR="$PREFIX/share/applications"
 mkdir -p "$DESKTOP_DIR"
 
-ICON_REF="cdin"   # icon theme lookup by name
-[[ "$ICON_INSTALLED" -eq 0 ]] && ICON_REF="text-editor"  # generic fallback
+ICON_REF="cdin"
+[[ "$ICON_INSTALLED" -eq 0 ]] && ICON_REF="text-editor"
 
 cat > "$DESKTOP_DIR/cdin.desktop" << EOF
 [Desktop Entry]
@@ -138,11 +177,10 @@ EOF
 
 ok "Desktop entry → $DESKTOP_DIR/cdin.desktop"
 
-# ---------- update icon cache / desktop database ------------------------------
-if command -v update-icon-caches &>/dev/null; then
-    update-icon-caches "$ICON_DIR" 2>/dev/null || true
-elif command -v gtk-update-icon-cache &>/dev/null; then
-    gtk-update-icon-cache -f -t "$ICON_DIR" 2>/dev/null || true
+# Register the .desktop file with the XDG menu system
+if command -v xdg-desktop-menu &>/dev/null; then
+    xdg-desktop-menu install --novendor "$DESKTOP_DIR/cdin.desktop" 2>/dev/null || true
+    info "Desktop entry registered via xdg-desktop-menu"
 fi
 
 if command -v update-desktop-database &>/dev/null; then
