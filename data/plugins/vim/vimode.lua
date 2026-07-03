@@ -4,9 +4,9 @@ local command     = require "core.command"
 local keymap      = require "core.keymap"
 local DocView     = require "core.docview"
 local CommandView = require "core.commandview"
-local ex          = require "plugins.vim_ex"
+local ex          = require "plugins.vim.ex"
 
-require "plugins.vim_fmenu"
+require "plugins.vim.fmenu"
 
 if config.vim_mode_enabled == nil then
   config.vim_mode_enabled = true

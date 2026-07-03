@@ -3,8 +3,8 @@ local core    = require "core"
 local command = require "core.command"
 local common  = require "core.common"
 local Doc     = require "core.doc"
-local fs      = require "plugins.vim_fs"
-local shell   = require "plugins.vim_shell"
+local fs      = require "plugins.vim.fs"
+local shell   = require "plugins.vim.shell"
 
 local M = {}
 

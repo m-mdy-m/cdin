@@ -179,16 +179,27 @@ end
 
 function core.load_plugins()
   local no_errors = true
-  local files = system.list_dir(EXEDIR .. "/data/plugins")
-  for _, filename in ipairs(files) do
-    local modname = "plugins." .. filename:gsub(".lua$", "")
-    local ok = core.try(require, modname)
-    if ok then
-      core.log_quiet("Loaded plugin %q", modname)
-    else
-      no_errors = false
+
+  local function load_dir(dir, prefix)
+    local files = system.list_dir(dir) or {}
+    for _, filename in ipairs(files) do
+      local full_path = dir .. "/" .. filename
+      local info = system.get_file_info(full_path)
+      if info and info.type == "dir" then
+        load_dir(full_path, prefix .. filename .. ".")
+      elseif filename:match("%.lua$") then
+        local modname = prefix .. filename:gsub("%.lua$", "")
+        local ok = core.try(require, modname)
+        if ok then
+          core.log_quiet("Loaded plugin %q", modname)
+        else
+          no_errors = false
+        end
+      end
     end
   end
+
+  load_dir(EXEDIR .. "/data/plugins", "plugins.")
   return no_errors
 end
 
