@@ -35,7 +35,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            gcc make pkg-config python3 python3-pip \
+            gcc make pkg-config python3 \
+            librsvg2-bin \
             liblua5.4-dev \
             cmake ninja-build \
             libwayland-dev libxkbcommon-dev \
@@ -63,7 +64,10 @@ jobs:
 
       - name: Generate icon assets
         run: |
-          pip install --quiet cairosvg Pillow
+          mkdir -p scripts/icons
+          for sz in 16 22 24 32 48 64 128 256 512 1024; do
+            rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg -o "scripts/icons/cdin-${sz}.png"
+          done
           python3 scripts/gen_icon.py \
             --svg       scripts/icon.svg \
             --out       src/icon.inl \
@@ -77,7 +81,7 @@ jobs:
 
       - name: make
         run: make -j$(nproc) BUILD=release PLATFORM=linux SDL_VERSION=3
-
+ب
       - name: Verify binary
         run: |
           BIN="$(find build/linux-release -maxdepth 1 -name 'cdin' | head -1)"
@@ -154,10 +158,10 @@ jobs:
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-python
             mingw-w64-x86_64-lua
-            mingw-w64-x86_64-cairo
-            mingw-w64-x86_64-python-pip
+            mingw-w64-x86_64-librsvg
             mingw-w64-x86_64-python-pillow
             mingw-w64-x86_64-python-cairo  
+            mingw-w64-x86_64-cairo
             make
             git
             unzip
@@ -194,6 +198,11 @@ jobs:
       # Generate icon.inl + PNGs using MSYS2 Python (has Cairo via mingw64)
       - name: Generate icon assets
         run: |
+          mkdir -p scripts/icons
+          for sz in 16 22 24 32 48 64 128 256 512 1024; do
+            rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg -o "scripts/icons/cdin-${sz}.png"
+          done
+       
           python3 scripts/gen_icon.py \
             --svg       scripts/icon.svg \
             --out       src/icon.inl \
