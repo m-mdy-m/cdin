@@ -52,7 +52,14 @@ function Warn  ($msg) { Write-Host "[install] $msg" -ForegroundColor Yellow }
 function Die   ($msg) { Write-Host "[install] ERROR: $msg" -ForegroundColor Red; exit 1 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RootDir   = Split-Path -Parent $ScriptDir
+
+# When running from a release package, cdin.exe sits next to install.ps1.
+# When running from source, install.ps1 is inside scripts/ and the root is one level up.
+if (Test-Path (Join-Path $ScriptDir "cdin.exe")) {
+    $RootDir = $ScriptDir   # release package layout
+} else {
+    $RootDir = Split-Path -Parent $ScriptDir   # source repo layout
+}
 Push-Location $RootDir
 
 # ── UNINSTALL ─────────────────────────────────────────────────────────────────
@@ -155,8 +162,10 @@ if (Test-Path "data") {
 }
 
 $icoPath      = Join-Path $Prefix "cdin.ico"
-$iconSvg      = "scripts\icon.svg"
 $iconInstalled = $false
+
+$bundledIco = Join-Path $ScriptDir "cdin.ico"
+$iconSvg    = "scripts\icon.svg"
 
 function Write-MinimalIco([string]$svgPath, [string]$destIco) {
     $python = $null
@@ -195,15 +204,24 @@ except Exception as e:
     return ($result -eq "ok")
 }
 
-if (Test-Path $iconSvg) {
+if (Test-Path $bundledIco) {
+    # Fast path: release package ships a pre-built .ico
+    Copy-Item -Force $bundledIco $icoPath
+    Ok "Icon              → $icoPath  (pre-built)"
+    $iconInstalled = $true
+} elseif (Test-Path $iconSvg) {
+    # Source repo: generate .ico on the fly from SVG
     $converted = Write-MinimalIco $iconSvg $icoPath
     if ($converted) {
-        Ok "Icon              → $icoPath"
+        Ok "Icon              → $icoPath  (generated from SVG)"
         $iconInstalled = $true
     } else {
         Warn "SVG→ICO conversion failed (install cairosvg + Pillow for best results)."
         $icoPath = ""
     }
+} else {
+    Warn "No icon found (cdin.ico not bundled and scripts\icon.svg not present) – shortcut will use default icon."
+    $icoPath = ""
 }
 
 if (-not $NoPath) {

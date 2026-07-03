@@ -65,6 +65,14 @@ jobs:
             --svg       scripts/icon.svg \
             --out       src/icon.inl \
             --icons-dir scripts/icons
+          # Verify PNGs were actually generated
+          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
+          if [[ "$PNG_COUNT" -eq 0 ]]; then
+            echo "::error::Icon PNGs were not generated – check cairosvg/Pillow install"
+            exit 1
+          fi
+          echo "Generated ${PNG_COUNT} PNG icons:"
+          ls -lh scripts/icons/
 
       # ── 4. Build ───────────────────────────────────────────────────────────
       - name: Build release binary
@@ -115,11 +123,15 @@ jobs:
           fi
 
           # Bundle pre-rendered PNG icons so install.sh needs no external converter
+          mkdir -p "${PKG_DIR}/scripts"
           if [[ -d scripts/icons ]]; then
-            mkdir -p "${PKG_DIR}/scripts"
             cp -r scripts/icons "${PKG_DIR}/scripts/"
+            echo "Bundled $(find scripts/icons -name '*.png' | wc -l) PNG icons"
+          else
+            echo "::error::scripts/icons/ not found – icon generation must have failed"
+            exit 1
           fi
-          [[ -f scripts/icon.svg ]] && { mkdir -p "${PKG_DIR}/scripts"; cp scripts/icon.svg "${PKG_DIR}/scripts/"; }
+          [[ -f scripts/icon.svg ]] && cp scripts/icon.svg "${PKG_DIR}/scripts/"
 
           cp scripts/install.sh "${PKG_DIR}/"
           chmod 755 "${PKG_DIR}/install.sh"
