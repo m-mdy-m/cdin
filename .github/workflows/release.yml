@@ -354,12 +354,6 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
-      - name: Determine prerelease flag
-        id: pre
-        run: |
-          [[ "${{ steps.version.outputs.VERSION }}" == *-* ]] \
-            && echo "flag=true"  >> "$GITHUB_OUTPUT" \
-            || echo "flag=false" >> "$GITHUB_OUTPUT"
 
       - name: Determine contributors
         id: contributors
@@ -452,6 +446,7 @@ jobs:
           body_path:  release_body.md
           files:      release/*
           draft:      false
-          prerelease: ${{ steps.pre.outputs.flag }}
+          prerelease: false
+          discussion_category_name: Releases
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
