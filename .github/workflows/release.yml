@@ -447,6 +447,5 @@ jobs:
           files:      release/*
           draft:      false
           prerelease: false
-          discussion_category_name: Releases
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
