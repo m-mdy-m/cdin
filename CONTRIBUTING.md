@@ -1,40 +1,78 @@
 # Contributing
 
-Thanks for your interest in contributing!
+Thanks for your interest in cdin. The project values small, readable,
+auditable code — contributions should keep it that way.
 
-## How to Contribute
+## Getting set up
 
-### Reporting Bugs
+You need gcc/clang, GNU make, SDL3 and Lua 5.4 headers, and Python 3.
+See [docs/guides/building.md](docs/guides/building.md) for the details.
 
-- Check if already reported
-- Create detailed issue with:
-  - Steps to reproduce
-  - Expected vs actual behavior
-  - Environment details
+```
+git clone https://github.com/m-mdy-m/cdin
+cd cdin
+make run
+```
 
-### Suggesting Features
+The build symlinks the repository's `data/` directory next to the binary,
+so Lua changes are live on the next start — most editor work is a
+change-and-restart loop with no recompile. Use `make debug` for a
+debuggable C build and `make debug-san` for sanitizers.
 
-- Open issue with enhancement label
-- Describe feature and use case
-- Explain why it's useful
+## Where things are
 
-### Code Contributions
+- `src/` — the C runtime: window, input, rendering, the Lua ↔ C API.
+  Changes here should be rare and well justified.
+- `data/core/` — the Lua editor core: documents, views, commands, keymap.
+- `data/plugins/` — everything optional: tree view, vim mode, autocomplete,
+  language syntaxes. New features usually belong here.
+- `mk/`, `scripts/` — build system and its wrappers.
 
-1. Fork the repo
-2. Create feature branch (`git checkout -b feature/amazing`)
-3. Make changes
-4. Run tests
-5. Commit (`git commit -m 'Add amazing feature'`)
-6. Push (`git push origin feature/amazing`)
-7. Open Pull Request
+Read [docs/architecture/overview.md](docs/architecture/overview.md) before
+touching the core; it explains the command/keymap/coroutine patterns that
+everything is built on.
 
-## Code Style
+## Reporting bugs
 
-- Follow existing style
-- Write clear commit messages
-- Add tests for new features
-- Update docs as needed
+Open an issue with steps to reproduce, what you expected, what happened
+instead, and your platform. The `cdin.log` file written next to the binary
+often contains the relevant error — include it. Check existing issues first.
 
-## Questions?
+## Suggesting features
 
-Open an issue or reach out to maintainers.
+Open an issue describing the feature and the problem it solves. Keep the
+project philosophy in mind: cdin prefers a small core with features as
+plugins, and would rather do less than become configurable soup. Features
+that can be a plugin should be a plugin.
+
+## Submitting changes
+
+1. Fork and create a branch (`git checkout -b feature/thing`)
+2. Make the change; keep it focused — one topic per pull request
+3. Build both `make` and `make debug` cleanly (the C flags include
+   `-Wall -Wextra`; don't introduce warnings)
+4. Run the editor and exercise what you changed. There is no automated test
+   suite yet, so a note in the PR about how you tested it is expected
+5. Update the docs under `docs/` if behavior, commands, keybindings or
+   configuration changed
+6. Add a line to the `[Unreleased]` section of `CHANGELOG.md` if the change
+   is user-visible
+7. Open a pull request explaining what and why
+
+## Code style
+
+The repository has an `.editorconfig`; most editors pick it up
+automatically. In short: UTF-8, LF line endings, final newline, trimmed
+trailing whitespace, 2-space indentation (tabs in Makefiles).
+
+For C: C11 (gnu11), keep functions short, no new dependencies without prior
+discussion. For Lua: follow the style of `data/core/` — `snake_case`,
+modules return a table, classes use `Object:extend()` from `core.object`.
+
+Commit messages: a short imperative summary line ("add soft wrap to
+docview"), with a body when the why isn't obvious.
+
+## Questions
+
+Open an issue or start a thread in
+[Discussions](https://github.com/m-mdy-m/cdin/discussions).
