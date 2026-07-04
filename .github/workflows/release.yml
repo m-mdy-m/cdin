@@ -81,7 +81,7 @@ jobs:
 
       - name: make
         run: make -j$(nproc) BUILD=release PLATFORM=linux SDL_VERSION=3
-ب
+
       - name: Verify binary
         run: |
           BIN="$(find build/linux-release -maxdepth 1 -name 'cdin' | head -1)"
