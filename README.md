@@ -1,47 +1,69 @@
-# Code In (cdin)
+# cdin
 
-> A lightweight, fast, and hackable text editor with Vim-like keybindings
+A lightweight, keyboard-centric text editor with Vim-style modal editing.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-orange.svg)](CHANGELOG.md)
 
-## Project status and identity
-cdin started as a fork of lite, and that heritage is visible in some design choices and early code. However, cdin is not a mere copy: the codebase has diverged, the project goals and implementation details have been rethought, and cdin is following its own path. The project is also inspired by lite-xl; ideas and UX learnings from lite-xl influenced several implementation and design decisions. In short: yes, a fork of lite, but cdin is its own project with its own direction.
+---
+
+## What it is
+
+cdin started as a fork of [lite](https://github.com/rxi/lite) and has since grown into its own project. The core idea is simple: an editor that's fast to start, easy to read through, and straightforward to extend. The design borrows from lite-xl in a few places, especially around UX decisions, but cdin makes its own choices about what to keep and what to cut.
+
+Vim-style modal editing is built in and on by default. Every buffer opens in Normal mode. If you've used Vim, the basics transfer directly. If you haven't, the status bar always shows which mode you're in.
+
+The editor is written in C and Lua. The C layer handles the window, renderer, and SDL bindings. Everything else — the editor behavior, plugins, keybindings, configuration — is Lua, loaded at runtime from `data/`. This means you can change most of how the editor works without recompiling anything.
 
 ## Philosophy
-Simplicity and hackability come first. The core of cdin aims to be small, predictable, and understandable: you should be able to read the source, find the edit loop, and add or change behavior in a few minutes. Performance matters: startup time, low memory footprint, and smooth text rendering are priorities. Extensibility is designed to be simple and unobtrusive — plugins and configuration should feel like first-class citizens rather than afterthoughts. Keyboard-centric editing is the default; Vim-inspired modal keybindings let you stay in the editor and keep your hands on the keyboard. Minimal external dependencies reduce friction for building and packaging, and we favor single-file, auditable subsystems where practical. Above all, cdin is meant for people who prefer tools they can tweak, read, and carry with them — an editor that gives you freedom instead of obscuring behavior behind layers of abstraction.
+
+Simplicity and hackability come first. The codebase is meant to be readable: you should be able to find the edit loop, understand what it does, and change it without needing to know the whole project. Performance matters — startup time, memory use, and rendering smoothness are all considered. Extensibility should feel natural, not bolted on. And the editor should be something you can carry with you: small, self-contained, not dependent on a runtime ecosystem.
+
+## Features
+
+- Modal editing (Normal / Insert / Visual) with Vim keybindings
+- Ex command line (`:w`, `:q`, `:e`, `:!cmd`, and more)
+- File manager menu (`m` in Normal mode)
+- Project tree view with optional git status markers
+- Trailing whitespace trimmed on save
+- Relative or absolute line numbers
+- Configurable via a single Lua file
+
 ## Documentation
 
-- [Building from Source](docs/guides/building.md) __not_created__
-- [Configuration Guide](docs/guides/configuration.md) __not_created__
-- [Plugin Development](docs/guides/plugin-development.md) __not_created__
-- [Vim Keybindings](docs/guides/vim-keybindings.md) __not_created__
-- [API Reference](docs/api/) __not_created__ 
-- [Architecture](docs/architecture/) __not_created__
+- [Over View](docs/architecture/overview.md)
+- [Getting Started](docs/guides/getting-started.md.md)
+- [Building from Source](docs/guides/building.md)
+- [Configuration](docs/guides/configuration.md)
+- [Vim Keybindings](docs/guides/vim-keybindings.md)
+- [Plugins](docs/guides/plugins.md)
+- [Command Reference](docs/guides/commands.md)
+- [Contributing](CONTRIBUTING.md)
 
-## Contributing
+## Quick start
 
-We welcome contributions! Please see:
-- [Contributing Guidelines](CONTRIBUTING.md) 
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Code Style Guide](docs/contributing/code-style.md) __not_created__
+```sh
+# clone
+git clone https://github.com/m-mdy-m/cdin.git
+cd cdin
 
-## Architecture
+# build (requires gcc, make, SDL3, Lua 5.4)
+make
 
-See [Architecture Overview](docs/architecture/overview.md) __not_created__
+# run
+./build/linux-release/cdin
+# or open a file/directory
+./build/linux-release/cdin path/to/project
+```
+
+See [Building from Source](docs/guides/building.md) for dependency details and platform-specific instructions.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE).
 
 ## Credits
 
 - Based on [lite](https://github.com/rxi/lite) by rxi
-- Inspired by [Vim](https://www.vim.org/),
+- Inspired by [Vim](https://www.vim.org/) and [lite-xl](https://lite-xl.com/)
 - Font rendering via [stb_truetype](https://github.com/nothings/stb)
-
-## Support
-
-- [Issue Tracker](https://github.com/m-mdy-m/cdin/issues)
-- [Discussions](https://github.com/m-mdy-m/cdin/discussions)
-- [Documentation](docs/) 
