@@ -320,11 +320,206 @@ jobs:
           retention-days: 14
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Job 2 – Collect both packages and publish GitHub Release
+  # Job 1c – macOS (arm64 + x86_64)
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-macos:
+    name: Build – macOS (arm64 + x86_64)
+    runs-on: macos-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies (Homebrew)
+        run: |
+          brew update --quiet
+          brew install \
+            lua \
+            librsvg \
+            pkg-config
+
+      - name: Build & install SDL3
+        run: |
+          curl -fsSL -o SDL3-src.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/SDL3-${SDL_VERSION}.tar.gz"
+          tar xf SDL3-src.tar.gz
+          cmake -S "SDL3-${SDL_VERSION}" -B /tmp/sdl3-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF \
+            -DSDL_TEST=OFF  -DSDL_TESTS=OFF
+          sudo cmake --build /tmp/sdl3-build --parallel $(sysctl -n hw.logicalcpu)
+          sudo cmake --install /tmp/sdl3-build
+          pkg-config --modversion sdl3
+
+      - name: Generate icon assets
+        run: |
+          mkdir -p scripts/icons
+          for sz in 16 22 24 32 48 64 128 256 512 1024; do
+            rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
+              -o "scripts/icons/cdin-${sz}.png"
+          done
+          python3 scripts/gen_icon.py \
+            --svg       scripts/icon.svg \
+            --out       src/icon.inl \
+            --icons-dir scripts/icons
+          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' | wc -l | tr -d ' ')
+          if [[ "$PNG_COUNT" -eq 0 ]]; then
+            echo "::error::Icon PNGs were not generated"
+            exit 1
+          fi
+          echo "Generated ${PNG_COUNT} PNG icons"
+
+      - name: make
+        run: |
+          make -j$(sysctl -n hw.logicalcpu) \
+            BUILD=release \
+            PLATFORM=macos \
+            SDL_VERSION=3 \
+            CC=clang
+
+      - name: Verify binary
+        run: |
+          BIN="$(find build/macos-release -maxdepth 1 -name 'cdin' | head -1)"
+          [[ -z "$BIN" ]] && { echo "::error::Binary not found"; find build/ -type f; exit 1; }
+          file "$BIN"
+          otool -L "$BIN"
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+
+      - name: Build .icns icon
+        run: |
+          ICONSET="scripts/cdin.iconset"
+          mkdir -p "$ICONSET"
+          ICONS=(
+            "icon_16x16.png:16"
+            "icon_16x16@2x.png:32"
+            "icon_32x32.png:32"
+            "icon_32x32@2x.png:64"
+            "icon_128x128.png:128"
+            "icon_128x128@2x.png:256"
+            "icon_256x256.png:256"
+            "icon_256x256@2x.png:512"
+            "icon_512x512.png:512"
+            "icon_512x512@2x.png:1024"
+          )
+          for item in "${ICONS[@]}"; do
+            name="${item%%:*}"
+            sz="${item##*:}"
+            src="scripts/icons/cdin-${sz}.png"
+            [[ -f "$src" ]] && cp "$src" "$ICONSET/$name" && echo "  $name ← cdin-${sz}.png"
+          done
+          iconutil -c icns "$ICONSET" -o scripts/cdin.icns
+          echo "cdin.icns: $(du -sh scripts/cdin.icns | cut -f1)"
+
+      - name: Create .app bundle
+        run: |
+          APP="dist/cdin.app"
+          CONTENTS="$APP/Contents"
+          MACOS_DIR="$CONTENTS/MacOS"
+          RESOURCES="$CONTENTS/Resources"
+          mkdir -p "$MACOS_DIR" "$RESOURCES"
+
+          cp "$BIN" "$MACOS_DIR/cdin"
+          chmod 755 "$MACOS_DIR/cdin"
+          [[ -d data ]] && cp -r data "$MACOS_DIR/"
+
+          [[ -f scripts/cdin.icns ]] && cp scripts/cdin.icns "$RESOURCES/cdin.icns"
+
+          # Bundle libSDL3.dylib so the app works without Homebrew
+          SDL_LIB="$(pkg-config --variable=libdir sdl3)/libSDL3.dylib"
+          if [[ -f "$SDL_LIB" ]]; then
+            cp "$SDL_LIB" "$MACOS_DIR/libSDL3.dylib"
+            install_name_tool \
+              -change "$(otool -L "$BIN" | grep SDL3 | awk '{print $1}')" \
+              "@executable_path/libSDL3.dylib" \
+              "$MACOS_DIR/cdin"
+            echo "Bundled libSDL3.dylib"
+          else
+            echo "::warning::libSDL3.dylib not found at $SDL_LIB – bundle may need SDL3 installed"
+          fi
+
+          cat > "$CONTENTS/Info.plist" << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>              <string>cdin</string>
+            <key>CFBundleDisplayName</key>       <string>cdin</string>
+            <key>CFBundleIdentifier</key>        <string>io.cdin.editor</string>
+            <key>CFBundleVersion</key>           <string>1</string>
+            <key>CFBundleShortVersionString</key> <string>1.0</string>
+            <key>CFBundleExecutable</key>        <string>cdin</string>
+            <key>CFBundleIconFile</key>          <string>cdin</string>
+            <key>CFBundlePackageType</key>       <string>APPL</string>
+            <key>CFBundleSignature</key>         <string>????</string>
+            <key>NSHighResolutionCapable</key>   <true/>
+            <key>LSMinimumSystemVersion</key>    <string>12.0</string>
+            <key>CFBundleDocumentTypes</key>
+            <array>
+              <dict>
+                <key>CFBundleTypeName</key>      <string>Text File</string>
+                <key>CFBundleTypeRole</key>      <string>Editor</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                  <string>public.plain-text</string>
+                  <string>public.source-code</string>
+                </array>
+              </dict>
+            </array>
+          </dict>
+          </plist>
+          PLIST
+
+          echo "App bundle:"
+          find "$APP" -type f | sort
+
+      - name: Resolve version
+        id: ver
+        run: |
+          VER="${GITHUB_REF#refs/tags/}"
+          [[ "$VER" == refs/* ]] && VER="dev-$(git rev-parse --short HEAD)"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Package
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          NAME="cdin-${VER}-macos"
+          PKG_DIR="dist/${NAME}"
+          mkdir -p "${PKG_DIR}"
+
+          cp -r dist/cdin.app "${PKG_DIR}/"
+          cp scripts/install.sh "${PKG_DIR}/"
+          chmod 755 "${PKG_DIR}/install.sh"
+          for f in README.md CHANGELOG.md LICENSE NOTICE; do
+            [[ -f "$f" ]] && cp "$f" "${PKG_DIR}/"
+          done
+
+          tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
+          echo "Tarball: $(du -sh dist/${NAME}.tar.gz | cut -f1)"
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-package
+          path: dist/*.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 2 – Collect all packages and publish GitHub Release
   # ═══════════════════════════════════════════════════════════════════════════
   create-release:
     name: Publish GitHub Release
-    needs: [build-linux, build-windows]
+    needs:
+      - build-linux
+      - build-windows
+      - build-macos
+  
     if: always() && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
@@ -430,6 +625,19 @@ jobs:
 
           > The installer copies \`cdin.exe\`, \`SDL3.dll\`, and the Lua DLL into
           > \`%LOCALAPPDATA%\cdin\bin\` and adds that folder to your **user PATH**.
+
+          ### macOS (arm64 + x86_64)
+
+          \`\`\`bash
+          tar xzf cdin-v${VERSION}-macos.tar.gz
+          cd cdin-v${VERSION}-macos
+          # Run directly:
+          open cdin.app
+          # Or move to Applications:
+          mv cdin.app /Applications/
+          \`\`\`
+
+          > SDL3 is **bundled inside** the .app — no Homebrew install needed.
 
           ---
 
