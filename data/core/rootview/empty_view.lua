@@ -4,6 +4,7 @@ local common  = require "core.utils.common"
 local View    = require "core.views.view"
 local keymap  = require "core.input.keymap"
 local command = require "core.input.command"
+local logo    = require "core.rootview.logo"
 
 local EmptyView = View:extend()
 
@@ -25,199 +26,67 @@ local RECENT_MAX   = 7
 local ICON_FILE = "f"
 local ICON_DIR  = "d"
 
-
-local LOGO_SPANS = {
-  {13,18,2,83,163,183},
-  {13,45,1,32,56,132},
-  {14,17,1,85,166,185},
-  {14,18,1,116,231,252},
-  {14,19,1,105,209,229},
-  {14,20,1,86,165,185},
-  {14,43,1,32,57,137},
-  {14,44,2,38,73,186},
-  {14,46,1,31,56,136},
-  {15,17,1,88,170,191},
-  {15,18,1,115,229,250},
-  {15,19,1,91,176,197},
-  {15,20,1,116,231,252},
-  {15,21,1,98,194,215},
-  {15,22,1,86,161,180},
-  {15,41,1,32,56,129},
-  {15,42,5,35,67,170},
-  {16,17,1,88,171,192},
-  {16,18,1,112,223,244},
-  {16,19,1,19,24,41},
-  {16,20,1,45,80,97},
-  {16,21,1,99,196,217},
-  {16,22,1,115,229,250},
-  {16,23,2,92,180,200},
-  {16,39,2,32,51,121},
-  {16,41,2,39,75,196},
-  {16,43,2,23,35,75},
-  {16,45,1,39,75,196},
-  {16,46,1,31,57,140},
-  {17,17,1,88,172,192},
-  {17,18,1,110,218,239},
-  {17,19,3,19,24,41},
-  {17,22,1,63,118,137},
-  {17,23,2,111,219,240},
-  {17,25,1,86,166,186},
-  {17,38,1,31,56,139},
-  {17,39,2,36,72,185},
-  {17,41,1,28,46,108},
-  {17,42,3,19,25,43},
-  {17,45,1,37,72,190},
-  {17,46,1,31,56,140},
-  {18,17,1,88,172,192},
-  {18,18,1,108,213,234},
-  {18,19,4,19,24,41},
-  {18,23,1,28,45,62},
-  {18,24,1,81,156,175},
-  {18,25,1,112,223,244},
-  {18,26,1,77,162,218},
-  {18,27,1,89,186,235},
-  {18,28,4,117,231,251},
-  {18,32,3,65,142,196},
-  {18,35,2,55,119,166},
-  {18,37,2,46,97,194},
-  {18,39,1,29,52,128},
-  {18,40,5,20,27,50},
-  {18,45,1,36,69,183},
-  {18,46,1,31,56,140},
-  {19,17,1,89,173,193},
-  {19,18,1,105,209,228},
-  {19,19,6,19,24,41},
-  {19,25,1,59,115,143},
-  {19,26,1,97,201,241},
-  {19,27,5,114,228,251},
-  {19,32,2,72,159,219},
-  {19,34,4,80,182,250},
-  {19,38,1,49,103,160},
-  {19,39,6,21,28,45},
-  {19,45,1,35,66,177},
-  {19,46,1,31,55,141},
-  {20,17,1,91,176,195},
-  {20,18,1,103,202,223},
-  {20,19,4,19,24,41},
-  {20,23,1,32,54,71},
-  {20,24,1,85,166,185},
-  {20,25,4,116,230,251},
-  {20,35,2,51,111,162},
-  {20,37,1,70,156,214},
-  {20,38,1,82,186,254},
-  {20,39,1,74,167,229},
-  {20,40,1,41,81,116},
-  {20,41,4,19,24,41},
-  {20,45,2,33,63,169},
-  {21,17,1,90,176,196},
-  {21,18,1,100,197,217},
-  {21,19,3,19,24,41},
-  {21,22,1,50,89,108},
-  {21,23,3,110,219,239},
-  {21,38,1,53,114,158},
-  {21,39,1,68,149,206},
-  {21,40,1,82,186,254},
-  {21,41,1,64,140,193},
-  {21,42,3,24,36,57},
-  {21,45,2,32,60,162},
-  {22,17,2,92,177,198},
-  {22,19,2,19,24,41},
-  {22,21,1,66,124,144},
-  {22,22,3,116,231,252},
-  {22,40,1,56,120,169},
-  {22,41,2,78,176,241},
-  {22,43,1,28,47,71},
-  {22,44,1,19,24,41},
-  {22,45,2,30,57,155},
-  {23,17,2,92,180,200},
-  {23,19,1,19,24,41},
-  {23,20,1,62,117,137},
-  {23,21,2,116,231,252},
-  {23,41,1,55,110,155},
-  {23,42,2,74,168,230},
-  {23,44,1,27,44,67},
-  {23,45,2,29,55,149},
-  {24,17,1,93,181,202},
-  {24,18,1,72,148,192},
-  {24,19,1,44,79,96},
-  {24,20,2,115,229,250},
-  {24,42,1,57,110,156},
-  {24,43,2,78,172,236},
-  {24,45,2,31,60,149},
-  {25,17,2,82,166,203},
-  {25,19,1,106,210,229},
-  {25,20,1,116,231,252},
-  {25,43,1,56,117,164},
-  {25,44,1,81,185,252},
-  {25,45,1,59,129,191},
-  {25,46,1,27,51,143},
-  {26,17,1,75,164,227},
-  {26,18,1,92,193,238},
-  {26,19,2,116,231,252},
-  {26,44,1,63,136,187},
-  {26,45,1,82,186,254},
-  {26,46,1,38,78,147},
-  {27,17,1,77,169,230},
-  {27,18,2,114,228,251},
-  {27,45,1,63,139,192},
-  {27,46,1,53,114,158},
-  {28,17,1,95,199,240},
-  {28,18,2,116,231,252},
-  {29,17,2,113,228,251},
-  {30,17,2,116,232,252},
-  {31,17,2,116,231,252},
-  {32,16,3,115,230,255},
-  {33,16,3,117,233,255},
-  {34,16,3,117,234,255},
-  {35,17,2,116,231,252},
-  {36,17,2,116,231,253},
-  {37,17,3,116,230,251},
-  {38,17,3,117,230,251},
-  {39,18,2,116,231,253},
-  {40,18,3,116,230,252},
-  {41,19,3,116,231,252},
-  {42,19,3,114,228,255},
-  {43,20,3,115,231,252},
-  {44,21,4,114,232,252},
-  {45,22,5,117,230,251},
-  {46,24,8,115,230,251},
-  {46,32,6,60,146,221},
-  {46,38,10,38,79,210},
-  {47,26,6,115,230,253},
-  {47,32,3,62,143,220},
-  {47,35,3,77,175,245},
-  {47,38,10,36,77,210},
-  {48,29,3,117,234,255},
-  {48,32,6,64,143,221},
-  {48,38,10,35,75,210},
+local SHORTCUTS = {
+  { key = "↑ / ↓",        desc = "Navigate recent items",    section = true },
+  { key = "Tab",           desc = "Switch Files ↔ Dirs" },
+  { key = "Enter",         desc = "Open selected item" },
+  { key = "Esc",           desc = "Clear selection" },
+  { key = "ctrl+o",        desc = "Open file…",              section = true },
+  { key = "ctrl+shift+o",  desc = "Open folder…" },
+  { key = "ctrl+shift+r",  desc = "Recent files picker" },
+  { key = "ctrl+shift+d",  desc = "Recent dirs picker" },
+  { key = "ctrl+n",        desc = "New document" },
+  -- Editor
+  { key = "ctrl+p",        desc = "Command palette",         section = true },
+  { key = "ctrl+shift+p",  desc = "Find file (fuzzy)" },
+  { key = ":q / :wq",     desc = "Quit / Save & Quit" },
+  { key = "i / Esc",      desc = "Insert / Normal mode" },
 }
 
-local function draw_logo_watermark(vx, vy, vw, vh)
-  local GRID = 64
-  local px   = math.max(2, math.floor(math.min(vw, vh) * 0.55 / GRID))
-  local lw   = GRID * px
-  local lh   = GRID * px
-  local ox   = vx + math.floor((vw - lw) / 2)
-  local oy   = vy + math.floor((vh - lh) / 2)
-  local ALPHA = 28
-
-  for _, s in ipairs(LOGO_SPANS) do
-    local sy, sx, sw, r, g, b = s[1], s[2], s[3], s[4], s[5], s[6]
-    renderer.draw_rect(ox + sx * px, oy + sy * px, sw * px, px,
-                       {r, g, b, ALPHA})
+local function safe_open_file(raw)
+  if not raw or raw == "" then return end
+  raw = raw:match("^%s*(.-)%s*$")
+  local abs = system.absolute_path(raw)
+  if not abs then
+    core.error("Cannot resolve path: %s", raw)
+    return
   end
+  local info = system.get_file_info(abs)
+  if not info then
+    core.error("File not found: %s", abs)
+    return
+  end
+  if info.type ~= "file" then
+    core.error("Not a file: %s", abs)
+    return
+  end
+  core.try(function()
+    core.root_view:open_doc(core.open_doc(abs))
+  end)
 end
 
+command.add(nil, {
+  ["empty-view:open-file"] = function()
+    core.command_view:enter("Open File", function(text, item)
+      safe_open_file((item and item.text) or text)
+    end, common.path_suggest)
+  end,
+  ["empty-view:open-folder"] = function()
+    command.perform("core:open-folder")
+  end,
+  ["empty-view:open-recent-files"] = function()
+    command.perform("session:open-recent")
+  end,
+  ["empty-view:open-recent-dirs"] = function()
+    command.perform("session:open-recent-dirs")
+  end,
+})
 
-local SHORTCUTS = {
-  { key = "ctrl+p",       desc = "Open file" },
-  { key = "ctrl+shift+p", desc = "Command palette" },
-  { key = "ctrl+shift+r", desc = "Recent files" },
-  { key = "ctrl+shift+d", desc = "Recent dirs" },
-  { key = "ctrl+n",       desc = "New document" },
-  { key = ":q / :wq",    desc = "Quit / Save & Quit" },
-  { key = "i / Esc",     desc = "Insert / Normal mode" },
+keymap.add {
+  ["ctrl+o"]       = "empty-view:open-file",
+  ["ctrl+shift+o"] = "empty-view:open-folder",
 }
+
 
 function EmptyView:new()
   EmptyView.super.new(self)
@@ -225,7 +94,7 @@ function EmptyView:new()
   self._hover_dir  = -1
   self._file_rects = {}
   self._dir_rects  = {}
-  self._kb_section = nil
+  self._kb_section = nil   -- "files" | "dirs" | nil
   self._kb_index   = 0
 end
 
@@ -234,6 +103,7 @@ local function draw_rect_safe(x, y, w, h, color)
     renderer.draw_rect(x, y, w, h, color)
   end
 end
+
 
 local function draw_logo(px, py)
   local big  = style.big_font
@@ -261,6 +131,7 @@ local function draw_logo(px, py)
   return tw, total_h
 end
 
+
 local function draw_section_header(title, px, py)
   local font    = style.font
   local fh      = font:get_height()
@@ -279,9 +150,15 @@ local function draw_shortcuts(px, py)
   local fh   = font:get_height()
   local mh   = mono:get_height()
 
-  local y = draw_section_header("Quick Reference", px, py)
+  local y        = draw_section_header("Quick Reference", px, py)
+  local first    = true
 
   for _, item in ipairs(SHORTCUTS) do
+    if item.section and not first then
+      y = y + math.floor(6 * SCALE)
+    end
+    first = false
+
     local kw = mono:get_width(item.key) + style.padding.x
     draw_rect_safe(px, y, kw, ITEM_H, style.background3)
     local ky = y + math.floor((ITEM_H - mh) / 2)
@@ -295,6 +172,7 @@ local function draw_shortcuts(px, py)
 
   return y - py
 end
+
 
 local function draw_recent_list(self, title, items, icon, px, py, col_w, hover_idx, kb_idx, rects_out)
   if #items == 0 then return 0 end
@@ -402,9 +280,31 @@ function EmptyView:on_mouse_pressed(btn, mx, my, ...)
   return EmptyView.super.on_mouse_pressed(self, btn, mx, my, ...)
 end
 
-
 function EmptyView:on_key_pressed(key, ...)
   local session = get_session()
+
+  if key == "tab" then
+    local files = session and session.get_recent_files() or {}
+    local dirs  = session and session.get_recent_dirs()  or {}
+    local fc    = math.min(#files, RECENT_MAX)
+    local dc    = math.min(#dirs,  RECENT_MAX)
+
+    if self._kb_section == "files" and dc > 0 then
+      self._kb_section = "dirs"
+      self._kb_index   = math.max(1, math.min(self._kb_index, dc))
+    elseif self._kb_section == "dirs" and fc > 0 then
+      self._kb_section = "files"
+      self._kb_index   = math.max(1, math.min(self._kb_index, fc))
+    elseif self._kb_section == nil then
+      if fc > 0 then
+        self._kb_section = "files"; self._kb_index = 1
+      elseif dc > 0 then
+        self._kb_section = "dirs";  self._kb_index = 1
+      end
+    end
+    core.redraw = true
+    return true
+  end
 
   if key == "down" or key == "up" then
     local files = session and session.get_recent_files() or {}
@@ -472,7 +372,8 @@ function EmptyView:draw()
   local vx, vy = self:get_content_offset()
   local vw, vh = self.size.x, self.size.y
 
-  draw_logo_watermark(vx, vy, vw, vh)
+  -- watermark via logo module
+  logo.draw_watermark(vx, vy, vw, vh)
 
   local session      = get_session()
   local recent_files = session and session.get_recent_files() or {}
@@ -500,7 +401,7 @@ function EmptyView:draw()
   local files_h = recent_block_h(file_count)
   local dirs_h  = recent_block_h(dir_count)
 
-  local KEY_COL_W    = math.floor(200 * SCALE)
+  local KEY_COL_W    = math.floor(220 * SCALE)
   local RECENT_COL_W = math.floor(220 * SCALE)
 
   local THREE_COL = vw > math.floor(900 * SCALE) and (has_files or has_dirs)
