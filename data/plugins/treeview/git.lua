@@ -21,18 +21,28 @@ M.root   = nil
 local IS_WIN = PATHSEP == "\\"
 
 local _git_cmd = nil
+local function silent_popen(cmd)
+  if system.popen then return system.popen(cmd) end
+  local full_cmd
+  if IS_WIN then
+    full_cmd = 'cmd /c " ' .. cmd .. ' " 2>NUL'
+  else
+    full_cmd = cmd
+  end
+  local ok, fp = pcall(io.popen, full_cmd)
+  if not ok or not fp then return nil end
+  local out = fp:read("*a")
+  fp:close()
+  return out
+end
 
 local function find_git_win()
-  if _git_cmd then return _git_cmd end
+  if _git_cmd ~= nil then return _git_cmd end
 
-  local probe = io.popen("git --version 2>NUL")
-  if probe then
-    local out = probe:read("*a")
-    probe:close()
-    if out and out:find("git version") then
-      _git_cmd = "git"
-      return _git_cmd
-    end
+  local out = silent_popen("git --version 2>NUL")
+  if out and out:find("git version") then
+    _git_cmd = "git"
+    return _git_cmd
   end
 
   local candidates = {
@@ -60,12 +70,7 @@ local function git_cmd()
 end
 
 local function run_capture(cmd)
-  if system.popen then return system.popen(cmd) end
-  local ok, fp = pcall(io.popen, cmd)
-  if not ok or not fp then return nil end
-  local out = fp:read("*a")
-  fp:close()
-  return out
+  return silent_popen(cmd)
 end
 
 local function normalize_path(p)
@@ -167,7 +172,7 @@ end
 function M.thread()
   while true do
     core.try(M.refresh)
-    coroutine.yield(config.treeview_git_update_rate)
+    coroutine.yield(config.treeview_git_update_rate or 4)
   end
 end
 

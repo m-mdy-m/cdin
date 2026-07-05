@@ -313,6 +313,9 @@ function M.submit(raw)
     local ok, err = fs.cd(arg1)
     if ok then
       core.log("cd: %s", fs.pwd())
+      local project = require "core.project"
+      project.request_rescan(core)
+      command.perform("treeview:refresh")
     else
       core.error("ex: %s", err)
     end

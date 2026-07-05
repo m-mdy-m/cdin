@@ -74,6 +74,10 @@ function M.open_cursor_item(view)
   if item.type == "dir" then
     item.expanded = not item.expanded
     core.redraw = true
+    if item.expanded then
+      local project = require "core.project"
+      project.prioritize(item.filename)
+    end
   else
     core.try(function()
       core.root_view:open_doc(core.open_doc(item.filename))
@@ -107,6 +111,8 @@ function M.expand_or_go_to_first_child(view)
   if item.type == "dir" and not item.expanded then
     item.expanded = true
     core.redraw = true
+    local project = require "core.project"
+    project.prioritize(item.filename)
     return
   end
   if item.type == "dir" then

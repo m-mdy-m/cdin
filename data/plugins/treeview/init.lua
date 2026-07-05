@@ -39,9 +39,10 @@ function TreeView:get_item_height()
 end
 
 function TreeView:get_cached(item)
-  if core.project_files ~= self._last_project_files then
+  local rev = core.project_files_revision or 0
+  if rev ~= self._last_revision then
     Cache.invalidate_skips()
-    self._last_project_files = core.project_files
+    self._last_revision = rev
   end
   return Cache.get(item)
 end
@@ -138,6 +139,10 @@ function TreeView:on_mouse_pressed(button, x, y, clicks)
 
   if item.type == "dir" then
     item.expanded = not item.expanded
+    if item.expanded then
+      local project = require "core.project"
+      project.prioritize(item.filename)
+    end
   else
     core.try(function()
       core.root_view:open_doc(core.open_doc(item.filename))
@@ -273,6 +278,9 @@ command.add(nil, {
 
   ["treeview:refresh"] = function()
     refresh_tree()
+    -- Also reset lazy-scan state so the project thread re-scans from scratch.
+    local project = require "core.project"
+    project.request_rescan(core)
     if config.treeview_git_enabled then core.try(Git.refresh) end
   end,
 
@@ -305,8 +313,8 @@ command.add(nil, {
       if text == "" then return end
       local path = (dir ~= "." and dir..PATHSEP or "") .. text
       local ok = os.execute(PATHSEP == "\\"
-        and ('mkdir "'..path..'"')
-        or  ('mkdir -p "'..path..'"'))
+        and ('cmd /c mkdir "' .. path .. '" 2>NUL')
+        or  ('mkdir -p "' .. path .. '"'))
       if not ok then core.error('treeview: could not create directory "%s"', path); return end
       refresh_tree()
     end, function(text)
@@ -347,8 +355,8 @@ command.add(nil, {
     for _, item in ipairs(items) do
       if item.type == "dir" then
         os.execute(PATHSEP == "\\"
-          and ('rmdir /s /q "'..item.filename..'"')
-          or  ('rm -rf "'..item.filename..'"'))
+          and ('cmd /c rmdir /s /q "' .. item.filename .. '" 2>NUL')
+          or  ('rm -rf "' .. item.filename .. '"'))
       else
         os.remove(item.filename)
       end
