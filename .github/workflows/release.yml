@@ -438,45 +438,6 @@ jobs:
           ${{ steps.contributors.outputs.list }}
           NOTES
 
-      - name: Resolve discussion category
-        id: discussion
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Query all discussion categories via GraphQL and pick the best match:
-          # prefer "Releases", then "Announcements", then the first available one.
-          REPO="${{ github.repository }}"
-          OWNER="${REPO%%/*}"
-          NAME="${REPO##*/}"
-
-          CATEGORIES=$(gh api graphql -f query='
-            query($owner:String!, $name:String!) {
-              repository(owner:$owner, name:$name) {
-                discussionCategories(first:20) {
-                  nodes { name }
-                }
-              }
-            }' -f owner="$OWNER" -f name="$NAME" \
-            --jq '.data.repository.discussionCategories.nodes[].name' 2>/dev/null || echo "")
-
-          if [[ -z "$CATEGORIES" ]]; then
-            echo "category=" >> "$GITHUB_OUTPUT"
-            echo "No discussion categories found – skipping discussion creation"
-            exit 0
-          fi
-
-          for PREFERRED in "Releases" "Announcements"; do
-            if echo "$CATEGORIES" | grep -qx "$PREFERRED"; then
-              echo "category=${PREFERRED}" >> "$GITHUB_OUTPUT"
-              echo "Using discussion category: ${PREFERRED}"
-              exit 0
-            fi
-          done
-
-          FIRST=$(echo "$CATEGORIES" | head -1)
-          echo "category=${FIRST}" >> "$GITHUB_OUTPUT"
-          echo "Using first available discussion category: ${FIRST}"
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
