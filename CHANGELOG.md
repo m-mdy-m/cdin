@@ -153,3 +153,20 @@ This release focuses on improving the startup experience and fixing several issu
 ### Stability
 
 - Improved startup reliability following the internal architecture changes introduced in `0.1.0-beta.2`.
+
+## [v0.1.0-beta.4] - 2026-07-05
+
+### Features
+
+- **macOS Build:** Added official macOS build support — cdin is now distributed for macOS alongside Linux and Windows. ([`9a76e3e`](../../commit/9a76e3e))
+- **Menu Navigation:** Navigate between options in the shell menu, fmenu (NerdTree-like file manager), and doc menu using `↑`/`↓` arrow keys, and confirm selection with `Tab`. ([`51c95a4`](../../commit/51c95a4))
+- **Logo:** Auto-generate logo backgrounds via the new `gen_logo_lua` scripts. ([`846297b`](../../commit/846297b))
+
+### Bug Fixes
+
+- **macOS:** Fixed incorrect bash version used in macOS builds. ([`5c83e07`](../../commit/5c83e07))
+- **File Open:** Fixed `Ctrl+O` shortcut not opening the file picker correctly. ([`900a092`](../../commit/900a092))
+
+### Refactoring
+
+- **Session:** Added a new option to automatically reopen the last active file on startup — disabled (`false`) by default. ([`29b11ae`](../../commit/29b11ae))
