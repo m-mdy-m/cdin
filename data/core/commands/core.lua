@@ -74,8 +74,19 @@ command.add(nil, {
   end,
 
   ["core:open-file"] = function()
-    core.command_view:enter("Open File", function(text)
-      core.root_view:open_doc(core.open_doc(text))
+    core.command_view:enter("Open File", function(text, item)
+      local path = (item and item.text) or text
+      if not path or path == "" then return end
+      path = path:match("^%s*(.-)%s*$")
+      local abs  = system.absolute_path(path)
+      if not abs then core.error("Cannot resolve: %s", path); return end
+      local info = system.get_file_info(abs)
+      if not info or info.type ~= "file" then
+        core.error("Not a file: %s", abs); return
+      end
+      core.try(function()
+        core.root_view:open_doc(core.open_doc(abs))
+      end)
     end, common.path_suggest)
   end,
 
