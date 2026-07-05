@@ -26,8 +26,6 @@ local ICON_FILE = "f"
 local ICON_DIR  = "d"
 
 
--- ── Logo watermark data (64×64 raster of scripts/icon.svg) ──────────────────
--- Each entry: { grid_row, grid_col, run_width, r, g, b }
 local LOGO_SPANS = {
   {13,18,2,83,163,183},
   {13,45,1,32,56,132},
@@ -195,15 +193,12 @@ local LOGO_SPANS = {
 }
 
 local function draw_logo_watermark(vx, vy, vw, vh)
-  -- Size: fill ~55% of the smaller view dimension
   local GRID = 64
   local px   = math.max(2, math.floor(math.min(vw, vh) * 0.55 / GRID))
   local lw   = GRID * px
   local lh   = GRID * px
   local ox   = vx + math.floor((vw - lw) / 2)
   local oy   = vy + math.floor((vh - lh) / 2)
-
-  -- Very low alpha keeps the look subtle (like VSCode watermark)
   local ALPHA = 28
 
   for _, s in ipairs(LOGO_SPANS) do
