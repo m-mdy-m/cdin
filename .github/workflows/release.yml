@@ -413,8 +413,9 @@ jobs:
       - name: Build release binary (arm64)
         run: |
           make -j$(sysctl -n hw.logicalcpu) \
-            BUILD=release PLATFORM=macos SDL_VERSION=3 \
-            CC="clang -arch arm64"
+            BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang \
+            CFLAGS="-arch arm64 -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter -O3 -DNDEBUG -Isrc $(pkg-config --cflags sdl3) $(pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)" \
+            LDFLAGS="-arch arm64 $(pkg-config --libs sdl3) $(pkg-config --libs lua5.4 2>/dev/null || pkg-config --libs lua 2>/dev/null) -lm -s"
           lipo -info build/macos-release/cdin | grep -q arm64 \
             || { echo "::error::expected arm64"; lipo -info build/macos-release/cdin; exit 1; }
           cp build/macos-release/cdin /tmp/cdin-arm64
@@ -423,8 +424,9 @@ jobs:
         run: |
           make clean
           make -j$(sysctl -n hw.logicalcpu) \
-            BUILD=release PLATFORM=macos SDL_VERSION=3 \
-            CC="clang -arch x86_64"
+            BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang \
+            CFLAGS="-arch x86_64 -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter -O3 -DNDEBUG -Isrc $(pkg-config --cflags sdl3) $(pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)" \
+            LDFLAGS="-arch x86_64 $(pkg-config --libs sdl3) $(pkg-config --libs lua5.4 2>/dev/null || pkg-config --libs lua 2>/dev/null) -lm -s"
           lipo -info build/macos-release/cdin | grep -q x86_64 \
             || { echo "::error::expected x86_64"; lipo -info build/macos-release/cdin; exit 1; }
 

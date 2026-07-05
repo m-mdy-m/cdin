@@ -107,16 +107,20 @@ jobs:
 
       - name: Build release binary (arm64)
         run: |
+          BASE_CFLAGS=$(make -n BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang info 2>/dev/null \
+            | grep 'CFLAGS' | head -1 | sed 's/.*CFLAGS *//' || true)
+
           make -j$(sysctl -n hw.logicalcpu) \
             BUILD=release \
             PLATFORM=macos \
             SDL_VERSION=3 \
-            CC="clang -arch arm64"
+            CC=clang \
+            CFLAGS="-arch arm64 -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter -O3 -DNDEBUG -Isrc $(pkg-config --cflags sdl3) $(pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)" \
+            LDFLAGS="-arch arm64 $(pkg-config --libs sdl3) $(pkg-config --libs lua5.4 2>/dev/null || pkg-config --libs lua 2>/dev/null) -lm -s"
+
           file build/macos-release/cdin
-          # Verify we actually got arm64 before continuing
           lipo -info build/macos-release/cdin | grep -q arm64 \
-            || { echo "::error::arm64 binary expected but got:"; lipo -info build/macos-release/cdin; exit 1; }
-          # Stash outside build/ so make clean can't touch it
+            || { echo "::error::arm64 expected"; lipo -info build/macos-release/cdin; exit 1; }
           cp build/macos-release/cdin /tmp/cdin-arm64
 
       - name: Build release binary (x86_64)
@@ -126,11 +130,13 @@ jobs:
             BUILD=release \
             PLATFORM=macos \
             SDL_VERSION=3 \
-            CC="clang -arch x86_64"
+            CC=clang \
+            CFLAGS="-arch x86_64 -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter -O3 -DNDEBUG -Isrc $(pkg-config --cflags sdl3) $(pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)" \
+            LDFLAGS="-arch x86_64 $(pkg-config --libs sdl3) $(pkg-config --libs lua5.4 2>/dev/null || pkg-config --libs lua 2>/dev/null) -lm -s"
+
           file build/macos-release/cdin
-          # Verify we actually got x86_64 before lipo
           lipo -info build/macos-release/cdin | grep -q x86_64 \
-            || { echo "::error::x86_64 binary expected but got:"; lipo -info build/macos-release/cdin; exit 1; }
+            || { echo "::error::x86_64 expected"; lipo -info build/macos-release/cdin; exit 1; }
 
       - name: Create universal binary with lipo
         run: |
@@ -240,7 +246,6 @@ jobs:
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "Version: $VER"
-
       - name: Create DMG installer
         run: |
           VER="${{ steps.version.outputs.version }}"
