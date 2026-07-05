@@ -106,6 +106,23 @@ The full default keymap is documented in [Command Reference](docs/reference/comm
 - No multiple cursors.
 - Visual mode only supports character-wise selection. Line-wise and block-wise visual modes are not implemented.
 
----
+## [0.1.0-beta.2] — 2026-07-05
 
-[0.1.0-beta.1]: https://github.com/m-mdy-m/cdin/releases/tag/v0.1.0-beta.1
+This release focuses on a major internal refactor of the data layer and plugin architecture. While the user-facing behavior remains largely unchanged, the internal structure has been significantly reorganized to improve modularity, maintainability, and future extensibility.
+
+No intentional breaking changes to core editor behavior were introduced, but due to the scope of the refactor, some instability or plugin-related regressions may occur.
+
+### Internal architecture
+
+* Major refactor of the internal `data/` structure into a cleaner, modular layout.
+* Improved separation of concerns across core systems without altering runtime behavior.
+* Reorganized initialization and data flow to better support future plugin and feature expansion.
+* Reduced coupling between subsystems for easier debugging and testing.
+### Stability notes
+
+* Core editor behavior remains unchanged from `0.1.0-beta.1`.
+
+### Versioning note
+
+* This release remains within the beta cycle.
+* APIs are still considered unstable and may change before the first stable release.
