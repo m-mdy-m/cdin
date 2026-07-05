@@ -320,13 +320,13 @@ jobs:
           retention-days: 14
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Job 1c – macOS DMG (universal: arm64 + x86_64)
+  # Job 1c – macOS DMG (arm64, Rosetta 2 compatible)
   #
   #   Produces a drag-to-Applications DMG — the user double-clicks it,
   #   drags cdin.app to the Applications shortcut, done. No terminal needed.
   # ═══════════════════════════════════════════════════════════════════════════
   build-macos:
-    name: Build – macOS DMG (universal)
+    name: Build – macOS DMG (arm64)
     runs-on: macos-15
     continue-on-error: true
 
@@ -410,34 +410,12 @@ jobs:
           iconutil -c icns "$ICONSET" -o scripts/cdin.icns
           echo "cdin.icns: $(du -sh scripts/cdin.icns | cut -f1)"
 
-      - name: Build release binary (arm64)
+      - name: Build release binary
         run: |
           make -j$(sysctl -n hw.logicalcpu) \
-            BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang \
-            CFLAGS="-arch arm64 -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter -O3 -DNDEBUG -Isrc $(pkg-config --cflags sdl3) $(pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)" \
-            LDFLAGS="-arch arm64 $(pkg-config --libs sdl3) $(pkg-config --libs lua5.4 2>/dev/null || pkg-config --libs lua 2>/dev/null) -lm -s"
-          lipo -info build/macos-release/cdin | grep -q arm64 \
-            || { echo "::error::expected arm64"; lipo -info build/macos-release/cdin; exit 1; }
-          cp build/macos-release/cdin /tmp/cdin-arm64
-
-      - name: Build release binary (x86_64)
-        run: |
-          make clean
-          make -j$(sysctl -n hw.logicalcpu) \
-            BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang \
-            CFLAGS="-arch x86_64 -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter -O3 -DNDEBUG -Isrc $(pkg-config --cflags sdl3) $(pkg-config --cflags lua5.4 2>/dev/null || pkg-config --cflags lua 2>/dev/null)" \
-            LDFLAGS="-arch x86_64 $(pkg-config --libs sdl3) $(pkg-config --libs lua5.4 2>/dev/null || pkg-config --libs lua 2>/dev/null) -lm -s"
-          lipo -info build/macos-release/cdin | grep -q x86_64 \
-            || { echo "::error::expected x86_64"; lipo -info build/macos-release/cdin; exit 1; }
-
-      - name: Create universal binary with lipo
-        run: |
-          lipo -create \
-            /tmp/cdin-arm64 \
-            build/macos-release/cdin \
-            -output build/macos-release/cdin-universal
-          lipo -info build/macos-release/cdin-universal
-          echo "BIN=build/macos-release/cdin-universal" >> "$GITHUB_ENV"
+            BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang
+          file build/macos-release/cdin
+          echo "BIN=build/macos-release/cdin" >> "$GITHUB_ENV"
 
       - name: Resolve version
         id: ver
@@ -673,7 +651,7 @@ jobs:
           > The installer copies \`cdin.exe\`, \`SDL3.dll\`, and the Lua DLL into
           > \`%LOCALAPPDATA%\cdin\bin\` and adds that folder to your **user PATH**.
 
-          ### macOS (universal: arm64 + x86_64)
+          ### macOS (arm64)
 
           1. Download **\`cdin-v${VERSION}-macos.dmg\`** and double-click it.
           2. Drag **cdin** into the **Applications** folder shortcut.
