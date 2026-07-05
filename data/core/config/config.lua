@@ -23,5 +23,6 @@ config.vim_mode_enabled = true
 config.scrolloff = 5
 
 config.line_number_relative = false
+config.session_restore = false
 
 return config

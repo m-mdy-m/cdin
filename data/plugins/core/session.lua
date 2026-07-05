@@ -5,7 +5,7 @@ local keymap  = require "core.input.keymap"
 local common  = require "core.utils.common"
 
 if config.session_max_recent  == nil then config.session_max_recent  = 10  end
-if config.session_restore      == nil then config.session_restore      = true end
+if config.session_restore      == nil then config.session_restore      = false end
 if config.session_save_on_quit == nil then config.session_save_on_quit = true end
 
 local IS_WIN = PATHSEP == "\\"
