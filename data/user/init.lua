@@ -1,5 +1,3 @@
--- data/user/init.lua
---
 -- Your personal cdin config. Loaded last, after core and every plugin
 -- in data/plugins/, so anything set here always wins.
 --
@@ -9,7 +7,7 @@
 -- a line out (prefix it with `--`) to fall back to the built-in default
 -- instead of deleting it, so you can see what changed later.
 
-local keymap = require "core.keymap"
+local keymap = require "core.input.keymap"
 local config = require "core.config"
 local style  = require "core.style"
 
