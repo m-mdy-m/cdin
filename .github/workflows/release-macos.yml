@@ -93,37 +93,37 @@ jobs:
 
       - name: Build .icns icon
         run: |
-          # iconutil expects a specific folder structure: cdin.iconset/
-          ICONSET="scripts/cdin.iconset"
-          mkdir -p "$ICONSET"
+            ICONSET="scripts/cdin.iconset"
+            mkdir -p "$ICONSET"
 
-          # macOS icon sizes (1x and 2x retina)
-          declare -A SIZE_MAP=(
-            ["icon_16x16.png"]=16
-            ["icon_16x16@2x.png"]=32
-            ["icon_32x32.png"]=32
-            ["icon_32x32@2x.png"]=64
-            ["icon_128x128.png"]=128
-            ["icon_128x128@2x.png"]=256
-            ["icon_256x256.png"]=256
-            ["icon_256x256@2x.png"]=512
-            ["icon_512x512.png"]=512
-            ["icon_512x512@2x.png"]=1024
-          )
+            ICONS=(
+            "icon_16x16.png:16"
+            "icon_16x16@2x.png:32"
+            "icon_32x32.png:32"
+            "icon_32x32@2x.png:64"
+            "icon_128x128.png:128"
+            "icon_128x128@2x.png:256"
+            "icon_256x256.png:256"
+            "icon_256x256@2x.png:512"
+            "icon_512x512.png:512"
+            "icon_512x512@2x.png:1024"
+            )
 
-          for name in "${!SIZE_MAP[@]}"; do
-            sz="${SIZE_MAP[$name]}"
+            for item in "${ICONS[@]}"; do
+            name="${item%%:*}"
+            sz="${item##*:}"
             src="scripts/icons/cdin-${sz}.png"
-            if [[ -f "$src" ]]; then
-              cp "$src" "$ICONSET/$name"
-              echo "  $name ← cdin-${sz}.png"
-            else
-              echo "::warning::Missing source: $src"
-            fi
-          done
 
-          iconutil -c icns "$ICONSET" -o scripts/cdin.icns
-          echo "cdin.icns: $(du -sh scripts/cdin.icns | cut -f1)"
+            if [[ -f "$src" ]]; then
+                cp "$src" "$ICONSET/$name"
+                echo "  $name ← cdin-${sz}.png"
+            else
+                echo "::warning::Missing source: $src"
+            fi
+            done
+
+            iconutil -c icns "$ICONSET" -o scripts/cdin.icns
+            echo "cdin.icns: $(du -sh scripts/cdin.icns | cut -f1)"
 
       - name: Create .app bundle
         run: |
