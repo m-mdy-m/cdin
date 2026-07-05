@@ -135,3 +135,21 @@ No intentional breaking changes to core editor behavior were introduced, but due
 
 * This release remains within the beta cycle.
 * APIs are still considered unstable and may change before the first stable release.
+
+## [0.1.0-beta.3] — 2026-07-05
+
+This release focuses on improving the startup experience and fixing several issues introduced during the previous internal refactor.
+
+### Features
+
+- Added a subtle background logo to the welcome/empty view for a cleaner visual appearance.
+
+### Bug Fixes
+
+- Fixed the Recent Files list not being displayed correctly in some situations.
+- Fixed an issue where certain terminal windows appeared unexpectedly when launching cdin.
+- Fixed a runtime error related to `_recent_rects` in the empty view.
+
+### Stability
+
+- Improved startup reliability following the internal architecture changes introduced in `0.1.0-beta.2`.
