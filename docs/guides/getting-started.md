@@ -93,7 +93,7 @@ can open it from inside the editor with the `core:open-user-module` command.
 
 ```lua
 local config = require "core.config"
-local keymap = require "core.keymap"
+local keymap = require "core.input.keymap"
 
 config.indent_size = 4
 config.tab_type = "hard"

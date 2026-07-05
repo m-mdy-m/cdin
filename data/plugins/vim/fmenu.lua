@@ -1,6 +1,6 @@
 local core    = require "core"
-local command = require "core.command"
-local common  = require "core.common"
+local command = require "core.input.command"
+local common  = require "core.utils.common"
 local fs      = require "plugins.vim.fs"
 local engine  = require "plugins.vim.menu_engine"
 
@@ -41,8 +41,8 @@ local function context_path()
     end
   end
 
-  local DocView     = require "core.docview"
-  local CommandView = require "core.commandview"
+  local DocView     = require "core.views.docview"
+  local CommandView = require "core.views.commandview"
   local av = core.active_view
   if av and av:is(DocView) and not av:is(CommandView) then
     local doc = av.doc
@@ -262,7 +262,10 @@ function M.new_file(dir)
     local ok, err = fs.touch(path)
     if not ok then core.error("fmenu: %s", err); return end
     refresh_tree()
-    core.try(function() core.root_view:open_doc(core.open_doc(path)) end)
+    core.try(function()
+      local doc = core.open_doc(path)
+      core.root_view:open_doc(doc)
+    end)
   end, function(partial)
     return common.path_suggest(base .. partial)
   end)
@@ -409,7 +412,10 @@ function M.open_file_prompt(dir)
     if not fs.exists(path) then
       core.error("fmenu: no such file: %s", path); return
     end
-    core.try(function() core.root_view:open_doc(core.open_doc(path)) end)
+    core.try(function()
+      local doc = core.open_doc(path)
+      core.root_view:open_doc(doc)
+    end)
   end, function(partial)
     return common.path_suggest(base .. partial)
   end)

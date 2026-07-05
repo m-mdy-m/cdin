@@ -103,7 +103,6 @@ local function make_submit(items, key_map)
     if t ~= "" then
       local act = key_map[t:sub(1, 1)]
       if act then act(); return end
-      -- fallback: substring match
       local lo = t:lower()
       for _, it in ipairs(items) do
         if it._action and it.text:lower():find(lo, 1, true) then

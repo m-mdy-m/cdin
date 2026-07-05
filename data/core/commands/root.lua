@@ -1,8 +1,8 @@
 local core = require "core"
 local style = require "core.style"
-local DocView = require "core.docview"
-local command = require "core.command"
-local common = require "core.common"
+local DocView = require "core.views.docview"
+local command = require "core.input.command"
+local common = require "core.utils.common"
 
 
 local t = {

@@ -1,9 +1,9 @@
 local core        = require "core"
 local config      = require "core.config"
-local command     = require "core.command"
-local keymap      = require "core.keymap"
-local DocView     = require "core.docview"
-local CommandView = require "core.commandview"
+local command     = require "core.input.command"
+local keymap      = require "core.input.keymap"
+local DocView     = require "core.views.docview"
+local CommandView = require "core.views.commandview"
 local ex          = require "plugins.vim.ex"
 
 require "plugins.vim.fmenu"

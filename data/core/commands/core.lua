@@ -1,8 +1,8 @@
 local core = require "core"
-local common = require "core.common"
-local command = require "core.command"
-local keymap = require "core.keymap"
-local LogView = require "core.logview"
+local common = require "core.utils.common"
+local command = require "core.input.command"
+local keymap = require "core.input.keymap"
+local LogView = require "core.views.logview"
 
 
 local fullscreen = false

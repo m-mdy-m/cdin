@@ -1,6 +1,6 @@
 local core = require "core"
 local style = require "core.style"
-local View = require "core.view"
+local View = require "core.views.view"
 
 
 local LogView = View:extend()

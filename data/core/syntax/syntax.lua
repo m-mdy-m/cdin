@@ -1,4 +1,4 @@
-local common = require "core.common"
+local common = require "core.utils.common"
 
 local syntax = {}
 syntax.items = {}

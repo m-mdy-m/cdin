@@ -1,9 +1,9 @@
 local core = require "core"
-local common = require "core.common"
-local keymap = require "core.keymap"
-local command = require "core.command"
+local common = require "core.utils.common"
+local keymap = require "core.input.keymap"
+local command = require "core.input.command"
 local style = require "core.style"
-local View = require "core.view"
+local View = require "core.views.view"
 
 
 local ResultsView = View:extend()

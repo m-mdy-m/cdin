@@ -1,5 +1,5 @@
 local style = require "core.style"
-local common = require "core.common"
+local common = require "core.utils.common"
 
 style.background = { common.color "#fbfbfb" }
 style.background2 = { common.color "#f2f2f2" }

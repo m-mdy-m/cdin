@@ -1,7 +1,7 @@
 local core = require "core"
 local config = require "core.config"
-local tokenizer = require "core.tokenizer"
-local Object = require "core.object"
+local tokenizer = require "core.syntax.tokenizer"
+local Object = require "core.utils.object"
 
 
 local Highlighter = Object:extend()

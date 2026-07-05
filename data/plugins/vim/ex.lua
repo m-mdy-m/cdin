@@ -1,7 +1,6 @@
--- Ex-command dispatcher for vimode.
 local core    = require "core"
-local command = require "core.command"
-local common  = require "core.common"
+local command = require "core.input.command"
+local common  = require "core.utils.common"
 local Doc     = require "core.doc"
 local fs      = require "plugins.vim.fs"
 local shell   = require "plugins.vim.shell"
@@ -24,24 +23,20 @@ local function tokenize(s)
   local tokens = {}
   local i = 1
   while i <= #s do
-    -- skip whitespace
     while i <= #s and s:sub(i,i):match("%s") do i = i + 1 end
     if i > #s then break end
-
     local ch = s:sub(i,i)
     if ch == '"' or ch == "'" then
-      -- quoted token
       local q = ch
       i = i + 1
       local start = i
       while i <= #s and s:sub(i,i) ~= q do
-        if s:sub(i,i) == "\\" then i = i + 1 end  -- skip escape
+        if s:sub(i,i) == "\\" then i = i + 1 end 
         i = i + 1
       end
       tokens[#tokens+1] = s:sub(start, i-1)
-      i = i + 1  -- skip closing quote
+      i = i + 1 
     else
-      -- unquoted token
       local start = i
       while i <= #s and not s:sub(i,i):match("%s") do i = i + 1 end
       tokens[#tokens+1] = s:sub(start, i-1)
@@ -52,8 +47,8 @@ end
 
 
 local function active_docview()
-  local DocView = require "core.docview"
-  local CommandView = require "core.commandview"
+  local DocView = require "core.views.docview"
+  local CommandView = require "core.views.commandview"
   local v = core.active_view
   if v and v:is(DocView) and not v:is(CommandView) then return v end
   return nil
@@ -80,7 +75,7 @@ local function force_close_active_view()
     local other  = parent[is_a and "b" or "a"]
     if other:get_locked_size() then
       node.views = {}
-      local View = require "core.view"
+      local View = require "core.views.view"
       node:add_view(View())
     else
       parent:consume(other)

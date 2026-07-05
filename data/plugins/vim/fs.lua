@@ -1,5 +1,3 @@
--- Filesystem operations for vimode ex-commands and the treeview
-
 local IS_WIN = PATHSEP == "\\"
 
 local M = {}

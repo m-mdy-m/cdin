@@ -89,7 +89,7 @@ config.tab_type = "hard"
 You can add or override keybindings with `keymap.add`:
 
 ```lua
-local keymap = require "core.keymap"
+local keymap = require "core.input.keymap"
 
 keymap.add {
   ["ctrl+escape"] = "core:quit",
@@ -137,7 +137,7 @@ To write your own theme, create a Lua file in `data/user/colors/` and set colors
 
 ```lua
 local style = require "core.style"
-local common = require "core.common"
+local common = require "core.utils.common"
 
 style.background  = { common.color "#1e1e2e" }
 style.text        = { common.color "#cdd6f4" }
@@ -171,7 +171,7 @@ To create or open this file from inside the editor, run `core:open-project-modul
 
 ```lua
 local config = require "core.config"
-local keymap = require "core.keymap"
+local keymap = require "core.input.keymap"
 
 -- indentation
 config.indent_size = 4

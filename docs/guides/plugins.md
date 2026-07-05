@@ -101,8 +101,8 @@ A minimal plugin looks like this:
 ```lua
 -- data/plugins/my_plugin.lua
 local core    = require "core"
-local command = require "core.command"
-local keymap  = require "core.keymap"
+local command = require "core.input.command"
+local keymap  = require "core.input.keymap"
 
 command.add(nil, {
   ["my-plugin:hello"] = function()
@@ -119,11 +119,11 @@ Drop this file into `data/plugins/` and restart. The command appears in the comm
 
 ### `command.add(predicate, commands)`
 
-`predicate` controls when the command is active. Pass `nil` for commands that are always available. Pass a class (like `"core.docview"`) to make the command active only when a view of that type is focused.
+`predicate` controls when the command is active. Pass `nil` for commands that are always available. Pass a class (like `"core.views.docview"`) to make the command active only when a view of that type is focused.
 
 ```lua
 -- only active when a document is open
-command.add("core.docview", {
+command.add("core.views.docview", {
   ["my-plugin:do-something"] = function()
     local doc = core.active_view.doc
     core.log("Current file: %s", doc:get_name())

@@ -1,4 +1,4 @@
-local common = require "core.common"
+local common = require "core.utils.common"
 local style = {}
 
 style.padding = { x = common.round(14 * SCALE), y = common.round(7 * SCALE) }

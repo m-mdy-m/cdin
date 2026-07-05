@@ -1,6 +1,6 @@
 local core = require "core"
-local command = require "core.command"
-local CommandView = require "core.commandview"
+local command = require "core.input.command"
+local CommandView = require "core.views.commandview"
 
 local function has_commandview()
   return core.active_view:is(CommandView)

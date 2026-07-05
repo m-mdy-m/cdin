@@ -1,13 +1,12 @@
 local core = require "core"
-local common = require "core.common"
+local common = require "core.utils.common"
 local config = require "core.config"
-local command = require "core.command"
-local style = require "core.style"
-local keymap = require "core.keymap"
+local command = require "core.input.command"
+local keymap = require "core.input.keymap"
 local translate = require "core.doc.translate"
 local RootView = require "core.rootview"
-local DocView = require "core.docview"
-
+local DocView = require "core.views.docview"
+local style = require "core.style"
 config.autocomplete_max_suggestions = 6
 
 local autocomplete = {}

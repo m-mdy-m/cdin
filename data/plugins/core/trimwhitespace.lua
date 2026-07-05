@@ -1,5 +1,5 @@
 local core = require "core"
-local command = require "core.command"
+local command = require "core.input.command"
 local Doc = require "core.doc"
 
 
@@ -21,7 +21,7 @@ local function trim_trailing_whitespace(doc)
 end
 
 
-command.add("core.docview", {
+command.add("core.views.docview", {
   ["trim-whitespace:trim-trailing-whitespace"] = function()
     trim_trailing_whitespace(core.active_view.doc)
   end,

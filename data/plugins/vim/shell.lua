@@ -1,10 +1,12 @@
 local core    = require "core"
-local command = require "core.command"
+local command = require "core.input.command"
 local Doc     = require "core.doc"
+local config  = require "core.config"
 
 local IS_WIN = PATHSEP == "\\"
 
-local M = {}
+if config.shell_win         == nil then config.shell_win         = "cmd" end
+if config.shell_capture_win == nil then config.shell_capture_win = "cmd" end
 
 local function shell_quote(s)
   if IS_WIN then
@@ -14,15 +16,40 @@ local function shell_quote(s)
   end
 end
 
-local function with_stderr(cmd)
-  if IS_WIN then
-    return cmd .. " 2>&1"
-  else
+local function make_capture_cmd(cmd)
+  if not IS_WIN then
     return cmd .. " 2>&1"
   end
+  if config.shell_capture_win == "powershell" then
+    local escaped = cmd:gsub('"', '\\"')
+    return 'powershell -NoProfile -NonInteractive -Command "' .. escaped .. ' 2>&1"'
+  else
+    return 'cmd /c "' .. cmd:gsub('"', '""') .. '" 2>&1'
+  end
 end
+
+local function launch_interactive_shell()
+  if not IS_WIN then
+    local term = os.getenv("TERMINAL") or os.getenv("TERM_PROGRAM") or "xterm"
+    system.exec(term)
+    return
+  end
+  local shell = config.shell_win
+  if shell == "powershell" then
+    system.exec("start powershell -NoExit")
+  elseif shell == "pwsh" then
+    system.exec("start pwsh -NoExit")
+  else
+    system.exec("start cmd")
+  end
+end
+
+local M = {}
+M.IS_WIN      = IS_WIN
+M.shell_quote = shell_quote
+
 function M.capture(cmd)
-  local full = with_stderr(cmd)
+  local full = make_capture_cmd(cmd)
   local ok, fp = pcall(io.popen, full, "r")
   if not ok or not fp then
     return nil, ("shell: could not launch: %s"):format(cmd)
@@ -39,7 +66,6 @@ function M.run(cmd)
   system.exec(cmd)
 end
 
--- Run cmd and open its output in a new scratch buffer.
 function M.run_in_buffer(cmd)
   core.log("shell: running %s", cmd)
 
@@ -57,13 +83,12 @@ function M.run_in_buffer(cmd)
   core.root_view:open_doc(doc)
 
   if err then
-    core.warn("shell: %s", err)
+    core.error("shell: %s", err)
   else
     core.log("shell: done")
   end
 end
 
--- Ask user for a shell command and run it in a buffer.
 function M.prompt_and_run()
   core.command_view:enter(":! shell command", function(cmd)
     if cmd == "" then core.error("shell: empty command"); return end
@@ -79,18 +104,20 @@ function M.platform()
   return "linux"
 end
 
-M.IS_WIN      = IS_WIN
-M.shell_quote = shell_quote
-
--- ── commands ─────────────────────────────────────────────────────────────────
-
+-- ── Commands ──────────────────────────────────────────────────────────────────
 command.add(nil, {
-  ["vim-shell:run-custom"]  = function() M.prompt_and_run() end,
-  ["vim-shell:git-status"]  = function() M.run_in_buffer("git status") end,
-  ["vim-shell:git-log"]     = function() M.run_in_buffer("git log --oneline -20") end,
-  ["vim-shell:git-diff"]    = function() M.run_in_buffer("git diff") end,
-  ["vim-shell:make"]        = function() M.run_in_buffer("make") end,
-  ["vim-shell:make-test"]   = function() M.run_in_buffer("make test") end,
+  ["vim-shell:run-custom"]     = function() M.prompt_and_run() end,
+  ["vim-shell:git-status"]     = function() M.run_in_buffer("git status") end,
+  ["vim-shell:git-log"]        = function() M.run_in_buffer("git log --oneline -20") end,
+  ["vim-shell:git-diff"]       = function() M.run_in_buffer("git diff") end,
+  ["vim-shell:make"]           = function() M.run_in_buffer("make") end,
+  ["vim-shell:make-test"]      = function() M.run_in_buffer("make test") end,
+  -- Open a new interactive terminal window (non-blocking)
+  ["vim-shell:open-terminal"]  = function() launch_interactive_shell() end,
+  -- Switch the interactive shell preference at runtime
+  ["vim-shell:use-cmd"]        = function() config.shell_win = "cmd";        core.log("shell: interactive → cmd.exe") end,
+  ["vim-shell:use-powershell"] = function() config.shell_win = "powershell"; core.log("shell: interactive → PowerShell 5") end,
+  ["vim-shell:use-pwsh"]       = function() config.shell_win = "pwsh";       core.log("shell: interactive → PowerShell 7+") end,
 })
 
 return M
