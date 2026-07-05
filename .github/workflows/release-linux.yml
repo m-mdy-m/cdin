@@ -17,9 +17,6 @@ env:
   SDL_VERSION: "3.2.14"
 
 jobs:
-  # ═══════════════════════════════════════════════════════════════════════════
-  # Build only – release publishing is handled by release.yml
-  # ═══════════════════════════════════════════════════════════════════════════
   build-linux:
     name: Build (Linux x86_64)
     runs-on: ubuntu-22.04

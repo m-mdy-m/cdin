@@ -1,0 +1,243 @@
+name: Release – macOS
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SDL_VERSION: "3.2.14"
+
+jobs:
+  build-macos:
+    name: Build (macOS arm64 + x86_64)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies (Homebrew)
+        run: |
+          brew update --quiet
+          brew install \
+            lua \
+            librsvg \
+            pkg-config
+
+      - name: Install SDL3 from source
+        run: |
+          SDL_URL="https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/SDL3-${SDL_VERSION}.tar.gz"
+          curl -fsSL -o SDL3-src.tar.gz "${SDL_URL}"
+          tar xf SDL3-src.tar.gz
+
+          cmake -S "SDL3-${SDL_VERSION}" -B /tmp/sdl3-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF \
+            -DSDL_TEST=OFF  -DSDL_TESTS=OFF
+          sudo cmake --build /tmp/sdl3-build --parallel $(sysctl -n hw.logicalcpu)
+          sudo cmake --install /tmp/sdl3-build
+
+          pkg-config --modversion sdl3 && echo "SDL3 OK"
+
+      - name: Generate PNG icons
+        run: |
+          mkdir -p scripts/icons
+          for sz in 16 22 24 32 48 64 128 256 512 1024; do
+            rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
+              -o "scripts/icons/cdin-${sz}.png"
+            echo "  cdin-${sz}.png: OK"
+          done
+          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' | wc -l | tr -d ' ')
+          echo "Generated ${PNG_COUNT} PNG icons"
+
+      - name: Generate src/icon.inl
+        run: |
+          python3 scripts/gen_icon.py \
+            --svg       scripts/icon.svg \
+            --out       src/icon.inl \
+            --icons-dir scripts/icons
+          echo "icon.inl: $(wc -l < src/icon.inl) lines"
+
+      - name: Build release binary
+        run: |
+          make -j$(sysctl -n hw.logicalcpu) \
+            BUILD=release \
+            PLATFORM=macos \
+            SDL_VERSION=3 \
+            CC=clang
+
+      - name: Verify binary
+        run: |
+          BIN="$(find build/macos-release -maxdepth 1 -name 'cdin' | head -1)"
+          if [[ -z "$BIN" ]]; then
+            echo "::error::Binary not found under build/macos-release/"
+            find build/ -type f 2>/dev/null || echo "(build/ empty)"
+            exit 1
+          fi
+          file "$BIN"
+          otool -L "$BIN"
+          echo "Binary: $BIN  ($(du -sh "$BIN" | cut -f1))"
+          echo "BIN_PATH=$BIN" >> "$GITHUB_ENV"
+
+      - name: Build .icns icon
+        run: |
+          # iconutil expects a specific folder structure: cdin.iconset/
+          ICONSET="scripts/cdin.iconset"
+          mkdir -p "$ICONSET"
+
+          # macOS icon sizes (1x and 2x retina)
+          declare -A SIZE_MAP=(
+            ["icon_16x16.png"]=16
+            ["icon_16x16@2x.png"]=32
+            ["icon_32x32.png"]=32
+            ["icon_32x32@2x.png"]=64
+            ["icon_128x128.png"]=128
+            ["icon_128x128@2x.png"]=256
+            ["icon_256x256.png"]=256
+            ["icon_256x256@2x.png"]=512
+            ["icon_512x512.png"]=512
+            ["icon_512x512@2x.png"]=1024
+          )
+
+          for name in "${!SIZE_MAP[@]}"; do
+            sz="${SIZE_MAP[$name]}"
+            src="scripts/icons/cdin-${sz}.png"
+            if [[ -f "$src" ]]; then
+              cp "$src" "$ICONSET/$name"
+              echo "  $name ← cdin-${sz}.png"
+            else
+              echo "::warning::Missing source: $src"
+            fi
+          done
+
+          iconutil -c icns "$ICONSET" -o scripts/cdin.icns
+          echo "cdin.icns: $(du -sh scripts/cdin.icns | cut -f1)"
+
+      - name: Create .app bundle
+        run: |
+          APP="dist/cdin.app"
+          CONTENTS="$APP/Contents"
+          MACOS_DIR="$CONTENTS/MacOS"
+          RESOURCES="$CONTENTS/Resources"
+
+          mkdir -p "$MACOS_DIR" "$RESOURCES"
+
+          # Binary
+          cp "$BIN_PATH" "$MACOS_DIR/cdin"
+          chmod 755 "$MACOS_DIR/cdin"
+
+          # Data directory
+          if [[ -d data ]]; then
+            cp -r data "$MACOS_DIR/"
+          fi
+
+          # Icon
+          if [[ -f scripts/cdin.icns ]]; then
+            cp scripts/cdin.icns "$RESOURCES/cdin.icns"
+          fi
+
+          # Bundle SDL3.dylib inside the app so it works without Homebrew
+          SDL_LIB="$(pkg-config --variable=libdir sdl3)/libSDL3.dylib"
+          if [[ -f "$SDL_LIB" ]]; then
+            cp "$SDL_LIB" "$MACOS_DIR/libSDL3.dylib"
+            # Patch rpath so the binary finds the bundled dylib
+            install_name_tool \
+              -change "$(otool -L "$BIN_PATH" | grep SDL3 | awk '{print $1}')" \
+              "@executable_path/libSDL3.dylib" \
+              "$MACOS_DIR/cdin"
+            echo "Bundled libSDL3.dylib"
+          else
+            echo "::warning::libSDL3.dylib not found at $SDL_LIB – bundle may need SDL3 installed"
+          fi
+
+          # Info.plist
+          cat > "$CONTENTS/Info.plist" << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>              <string>cdin</string>
+            <key>CFBundleDisplayName</key>       <string>cdin</string>
+            <key>CFBundleIdentifier</key>        <string>io.cdin.editor</string>
+            <key>CFBundleVersion</key>           <string>1</string>
+            <key>CFBundleShortVersionString</key> <string>1.0</string>
+            <key>CFBundleExecutable</key>        <string>cdin</string>
+            <key>CFBundleIconFile</key>          <string>cdin</string>
+            <key>CFBundlePackageType</key>       <string>APPL</string>
+            <key>CFBundleSignature</key>         <string>????</string>
+            <key>NSHighResolutionCapable</key>   <true/>
+            <key>LSMinimumSystemVersion</key>    <string>12.0</string>
+            <key>CFBundleDocumentTypes</key>
+            <array>
+              <dict>
+                <key>CFBundleTypeName</key>      <string>Text File</string>
+                <key>CFBundleTypeRole</key>      <string>Editor</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                  <string>public.plain-text</string>
+                  <string>public.source-code</string>
+                </array>
+              </dict>
+            </array>
+          </dict>
+          </plist>
+          PLIST
+
+          echo "App bundle:"
+          find "$APP" -type f | sort
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VER="${GITHUB_REF#refs/tags/}"
+          else
+            VER="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Package tarball
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          PKG_NAME="cdin-${VER}-macos"
+          PKG_DIR="dist/${PKG_NAME}"
+
+          mkdir -p "${PKG_DIR}"
+
+          # .app bundle
+          cp -r dist/cdin.app "${PKG_DIR}/"
+
+          # install script (reuses the Linux one – works on macOS too)
+          cp scripts/install.sh "${PKG_DIR}/"
+          chmod 755 "${PKG_DIR}/install.sh"
+
+          # Docs
+          for f in README.md CHANGELOG.md LICENSE NOTICE; do
+            [[ -f "$f" ]] && cp "$f" "${PKG_DIR}/"
+          done
+
+          tar -C dist -czf "dist/${PKG_NAME}.tar.gz" "${PKG_NAME}"
+          echo "PKG_PATH=dist/${PKG_NAME}.tar.gz" >> "$GITHUB_ENV"
+          echo "Tarball: $(du -sh dist/${PKG_NAME}.tar.gz | cut -f1)"
+
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdin-macos
+          path: dist/*.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
