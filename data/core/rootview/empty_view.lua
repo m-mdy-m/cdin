@@ -33,6 +33,7 @@ local SHORTCUTS = {
 function EmptyView:new()
   EmptyView.super.new(self)
   self._recent_hover = -1
+  self._recent_rects = {}
 end
 
 local function draw_rect_safe(x, y, w, h, color)
@@ -112,7 +113,9 @@ local function draw_recent(self, px, py, hover_idx)
   draw_rect_safe(px, underline_y, title_w, common.round(SCALE), style.dim)
 
   local y = underline_y + math.floor(style.padding.y * 0.8)
-  _recent_rects = {}
+  local rects = self._recent_rects
+  rects = {}
+  self._recent_rects = rects
 
   local count = math.min(#recent, RECENT_MAX)
   for i = 1, count do
@@ -140,7 +143,7 @@ local function draw_recent(self, px, py, hover_idx)
       renderer.draw_text(font, "  " .. dir, ix + nw, fy, style.dim)
     end
 
-    _recent_rects[i] = { x = px, y = y, w = 9999, h = ITEM_H, path = path }
+    self._recent_rects[i] = { x = px, y = y, w = 9999, h = ITEM_H, path = path }
     y = y + ITEM_H + math.floor(3 * SCALE)
   end
 
@@ -151,7 +154,7 @@ function EmptyView:on_mouse_moved(mx, my, ...)
   EmptyView.super.on_mouse_moved(self, mx, my, ...)
   local prev = self._recent_hover
   self._recent_hover = -1
-  for i, r in ipairs(_recent_rects) do
+  for i, r in ipairs(self._recent_rects) do
     if mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h then
       self._recent_hover = i
       break
@@ -164,7 +167,7 @@ end
 
 function EmptyView:on_mouse_pressed(btn, mx, my, ...)
   if btn == "left" then
-    for i, r in ipairs(_recent_rects) do
+    for i, r in ipairs(self._recent_rects) do
       if mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h then
         local session = get_session()
         if session then session.open(r.path) end

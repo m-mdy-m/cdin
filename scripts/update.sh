@@ -47,9 +47,9 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: cdin update [--check] [--force] [--version=X.Y.Z]"
       echo ""
       echo "Options:"
-      echo "  --check       فقط بررسی کن آپدیت هست یا نه"
-      echo "  --force       بدون پرسیدن آپدیت کن"
-      echo "  --version=X   ورژن خاص رو نصب کن"
+      echo "  --check "
+      echo "  --force "
+      echo "  --version=X "
       exit 0
       ;;
     update) ;; 
