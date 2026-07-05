@@ -154,7 +154,7 @@ This release focuses on improving the startup experience and fixing several issu
 
 - Improved startup reliability following the internal architecture changes introduced in `0.1.0-beta.2`.
 
-## [v0.1.0-beta.4] — 2026-07-05
+## [0.1.0-beta.4] — 2026-07-05
 
 ### Features
 
