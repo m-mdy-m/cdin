@@ -105,8 +105,8 @@ local function handle_key(k)
   if not config.vim_mode_enabled then return false end
 
   if core.active_view == core.command_view then
-    if k == "up"   then return ex_history_prev() end
-    if k == "down" then return ex_history_next() end
+    if k == "up"   and keymap.modkeys.ctrl then return ex_history_prev() end
+    if k == "down" and keymap.modkeys.ctrl then return ex_history_next() end
     return false
   end
 

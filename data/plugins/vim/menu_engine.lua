@@ -1,14 +1,15 @@
 local core = require "core"
 
 local M = {}
+
 local function build_items(entries)
-  local items   = {}
+  local items = {}
 
   local function add_entry(e, is_last_in_block)
-    local branch  = is_last_in_block and "└─ " or "├─ "
-    local icon    = e.icon  or ""
-    local label   = e.label or ""
-    local key     = e.key   or "?"
+    local branch = is_last_in_block and "└─ " or "├─ "
+    local icon   = e.icon  or ""
+    local label  = e.label or ""
+    local key    = e.key   or "?"
 
     local text = branch
                .. "[" .. key .. "] "
@@ -25,12 +26,13 @@ local function build_items(entries)
 
   for i, item in ipairs(entries) do
     if item.header then
-      -- section header (not selectable)
+      -- section header — marked with _is_header so CommandView can skip it
       items[#items + 1] = {
-        text    = "  ── " .. item.header .. " ──",
-        info    = "",
-        _key    = nil,
-        _action = nil,
+        text      = "  ── " .. item.header .. " ──",
+        info      = "",
+        _key      = nil,
+        _action   = nil,
+        _is_header = true,
       }
       local sub = item.entries or {}
       for j, e in ipairs(sub) do
@@ -59,7 +61,7 @@ local function collect_all_entries(entries)
 end
 
 local function build_key_map(entries)
-  local map = {}
+  local map  = {}
   local flat = collect_all_entries(entries)
   for _, e in ipairs(flat) do
     if e.key and e.action then
@@ -79,7 +81,7 @@ local function make_suggest(items, key_map)
         if item._key == first then return { item } end
       end
     end
-    local lo = t:lower()
+    local lo      = t:lower()
     local results = {}
     for _, item in ipairs(items) do
       if item._action then   -- skip section headers
@@ -125,9 +127,9 @@ function M.open(opts)
 
   local label = title
   if context ~= "" then
-    label = label .. "  " .. context .. "  (key or Tab)"
+    label = label .. "  " .. context .. "  (key / ↑↓ / Tab)"
   else
-    label = label .. "  (key or Tab)"
+    label = label .. "  (key / ↑↓ / Tab)"
   end
 
   core.command_view:enter(
