@@ -111,10 +111,11 @@ jobs:
             BUILD=release \
             PLATFORM=macos \
             SDL_VERSION=3 \
-            CC=clang \
-            EXTRA_CFLAGS="-arch arm64" \
-            EXTRA_LDFLAGS="-arch arm64"
+            CC="clang -arch arm64"
           file build/macos-release/cdin
+          # Verify we actually got arm64 before continuing
+          lipo -info build/macos-release/cdin | grep -q arm64 \
+            || { echo "::error::arm64 binary expected but got:"; lipo -info build/macos-release/cdin; exit 1; }
           # Stash outside build/ so make clean can't touch it
           cp build/macos-release/cdin /tmp/cdin-arm64
 
@@ -125,10 +126,11 @@ jobs:
             BUILD=release \
             PLATFORM=macos \
             SDL_VERSION=3 \
-            CC=clang \
-            EXTRA_CFLAGS="-arch x86_64" \
-            EXTRA_LDFLAGS="-arch x86_64"
+            CC="clang -arch x86_64"
           file build/macos-release/cdin
+          # Verify we actually got x86_64 before lipo
+          lipo -info build/macos-release/cdin | grep -q x86_64 \
+            || { echo "::error::x86_64 binary expected but got:"; lipo -info build/macos-release/cdin; exit 1; }
 
       - name: Create universal binary with lipo
         run: |

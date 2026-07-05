@@ -413,17 +413,20 @@ jobs:
       - name: Build release binary (arm64)
         run: |
           make -j$(sysctl -n hw.logicalcpu) \
-            BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang \
-            EXTRA_CFLAGS="-arch arm64" EXTRA_LDFLAGS="-arch arm64"
-          # Stash outside build/ so make clean can't touch it
+            BUILD=release PLATFORM=macos SDL_VERSION=3 \
+            CC="clang -arch arm64"
+          lipo -info build/macos-release/cdin | grep -q arm64 \
+            || { echo "::error::expected arm64"; lipo -info build/macos-release/cdin; exit 1; }
           cp build/macos-release/cdin /tmp/cdin-arm64
 
       - name: Build release binary (x86_64)
         run: |
           make clean
           make -j$(sysctl -n hw.logicalcpu) \
-            BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang \
-            EXTRA_CFLAGS="-arch x86_64" EXTRA_LDFLAGS="-arch x86_64"
+            BUILD=release PLATFORM=macos SDL_VERSION=3 \
+            CC="clang -arch x86_64"
+          lipo -info build/macos-release/cdin | grep -q x86_64 \
+            || { echo "::error::expected x86_64"; lipo -info build/macos-release/cdin; exit 1; }
 
       - name: Create universal binary with lipo
         run: |
