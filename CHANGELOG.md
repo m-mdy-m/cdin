@@ -108,7 +108,7 @@ The full default keymap is documented in [Command Reference](docs/reference/comm
 
 ## [0.1.0-beta.2] — 2026-07-05
 
-This release focuses on a major internal refactor of the data layer and plugin architecture. While the user-facing behavior remains largely unchanged, the internal structure has been significantly reorganized to improve modularity, maintainability, and future extensibility.
+This release focuses on a major internal refactor of the data layer and plugin architecture. While user-facing behavior remains largely unchanged, the internal structure has been significantly reorganized to improve modularity, maintainability, and future extensibility.
 
 No intentional breaking changes to core editor behavior were introduced, but due to the scope of the refactor, some instability or plugin-related regressions may occur.
 
@@ -118,6 +118,15 @@ No intentional breaking changes to core editor behavior were introduced, but due
 * Improved separation of concerns across core systems without altering runtime behavior.
 * Reorganized initialization and data flow to better support future plugin and feature expansion.
 * Reduced coupling between subsystems for easier debugging and testing.
+* Enhanced plugin system foundation with clearer lifecycle handling and session isolation.
+
+### Plugins
+
+* Introduced a **session plugin system** to manage runtime session state in a structured and extensible way.
+### Tooling & Scripts
+
+* Added an automated **update script** to streamline project updates and maintenance workflows.
+
 ### Stability notes
 
 * Core editor behavior remains unchanged from `0.1.0-beta.1`.
