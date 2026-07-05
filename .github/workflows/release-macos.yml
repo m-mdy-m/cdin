@@ -115,7 +115,8 @@ jobs:
             EXTRA_CFLAGS="-arch arm64" \
             EXTRA_LDFLAGS="-arch arm64"
           file build/macos-release/cdin
-          mv build/macos-release/cdin build/macos-release/cdin-arm64
+          # Stash outside build/ so make clean can't touch it
+          cp build/macos-release/cdin /tmp/cdin-arm64
 
       - name: Build release binary (x86_64)
         run: |
@@ -128,16 +129,15 @@ jobs:
             EXTRA_CFLAGS="-arch x86_64" \
             EXTRA_LDFLAGS="-arch x86_64"
           file build/macos-release/cdin
-          mv build/macos-release/cdin build/macos-release/cdin-x86_64
 
       - name: Create universal binary with lipo
         run: |
           lipo -create \
-            build/macos-release/cdin-arm64 \
-            build/macos-release/cdin-x86_64 \
-            -output build/macos-release/cdin
-          lipo -info build/macos-release/cdin
-          echo "BIN=build/macos-release/cdin" >> "$GITHUB_ENV"
+            /tmp/cdin-arm64 \
+            build/macos-release/cdin \
+            -output build/macos-release/cdin-universal
+          lipo -info build/macos-release/cdin-universal
+          echo "BIN=build/macos-release/cdin-universal" >> "$GITHUB_ENV"
 
       - name: Create .app bundle
         run: |
