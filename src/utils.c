@@ -40,7 +40,16 @@ void utils_get_exe_filename(char *buf, int size) {
   buf[len] = '\0';
 #elif __APPLE__
   unsigned sz = (unsigned)size;
-  _NSGetExecutablePath(buf, &sz);
+  if (_NSGetExecutablePath(buf, &sz) != 0) {
+    log_warn("utils: _NSGetExecutablePath buffer too small");
+    buf[0] = '\0';
+    return;
+  }
+  char resolved[2048];
+  if (realpath(buf, resolved)) {
+    strncpy(buf, resolved, size - 1);
+    buf[size - 1] = '\0';
+  }
 #else
   log_warn("utils: unrecognized platform, falling back to relative path './cdin'");
   strncpy(buf, "./cdin", size - 1);

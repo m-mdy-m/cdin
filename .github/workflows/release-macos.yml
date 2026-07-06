@@ -237,7 +237,7 @@ jobs:
             --app-drop-link  480 185 \
             --no-internet-enable \
             "${DMG_PATH}" \
-            "dist/"
+            "dist/cdin.app"
 
           echo "DMG: $(du -sh ${DMG_PATH} | cut -f1)"
           echo "DMG_PATH=${DMG_PATH}" >> "$GITHUB_ENV"
