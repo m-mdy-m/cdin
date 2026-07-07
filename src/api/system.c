@@ -460,12 +460,16 @@ static int f_popen(lua_State *L) {
   }
   SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
 
+  SECURITY_ATTRIBUTES sa_nul = { sizeof(sa_nul), NULL, TRUE };
+  HANDLE hNul = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_WRITE,
+                            &sa_nul, OPEN_EXISTING, 0, NULL);
+
   STARTUPINFOW si = { 0 };
   si.cb          = sizeof(si);
   si.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
   si.wShowWindow = SW_HIDE;
   si.hStdOutput  = hWrite;
-  si.hStdError   = hWrite;  
+  si.hStdError   = (hNul != INVALID_HANDLE_VALUE) ? hNul : GetStdHandle(STD_ERROR_HANDLE);
   si.hStdInput   = GetStdHandle(STD_INPUT_HANDLE);
 
   PROCESS_INFORMATION pi = { 0 };
@@ -475,7 +479,8 @@ static int f_popen(lua_State *L) {
     CREATE_NO_WINDOW,             
     NULL, NULL, &si, &pi);
   free(wcmd);
-  CloseHandle(hWrite);           
+  CloseHandle(hWrite);
+  if (hNul != INVALID_HANDLE_VALUE) CloseHandle(hNul);
 
   if (!ok) {
     CloseHandle(hRead);
