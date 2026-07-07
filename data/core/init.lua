@@ -30,7 +30,8 @@ end
 
 require("core.core.lifecycle").install(core)
 
-local state = require "core.core.state"
+local state    = require "core.core.state"
+local eventbus = require "core.core.eventbus"
 
 function core.init()
   local command     = require "core.input.command"
@@ -51,6 +52,7 @@ function core.init()
   end
   system.chdir(project_dir)
   state.setup_state(core)
+  eventbus.install(core)
   function core.set_active_view(view)
     assert(view, "Tried to set active view to nil")
     if view ~= core.active_view then
