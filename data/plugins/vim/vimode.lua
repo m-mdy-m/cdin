@@ -21,8 +21,9 @@ local MODE_VISUAL = "visual"
 
 local PENDING_TIMEOUT = 0.6   
 
-local pending = nil   
-local history_pos = nil   
+local pending     = nil
+local count_buf   = ""
+local history_pos = nil
 
 local function active_docview()
   local v = core.active_view
@@ -139,7 +140,8 @@ local function handle_key(k)
       else
         command.perform("doc:select-none")
       end
-      pending = nil
+      pending  = nil
+      count_buf = ""
       return true  
     end
     return false
@@ -172,6 +174,67 @@ local function handle_key(k)
     end
   end
 
+  -- digit prefix for Ngt
+  if mode == MODE_NORMAL and not shift and k:match("^%d$") then
+    if k ~= "0" or count_buf ~= "" then
+      count_buf = count_buf .. k
+      return true
+    end
+  end
+
+  -- Ctrl+w prefix handler
+  if k == "ctrl+w" then
+    pending   = { key = "ctrl_w", t = system.get_time() }
+    count_buf = ""
+    return true
+  end
+  if pending and pending.key == "ctrl_w" then
+    pending   = nil
+    count_buf = ""
+    local wmap = {
+      h="window:focus-left", j="window:focus-down",
+      k="window:focus-up",   l="window:focus-right",
+      w="window:focus-next", p="window:focus-prev-window",
+      t="window:focus-first",b="window:focus-last",
+      s="window:split",      v="window:vsplit",
+      c="window:close",      o="window:only",
+      n="window:new",
+    }
+    local wmap_shift = {
+      W="window:focus-prev",
+    }
+    local wmap_sym = {
+      ["+"]=  "window:increase-height",
+      ["-"]=  "window:decrease-height",
+      [">"]=  "window:increase-width",
+      ["<"]=  "window:decrease-width",
+      ["="]=  "window:equalize",
+    }
+    local wcmd = wmap[k] or wmap_shift[k] or wmap_sym[k]
+    if wcmd then command.perform(wcmd) end
+    return true
+  end
+
+  -- gt / gT / Ngt  (resolved when second key after "g" is t or T)
+  if mode == MODE_NORMAL and pending and pending.key == "g" then
+    if k == "t" and not shift then
+      pending = nil
+      local ok, tabM = pcall(require, "plugins.tab.manager")
+      if ok then
+        local n = tonumber(count_buf)
+        count_buf = ""
+        if n then tabM.go_to(n) else tabM.next() end
+      end
+      return true
+    elseif k == "t" and shift then
+      pending   = nil
+      count_buf = ""
+      local ok, tabM = pcall(require, "plugins.tab.manager")
+      if ok then tabM.prev() end
+      return true
+    end
+  end
+
   if mode == MODE_NORMAL and not shift
      and (k == "g" or k == "d" or k == "y" or k == "c") then
     if pending and pending.key == k
@@ -195,8 +258,9 @@ local function handle_key(k)
     return true
   end
 
-  if pending and pending.key ~= k then
+  if pending and pending.key ~= k and pending.key ~= "ctrl_w" then
     pending = nil
+    count_buf = ""
   end
 
   if shift then

@@ -323,6 +323,91 @@ function M.submit(raw)
   elseif cmd == "tree" then
     command.perform("treeview:focus-and-refresh")
 
+  -- ── Tab commands ────────────────────────────────────────
+  elseif cmd == "tabnew" or cmd == "tabe" or cmd == "tabedit" then
+    local ok, tabM = pcall(require, "plugins.tab.manager")
+    if ok then
+      tabM.create()
+      if arg1 then open_file(arg1, false) end
+    end
+
+  elseif cmd == "tabclose" or cmd == "tabc" then
+    local ok, tabM = pcall(require, "plugins.tab.manager")
+    if ok then tabM.close(tabM.active_id, false) end
+
+  elseif cmd == "tabonly" or cmd == "tabo" then
+    local ok, tabM = pcall(require, "plugins.tab.manager")
+    if ok then tabM.close_others() end
+
+  elseif cmd == "tabnext" or cmd == "tabn" then
+    local ok, tabM = pcall(require, "plugins.tab.manager")
+    if ok then
+      if arg1 then tabM.go_to(tonumber(arg1) or 1)
+      else tabM.next() end
+    end
+
+  elseif cmd == "tabprevious" or cmd == "tabp" or cmd == "tabNext" then
+    local ok, tabM = pcall(require, "plugins.tab.manager")
+    if ok then tabM.prev() end
+
+  elseif cmd == "tabfirst" or cmd == "tabr" or cmd == "tabrew" then
+    local ok, tabM = pcall(require, "plugins.tab.manager")
+    if ok then tabM.first() end
+
+  elseif cmd == "tablast" then
+    local ok, tabM = pcall(require, "plugins.tab.manager")
+    if ok then tabM.last() end
+
+  elseif cmd == "tabmove" or cmd == "tabm" then
+    local ok, tabM = pcall(require, "plugins.tab.manager")
+    if ok and arg1 then
+      local n = tonumber(arg1)
+      if n then tabM.move(tabM.active_id, n + 1) end
+    end
+
+  -- ── Window commands ───────────────────────────────────────────────────────
+  elseif cmd == "split" or cmd == "sp" then
+    command.perform("window:split")
+    if arg1 then open_file(arg1, false) end
+
+  elseif cmd == "vsplit" or cmd == "vs" then
+    command.perform("window:vsplit")
+    if arg1 then open_file(arg1, false) end
+
+  elseif cmd == "vnew" then
+    command.perform("window:vnew")
+    if arg1 then open_file(arg1, true) end
+
+  elseif cmd == "close" or cmd == "clo" then
+    command.perform("window:close")
+
+  elseif cmd == "only" or cmd == "on" then
+    command.perform("window:only")
+
+  -- :wincmd {char}
+  elseif cmd == "wincmd" or cmd == "winc" then
+    local char = arg1 or ""
+    local wmap = {
+      h = "window:focus-left",  j = "window:focus-down",
+      k = "window:focus-up",    l = "window:focus-right",
+      w = "window:focus-next",  W = "window:focus-prev",
+      p = "window:focus-prev-window",
+      t = "window:focus-first", b = "window:focus-last",
+      s = "window:split",       v = "window:vsplit",
+      c = "window:close",       o = "window:only",
+      n = "window:new",         N = "window:vnew",
+      ["+"] = "window:increase-height",
+      ["-"] = "window:decrease-height",
+      [">"] = "window:increase-width",
+      ["<"] = "window:decrease-width",
+      ["="] = "window:equalize",
+      ["|"] = "window:maximize-width",
+      ["_"] = "window:maximize-height",
+    }
+    local wcmd = wmap[char]
+    if wcmd then command.perform(wcmd)
+    else core.error("ex: unknown :wincmd %q", char) end
+
   elseif cmd == "help" or cmd == "h" then
     show_help()
 
@@ -360,6 +445,9 @@ function M.suggest(text)
       "e","edit","new",
       "mkdir","rm","delete","rename","copy","move",
       "ls","pwd","cd","tree","help",
+      "tabnew","tabe","tabclose","tabonly","tabnext","tabprevious",
+      "tabfirst","tablast","tabmove",
+      "split","vsplit","vnew","close","only","wincmd",
     }
     local results = {}
     for _, c in ipairs(ALL_CMDS) do
