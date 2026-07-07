@@ -46,6 +46,7 @@ function TreeView:get_cached(item)
   end
   return Cache.get(item)
 end
+
 function TreeView:each_item()
   return coroutine.wrap(function()
     local ox, oy = self:get_content_offset()
@@ -83,6 +84,7 @@ function TreeView:each_item()
     end
   end)
 end
+
 function TreeView:on_mouse_moved(px, py, ...)
   TreeView.super.on_mouse_moved(self, px, py, ...)
   self.hovered_item = nil
@@ -173,6 +175,71 @@ function TreeView:set_locked_size(axis, value)
   if axis == "x" then config.treeview_size = value end
 end
 
+local _ro_cache = {}
+
+local function is_file_readonly(abs_path)
+  if not abs_path or abs_path == "" then return false end
+  local cached = _ro_cache[abs_path]
+  if cached ~= nil then return cached end
+  local fp = io.open(abs_path, "r+b")
+  if fp then
+    fp:close()
+    _ro_cache[abs_path] = false
+  else
+    _ro_cache[abs_path] = true
+  end
+  return _ro_cache[abs_path]
+end
+
+local function git_badge(item, is_ro)
+  if is_ro then return "[RO]", style.dim end
+
+  if not Git.root then return nil end
+  local status = Git.get_status(item)
+  if not status then return nil end
+
+  local label
+  if     status == "M" then label = "M"
+  elseif status == "A" then label = "A"
+  elseif status == "D" then label = "D"
+  elseif status == "R" then label = "R"
+  elseif status == "C" then label = "C"
+  elseif status == "U" then label = "U"
+  elseif status == "?" then label = "??"
+  else                       label = status
+  end
+
+  return "[" .. label .. "]", Git.get_color(status)
+end
+
+local ELLIPSIS = "...."
+
+local function truncate_name(font, name, max_w, badge_text)
+  local full_text = badge_text and (name .. badge_text) or name
+
+  if font:get_width(full_text) <= max_w then
+    return name
+  end
+
+  local stem, ext = name:match("^(.+)(%.[^%.]+)$")
+  if not stem then stem = name; ext = "" end
+
+  local suffix = ELLIPSIS .. (badge_text or "") .. ext
+  local suffix_w = font:get_width(suffix)
+  local avail_w  = max_w - suffix_w
+
+  if avail_w <= 0 then
+    return ELLIPSIS .. ext
+  end
+
+  local trimmed = stem
+  while #trimmed > 1 and font:get_width(trimmed) > avail_w do
+    trimmed = trimmed:sub(1, -2)
+  end
+
+  return trimmed .. ELLIPSIS .. ext
+end
+
 function TreeView:draw()
   self:draw_background(style.background2)
 
@@ -218,15 +285,21 @@ function TreeView:draw()
     end
 
     row_x = row_x + spacing
-    common.draw_text(style.font, color, item.name, nil, row_x, y, 0, h)
 
-    if Git.root then
-      local status = Git.get_status(item)
-      if status then
-        local icon   = Git.ICON[status] or status
-        local gcolor = Git.get_color(status)
-        common.draw_text(style.font, gcolor, icon, "right", x, y, w-style.padding.x, h)
-      end
+    local is_ro = item.type == "file" and is_file_readonly(item.abs_filename)
+    local badge, bcolor = git_badge(item, is_ro)
+    local name_area_w = w - (row_x - x) - style.padding.x
+
+    local display_name
+    if badge then
+      display_name = truncate_name(style.font, item.name, name_area_w, badge)
+    else
+      display_name = truncate_name(style.font, item.name, name_area_w, nil)
+    end
+    local name_w = common.draw_text(style.font, color, display_name, nil, row_x, y, 0, h) - row_x
+    local after_name_x = row_x + name_w
+    if badge then
+      common.draw_text(style.font, bcolor, badge, nil, after_name_x, y, 0, h)
     end
   end
 end
@@ -248,6 +321,7 @@ end
 
 local function refresh_tree()
   Cache.flush()
+  _ro_cache = {}
   view._last_project_files = nil
   core.redraw = true
 end
@@ -278,7 +352,6 @@ command.add(nil, {
 
   ["treeview:refresh"] = function()
     refresh_tree()
-    -- Also reset lazy-scan state so the project thread re-scans from scratch.
     local project = require "core.project"
     project.request_rescan(core)
     if config.treeview_git_enabled then core.try(Git.refresh) end
