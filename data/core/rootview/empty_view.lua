@@ -193,13 +193,10 @@ local function draw_recent_list(self, title, items, icon, px, py, col_w, hover_i
     local is_dir_icon = (icon == ICON_DIR)
     if is_dir_icon then
       name      = (path:match("([^\\/]+)[\\/]?$") or path) .. "/"
-      dir_label = path:match("^(.+)[\\/][^\\/]+$") or ""
     else
       name      = path:match("[^\\/]+$") or path
-      local raw_dir = path:match("^(.+)[\\/][^\\/]+$") or ""
-      local last    = raw_dir:match("([^\\/]+)$") or ""
-      dir_label     = last ~= "" and (last .. "/") or ""
     end
+    dir_label = ""
 
     local is_hover = (i == hover_idx) or (i == kb_idx)
 
