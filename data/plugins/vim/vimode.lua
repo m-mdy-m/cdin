@@ -122,10 +122,6 @@ local function handle_key(k)
     open_ex_commandline()
     return true
   end
-  if k == "m" then
-    command.perform("vim-fmenu:open")
-    return true
-  end
   local view = active_docview()
 
   if k == "escape" then
