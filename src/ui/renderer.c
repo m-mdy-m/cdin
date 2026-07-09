@@ -10,7 +10,7 @@
 #include "../../lib/stb/stb_truetype.h"
 
 #include "renderer.h"
-#include "../helpers/logger.h"
+#include "../core/logger.h"
 
 #define MAX_GLYPHSET 256
 

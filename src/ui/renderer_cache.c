@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "rendrer_cache.h"
-#include "../helpers/logger.h"
+#include "renderer_cache.h"
+#include "../core/logger.h"
 
 #define CELLS_X          80
 #define CELLS_Y          50
