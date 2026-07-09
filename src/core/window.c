@@ -1,5 +1,5 @@
 #include "window.h"
-#include "../helpers/logger.h"
+#include "logger.h"
 
 #include <string.h>
 
