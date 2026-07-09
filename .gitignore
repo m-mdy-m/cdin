@@ -11,3 +11,5 @@ cdin_code_backup/*
 # Auto-generated icon C array 
 ./src/icon.inl
 *icon.inl*
+results
+fixtures
