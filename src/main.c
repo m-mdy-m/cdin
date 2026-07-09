@@ -9,11 +9,11 @@
 
 #include "api/api.h"
 #include "core/window.h"
-#include "core/lua_connector.h"
-#include "helpers/logger.h"
-#include "initial.h"
-#include "rendrer/renderer.h"
-#include "utils.h"
+#include "lua/api.h"
+#include "core/logger.h"
+#include "core/boot.h"
+#include "ui/renderer.h"
+#include "core/utils.h"
 
 SDL_Window *window;
 
