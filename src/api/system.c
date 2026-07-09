@@ -8,9 +8,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "api.h"
-#include "../rendrer/rendrer_cache.h"
+#include "../ui/renderer_cache.h"
 #include "../core/window.h"
-#include "../helpers/logger.h"
+#include "../core/logger.h"
 
 #ifndef _WIN32
   #include <unistd.h>

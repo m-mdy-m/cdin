@@ -1,7 +1,7 @@
 #include "api.h"
-#include "../rendrer/renderer.h"
-#include "../rendrer/rendrer_cache.h"
-#include "../helpers/logger.h"
+#include "../ui/renderer.h"
+#include "../ui/renderer_cache.h"
+#include "../core/logger.h"
 
 
 static int f_load(lua_State *L) {

@@ -1,6 +1,8 @@
 #include "api.h"
 
-#include "../helpers/logger.h"
+#include "../core/logger.h"
+#include "../fs/fs.h"
+#include "../search/search.h"
 
 int luaopen_system(lua_State *L);
 int luaopen_renderer(lua_State *L);
@@ -8,6 +10,8 @@ int luaopen_renderer(lua_State *L);
 static const luaL_Reg libs[] = {
   { "system",   luaopen_system   },
   { "renderer", luaopen_renderer },
+  { "fs",       luaopen_fs       },
+  { "search",   luaopen_search   },
   { NULL, NULL }
 };
 
