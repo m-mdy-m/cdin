@@ -125,8 +125,9 @@ jobs:
           fi
           [[ -f scripts/icon.svg ]] && cp scripts/icon.svg "${PKG_DIR}/scripts/"
 
-          cp scripts/install.sh "${PKG_DIR}/"
-          chmod 755 "${PKG_DIR}/install.sh"
+          # Bundle the Python installer (replaces the old install.sh)
+          cp scripts/cdin.py "${PKG_DIR}/"
+          cp -r scripts/_cdin "${PKG_DIR}/"
 
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
             [[ -f "$f" ]] && cp "$f" "${PKG_DIR}/"

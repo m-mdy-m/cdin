@@ -200,9 +200,11 @@ jobs:
 
           [[ -d data ]] && cp -r data "${PKG_DIR}/"
 
-          cp scripts/install.ps1 "${PKG_DIR}/"
-
           [[ -f scripts/cdin.ico ]] && cp scripts/cdin.ico "${PKG_DIR}/" && echo "Bundled cdin.ico"
+
+          # Bundle the Python installer (replaces the old install.ps1)
+          cp scripts/cdin.py "${PKG_DIR}/"
+          cp -r scripts/_cdin "${PKG_DIR}/"
 
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
             [[ -f "$f" ]] && cp "$f" "${PKG_DIR}/"

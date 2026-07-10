@@ -74,8 +74,6 @@ jobs:
           ICONSET="scripts/cdin.iconset"
           mkdir -p "$ICONSET"
 
-          # Parallel arrays — avoids associative array key parsing issues with
-          # dots and @ characters on macOS bash (declare -A fails on those keys)
           ICON_NAMES=(
             "icon_16x16.png"
             "icon_16x16@2x.png"
@@ -124,17 +122,13 @@ jobs:
 
           mkdir -p "$MACOS_DIR" "$RESOURCES"
 
-          # Binary
           cp "$BIN" "$MACOS_DIR/cdin"
           chmod 755 "$MACOS_DIR/cdin"
 
-          # Data directory (Lua plugins, themes, fonts…)
           [[ -d data ]] && cp -r data "$MACOS_DIR/"
 
-          # Icon
           [[ -f scripts/cdin.icns ]] && cp scripts/cdin.icns "$RESOURCES/cdin.icns"
 
-          # Bundle libSDL3.dylib so the .app works WITHOUT Homebrew installed
           SDL_LIB="$(pkg-config --variable=libdir sdl3)/libSDL3.dylib"
           if [[ -f "$SDL_LIB" ]]; then
             cp "$SDL_LIB" "$MACOS_DIR/libSDL3.dylib"
@@ -143,7 +137,6 @@ jobs:
               -change "$OLD_PATH" \
               "@executable_path/libSDL3.dylib" \
               "$MACOS_DIR/cdin"
-            # Also fix the dylib's own id so macOS is happy
             install_name_tool \
               -id "@executable_path/libSDL3.dylib" \
               "$MACOS_DIR/libSDL3.dylib"
@@ -152,14 +145,12 @@ jobs:
             echo "::warning::libSDL3.dylib not found – bundle may require SDL3 at runtime"
           fi
 
-          # Determine version for Info.plist
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             PLIST_VERSION="${GITHUB_REF#refs/tags/v}"
           else
             PLIST_VERSION="0.0.0-dev"
           fi
 
-          # Info.plist
           cat > "$CONTENTS/Info.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -214,18 +205,22 @@ jobs:
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "Version: $VER"
+
       - name: Create DMG installer
         run: |
           VER="${{ steps.version.outputs.version }}"
           DMG_NAME="cdin-${VER}-macos"
           DMG_PATH="dist/${DMG_NAME}.dmg"
 
+          # Also bundle the Python installer inside a separate folder in the DMG
+          # so users who prefer a CLI install can use it from a terminal.
+          INSTALLER_DIR="dist/cdin-installer"
+          mkdir -p "$INSTALLER_DIR"
+          cp scripts/cdin.py "$INSTALLER_DIR/"
+          cp -r scripts/_cdin "$INSTALLER_DIR/"
+
           mkdir -p dist
 
-          # create-dmg handles:
-          #   - mounting & formatting the image
-          #   - placing the .app and the /Applications symlink
-          #   - setting window size, icon positions, background
           create-dmg \
             --volname "cdin ${VER}" \
             --volicon "scripts/cdin.icns" \
@@ -237,7 +232,7 @@ jobs:
             --app-drop-link  480 185 \
             --no-internet-enable \
             "${DMG_PATH}" \
-            "dist/cdin.app"
+            "dist/"
 
           echo "DMG: $(du -sh ${DMG_PATH} | cut -f1)"
           echo "DMG_PATH=${DMG_PATH}" >> "$GITHUB_ENV"

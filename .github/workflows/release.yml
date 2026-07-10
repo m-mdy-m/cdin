@@ -107,13 +107,15 @@ jobs:
           chmod 755        "${DIR}/bin/cdin"
           [[ -d data ]] && cp -r data "${DIR}/bin/"
 
-          # Bundle pre-rendered PNGs so install.sh needs no external converter
+          # Bundle pre-rendered PNGs so the installer can set up icons
           mkdir -p "${DIR}/scripts"
           cp -r scripts/icons "${DIR}/scripts/"
           [[ -f scripts/icon.svg ]] && cp scripts/icon.svg "${DIR}/scripts/"
 
-          cp scripts/install.sh "${DIR}/"
-          chmod 755 "${DIR}/install.sh"
+          # Bundle the Python installer (replaces the old install.sh)
+          cp scripts/cdin.py "${DIR}/"
+          cp -r scripts/_cdin "${DIR}/"
+
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
             [[ -f "$f" ]] && cp "$f" "${DIR}/"
           done
@@ -160,7 +162,7 @@ jobs:
             mingw-w64-x86_64-lua
             mingw-w64-x86_64-librsvg
             mingw-w64-x86_64-python-pillow
-            mingw-w64-x86_64-python-cairo  
+            mingw-w64-x86_64-python-cairo
             mingw-w64-x86_64-cairo
             make
             git
@@ -195,14 +197,13 @@ jobs:
           PC
           pkg-config --modversion sdl3
 
-      # Generate icon.inl + PNGs using MSYS2 Python (has Cairo via mingw64)
       - name: Generate icon assets
         run: |
           mkdir -p scripts/icons
           for sz in 16 22 24 32 48 64 128 256 512 1024; do
             rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg -o "scripts/icons/cdin-${sz}.png"
           done
-       
+
           python3 scripts/gen_icon.py \
             --svg       scripts/icon.svg \
             --out       src/icon.inl \
@@ -215,7 +216,6 @@ jobs:
           fi
           echo "Generated ${PNG_COUNT} PNG icons"
 
-      # Build .ico from the PNGs we just generated (pure Python, no Cairo needed here)
       - name: Build cdin.ico
         run: |
           python3 - << 'PYEOF'
@@ -298,10 +298,12 @@ jobs:
 
           [[ -d data ]] && cp -r data "${DIR}/"
 
-          # Bundle pre-built .ico (install.ps1 uses it for shortcuts)
           [[ -f scripts/cdin.ico ]] && cp scripts/cdin.ico "${DIR}/" && echo "Bundled cdin.ico"
 
-          cp scripts/install.ps1 "${DIR}/"
+          # Bundle the Python installer (replaces the old install.ps1)
+          cp scripts/cdin.py "${DIR}/"
+          cp -r scripts/_cdin "${DIR}/"
+
           for f in README.md CHANGELOG.md LICENSE NOTICE; do
             [[ -f "$f" ]] && cp "$f" "${DIR}/"
           done
@@ -321,9 +323,6 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Job 1c – macOS DMG (arm64, Rosetta 2 compatible)
-  #
-  #   Produces a drag-to-Applications DMG — the user double-clicks it,
-  #   drags cdin.app to the Applications shortcut, done. No terminal needed.
   # ═══════════════════════════════════════════════════════════════════════════
   build-macos:
     name: Build – macOS DMG (arm64)
@@ -379,8 +378,6 @@ jobs:
           ICONSET="scripts/cdin.iconset"
           mkdir -p "$ICONSET"
 
-          # Parallel arrays — avoids associative array key parsing issues with
-          # dots and @ characters on macOS bash (declare -A fails on those keys)
           ICON_NAMES=(
             "icon_16x16.png"
             "icon_16x16@2x.png"
@@ -423,7 +420,7 @@ jobs:
           VER="${GITHUB_REF#refs/tags/}"
           [[ "$VER" == refs/* ]] && VER="dev-$(git rev-parse --short HEAD)"
           PLIST_VER="${VER#v}"
-          echo "version=${VER}"          >> "$GITHUB_OUTPUT"
+          echo "version=${VER}"             >> "$GITHUB_OUTPUT"
           echo "plist_version=${PLIST_VER}" >> "$GITHUB_OUTPUT"
 
       - name: Create .app bundle
@@ -433,15 +430,12 @@ jobs:
           RESOURCES="$APP/Contents/Resources"
           mkdir -p "$MACOS_DIR" "$RESOURCES"
 
-          # Binary + data
           cp "$BIN" "$MACOS_DIR/cdin"
           chmod 755 "$MACOS_DIR/cdin"
           [[ -d data ]] && cp -r data "$MACOS_DIR/"
 
-          # Icon
           [[ -f scripts/cdin.icns ]] && cp scripts/cdin.icns "$RESOURCES/cdin.icns"
 
-          # Bundle libSDL3.dylib — no Homebrew required at runtime
           SDL_LIB="$(pkg-config --variable=libdir sdl3)/libSDL3.dylib"
           if [[ -f "$SDL_LIB" ]]; then
             cp "$SDL_LIB" "$MACOS_DIR/libSDL3.dylib"
@@ -508,8 +502,6 @@ jobs:
           DMG_NAME="cdin-${VER}-macos"
           DMG_PATH="dist/${DMG_NAME}.dmg"
 
-          # create-dmg places cdin.app on the left, an /Applications symlink
-          # on the right — exactly the drag-and-drop experience users expect.
           create-dmg \
             --volname        "cdin ${VER}" \
             --volicon        "scripts/cdin.icns" \
@@ -544,7 +536,7 @@ jobs:
       - build-linux
       - build-windows
       - build-macos
-  
+
     if: always() && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
@@ -573,7 +565,6 @@ jobs:
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-
 
       - name: Determine contributors
         id: contributors
@@ -616,50 +607,79 @@ jobs:
               "${{ github.ref_name }}" "${{ github.repository }}" > release_body.md
           fi
 
-          cat >> release_body.md << NOTES
+          cat >> release_body.md << 'NOTES'
 
           ---
 
           ## Installation
 
+          > **Requires Python 3.8+** — comes pre-installed on all supported platforms.
+
           ### Linux (x86_64)
 
-          \`\`\`bash
-          tar xzf cdin-v${VERSION}-linux-x86_64.tar.gz
-          cd cdin-v${VERSION}-linux-x86_64
-          bash install.sh                         # → ~/.local  (no sudo)
-          # or system-wide:
-          sudo bash install.sh --prefix=/usr/local
-          \`\`\`
+          ```bash
+          tar xzf cdin-vVERSION-linux-x86_64.tar.gz
+          cd cdin-vVERSION-linux-x86_64
+
+          # Interactive (recommended for first-time install):
+          python3 cdin.py
+
+          # Or non-interactive:
+          python3 cdin.py install                        # → ~/.local  (no sudo)
+          python3 cdin.py install --prefix /usr/local    # system-wide (needs sudo)
+          python3 cdin.py install --shortcut             # also create .desktop entry
+          ```
 
           > **SDL3 runtime** — needed at runtime if not already installed:
-          > - Ubuntu 24.04+: \`sudo apt install libsdl3-0\`
+          > - Ubuntu 24.04+: `sudo apt install libsdl3-0`
           > - Other distros: see [SDL3 releases](https://github.com/libsdl-org/SDL/releases)
 
           ### Windows (x86_64)
 
-          1. Download \`cdin-v${VERSION}-windows-x86_64.zip\` and extract it.
-          2. Open **PowerShell** inside the extracted folder and run:
+          1. Download `cdin-vVERSION-windows-x86_64.zip` and extract it.
+          2. Open **PowerShell** or **Command Prompt** inside the extracted folder and run:
 
-          \`\`\`powershell
-          .\install.ps1
-          # Optional:
-          .\install.ps1 -RegisterFileTypes   # set as default for text/code files
-          .\install.ps1 -Prefix C:\Tools\cdin # custom location
-          \`\`\`
+          ```powershell
+          # Interactive (recommended):
+          python cdin.py
 
-          > The installer copies \`cdin.exe\`, \`SDL3.dll\`, and the Lua DLL into
-          > \`%LOCALAPPDATA%\cdin\bin\` and adds that folder to your **user PATH**.
+          # Or non-interactive:
+          python cdin.py install
+          python cdin.py install --shortcut              # also create desktop shortcut
+          python cdin.py install --register-filetypes    # set as default for text/code files
+          python cdin.py install --prefix C:\Tools\cdin  # custom install location
+          ```
+
+          > `cdin.exe`, `SDL3.dll`, and the Lua DLL are added to `%LOCALAPPDATA%\cdin\bin`
+          > and that folder is added to your **user PATH** automatically.
 
           ### macOS (arm64)
 
-          1. Download **\`cdin-v${VERSION}-macos.dmg\`** and double-click it.
+          1. Download **`cdin-vVERSION-macos.dmg`** and double-click it.
           2. Drag **cdin** into the **Applications** folder shortcut.
           3. Eject the disk image and open cdin from Launchpad or Spotlight.
 
           > SDL3 is **bundled inside** the .app — no Homebrew or extra installs needed.
 
           ---
+
+          ## Updating & Uninstalling
+
+          ```bash
+          python3 cdin.py update              # update to latest release
+          python3 cdin.py update --check      # just check, don't install
+          python3 cdin.py update --version 0.2.0
+
+          python3 cdin.py uninstall           # remove installed files
+          ```
+
+          ---
+          NOTES
+
+          # Substitute the real version into the heredoc above
+          sed -i "s/VERSION/${VERSION}/g" release_body.md
+
+          cat >> release_body.md << NOTES
 
           ${{ steps.contributors.outputs.header }}
 
@@ -675,6 +695,5 @@ jobs:
           files:      release/*
           draft:      false
           prerelease: false
-          discussion_category_name: ${{ steps.discussion.outputs.category }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
