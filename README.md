@@ -58,6 +58,26 @@ make
 
 See [Building from Source](docs/guides/building.md) for dependency details and platform-specific instructions.
 
+## Scripts
+
+All build, install, and asset tasks go through one entry point:
+
+```sh
+python3 scripts/cdin.py [command]
+```
+
+| Command | Does |
+|---|---|
+| `build` | Compile from source |
+| `install` | Install binary + data + desktop integration |
+| `build-install` | Build then install in one step |
+| `update` | Download the latest release from GitHub |
+| `uninstall` | Remove an installation |
+| `gen-icon` | Regenerate `.ico` / `.icns` / `.png` from `scripts/icon.svg` |
+| `gen-logo` | Regenerate `data/core/rootview/logo.lua` from `scripts/icon.svg` |
+
+Run with no arguments for an interactive wizard. See [`scripts/README.md`](scripts/README.md) for full documentation.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
