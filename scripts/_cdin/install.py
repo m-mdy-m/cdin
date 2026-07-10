@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from ._constants import ROOT_DIR, SCRIPT_DIR, ICON_SVG, ICON_ICO, GEN_ICON_PY
+from ._constants import ROOT_DIR, SCRIPT_DIR, ICON_SVG, ICON_ICO
 from .platform import PLATFORM, EXE_NAME, default_prefix
 from .ui import banner, info, ok, warn, die
 from .utils import find_binary_candidate, find_icons_src, install_binary, install_data
@@ -240,12 +240,11 @@ def _install_icon_windows(prefix: Path) -> str:
         ok(f"Icon             → {ico_dest}  (pre-built)")
         return str(ico_dest)
 
-    if ICON_SVG.is_file() and GEN_ICON_PY.is_file():
+    if ICON_SVG.is_file():
         try:
-            subprocess.run(
-                [sys.executable, str(GEN_ICON_PY), "--svg", str(ICON_SVG), "--out-ico", str(ico_dest)],
-                capture_output=True, text=True,
-            )
+            from .gen_icon import rasterize_png, open_image, build_ico, ICO_SIZES
+            images = {s: open_image(rasterize_png(ICON_SVG, s)) for s in ICO_SIZES}
+            build_ico(images, ico_dest)
             if ico_dest.is_file():
                 ok(f"Icon             → {ico_dest}  (generated)")
                 return str(ico_dest)

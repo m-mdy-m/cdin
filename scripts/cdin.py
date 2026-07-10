@@ -6,6 +6,8 @@ Usage (flags):
     python3 scripts/cdin.py build-install [--debug] [--prefix DIR] [--shortcut]
     python3 scripts/cdin.py update [--check] [--force] [--version X.Y.Z]
     python3 scripts/cdin.py uninstall [--prefix DIR]
+    python3 scripts/cdin.py gen-icon [<icon.svg>] [--out-dir DIR] [--out-ico PATH] [--out-inl PATH]
+    python3 scripts/cdin.py gen-logo [<icon.svg>] [--grid N] [--out PATH]
     python3 scripts/cdin.py --help
 """
 
@@ -17,6 +19,8 @@ import textwrap
 
 from _cdin.build         import cmd_build
 from _cdin.build_install import cmd_build_install
+from _cdin.gen_icon      import cmd_gen_icon
+from _cdin.gen_logo      import cmd_gen_logo
 from _cdin.install       import cmd_install
 from _cdin.interactive   import interactive
 from _cdin.platform      import default_prefix
@@ -30,6 +34,8 @@ DISPATCH = {
     "build-install": cmd_build_install,
     "update":        cmd_update,
     "uninstall":     cmd_uninstall,
+    "gen-icon":      cmd_gen_icon,
+    "gen-logo":      cmd_gen_logo,
 }
 
 
@@ -38,7 +44,7 @@ DISPATCH = {
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="cdin.py",
-        description="cdin build / install / update tool",
+        description="cdin build / install / update / asset tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Examples:
@@ -51,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
               python3 scripts/cdin.py update --check           # check only
               python3 scripts/cdin.py update --version 0.2.0
               python3 scripts/cdin.py uninstall
+              python3 scripts/cdin.py gen-icon                 # regenerate icons from scripts/icon.svg
+              python3 scripts/cdin.py gen-icon path/to/icon.svg --out-dir build/icons
+              python3 scripts/cdin.py gen-logo                 # regenerate data/core/rootview/logo.lua
+              python3 scripts/cdin.py gen-logo --grid 128 --out /tmp/logo.lua
         """),
     )
     sub = p.add_subparsers(dest="command")
@@ -89,6 +99,26 @@ def build_parser() -> argparse.ArgumentParser:
     # uninstall
     un = sub.add_parser("uninstall", help="Remove a cdin installation")
     un.add_argument("--prefix", metavar="DIR")
+
+    # gen-icon
+    gi = sub.add_parser("gen-icon", help="Generate .ico / .icns / .png icons from an SVG")
+    gi.add_argument("svg", nargs="?", metavar="icon.svg",
+                    help="Source SVG (default: scripts/icon.svg)")
+    gi.add_argument("--out-dir", metavar="DIR",
+                    help="Directory for output files (default: same dir as SVG)")
+    gi.add_argument("--out-ico", metavar="PATH",
+                    help="Path for the .ico file (overrides --out-dir for .ico)")
+    gi.add_argument("--out-inl", metavar="PATH",
+                    help="Write a C inline array to PATH (e.g. src/icon.inl)")
+
+    # gen-logo
+    gl = sub.add_parser("gen-logo", help="Rasterize SVG into logo.lua span data")
+    gl.add_argument("svg", nargs="?", metavar="icon.svg",
+                    help="Source SVG (default: scripts/icon.svg)")
+    gl.add_argument("--grid", type=int, default=64, metavar="N",
+                    help="Rasterize at N×N pixels (default: 64)")
+    gl.add_argument("--out", metavar="PATH",
+                    help="Output path (default: data/core/rootview/logo.lua)")
 
     return p
 

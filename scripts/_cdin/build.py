@@ -3,10 +3,9 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
-from ._constants import ROOT_DIR, ICON_SVG, ICON_INL, GEN_ICON_PY
+from ._constants import ROOT_DIR, ICON_SVG, ICON_INL
 from .platform import PLATFORM, default_jobs, default_prefix
 from .ui import banner, info, ok, warn, die
 from .utils import run, find_binary_candidate
@@ -46,17 +45,23 @@ def cmd_build(args: argparse.Namespace) -> None:
     else:
         ok("Build complete.")
 
+
 def _regenerate_icon() -> None:
     if not ICON_SVG.is_file():
         warn(f"{ICON_SVG} not found — icon.inl will not be regenerated.")
         return
 
-    info(f"Regenerating {ICON_INL.relative_to(ROOT_DIR)} (always fresh) …")
+    info(f"Regenerating {ICON_INL.relative_to(ROOT_DIR)} …")
     try:
-        run([sys.executable, str(GEN_ICON_PY), "--svg", str(ICON_SVG), "--out", str(ICON_INL)])
+        from .gen_icon import rasterize_png, open_image, build_inl
+        import argparse as _ap
+        _args = _ap.Namespace(svg=str(ICON_SVG), out_dir=None, out_ico=None, out_inl=str(ICON_INL))
+        png = rasterize_png(ICON_SVG, 256)
+        img = open_image(png)
+        build_inl({256: img}, ICON_INL)
         ok(f"{ICON_INL.name} generated.")
-    except subprocess.CalledProcessError:
-        warn("gen_icon.py failed — icon.inl may be stale.")
+    except Exception as e:
+        warn(f"gen_icon failed — icon.inl may be stale. ({e})")
 
 
 def _find_make() -> str:
