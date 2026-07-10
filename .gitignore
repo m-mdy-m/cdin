@@ -12,5 +12,6 @@ cdin_code_backup/*
 ./src/icon.inl
 *icon.inl*
 results
+scripts/icons
 fixtures
 *.rar
