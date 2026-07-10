@@ -5,6 +5,7 @@ local style     = require "core.style"
 local keymap    = require "core.input.keymap"
 local translate = require "core.doc.translate"
 local View      = require "core.views.view"
+local doc_search = require "core.doc.search"
 
 local DocView = View:extend()
 
@@ -226,10 +227,55 @@ function DocView:draw_line_text(idx, x, y)
   end
 end
 
+-- Draw all occurrences of the current search term on this line
+function DocView:draw_line_search_highlights(idx, x, y)
+  -- core.findreplace is set lazily when the module is first used
+  local fr = rawget(core, "findreplace")
+  if not fr then return end
+  local hl = fr.get_highlight(self.doc)
+  if not hl or not hl.text or hl.text == "" then return end
+
+  local lh   = self:get_line_height()
+  local text = hl.text
+  local opt  = hl.opt or {}
+  local line_text = self.doc.lines[idx]
+  if not line_text then return end
+
+  -- highlight colour: slightly brighter than line_highlight, distinct from selection
+  local hl_color = style.search_highlight or { common.lerp(
+    style.line_highlight, style.selection, 0.6) }
+  -- fallback if theme doesn't define search_highlight
+  if not style.search_highlight then
+    hl_color = { 255, 200, 0, 80 }
+  end
+
+  local search_text = opt.no_case and text:lower() or text
+  local src_text    = opt.no_case and line_text:lower() or line_text
+  local col = 1
+  while true do
+    local s, e
+    if opt.pattern then
+      s, e = src_text:find(search_text, col)
+    else
+      s, e = src_text:find(search_text, col, true)
+    end
+    if not s then break end
+    local x1 = x + self:get_col_x_offset(idx, s)
+    local x2 = x + self:get_col_x_offset(idx, e + 1)
+    renderer.draw_rect(x1, y, math.max(x2 - x1, 1), lh, hl_color)
+    col = e + 1
+    if col > #line_text then break end
+  end
+end
+
+
 function DocView:draw_line_body(idx, x, y)
   local line, col         = self.doc:get_selection()
   local line1, col1, line2, col2 = self.doc:get_selection(true)
   local lh = self:get_line_height()
+
+  -- draw search highlights first (behind selection)
+  self:draw_line_search_highlights(idx, x, y)
 
   if idx >= line1 and idx <= line2 then
     local text = self.doc.lines[idx]
