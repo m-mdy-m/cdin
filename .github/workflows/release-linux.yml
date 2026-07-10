@@ -60,7 +60,7 @@ jobs:
         run: |
           pip install --quiet cairosvg Pillow
           python3 scripts/gen_icon.py \
-            --svg       scripts/icon.svg \
+                        scripts/icon.svg \
             --out-inl        src/icon.inl \
             --out-dir scripts/icons
           PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)

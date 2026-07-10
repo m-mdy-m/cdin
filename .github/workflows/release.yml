@@ -69,7 +69,7 @@ jobs:
             rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg -o "scripts/icons/cdin-${sz}.png"
           done
           python3 scripts/gen_icon.py \
-            --svg       scripts/icon.svg \
+                        scripts/icon.svg \
             --out-inl        src/icon.inl \
             --out-dir scripts/icons
           PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
@@ -205,7 +205,7 @@ jobs:
           done
 
           python3 scripts/gen_icon.py \
-            --svg       scripts/icon.svg \
+                        scripts/icon.svg \
             --out-inl        src/icon.inl \
             --out-dir scripts/icons
 
@@ -366,7 +366,7 @@ jobs:
               -o "scripts/icons/cdin-${sz}.png"
           done
           python3 scripts/gen_icon.py \
-            --svg       scripts/icon.svg \
+                        scripts/icon.svg \
             --out-inl        src/icon.inl \
             --out-dir scripts/icons
           PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' | wc -l | tr -d ' ')
