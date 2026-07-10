@@ -65,8 +65,8 @@ jobs:
         run: |
           python3 scripts/gen_icon.py \
             --svg       scripts/icon.svg \
-            --out       src/icon.inl \
-            --icons-dir scripts/icons
+            --out-inl        src/icon.inl \
+            --out-dir scripts/icons
           echo "icon.inl: $(wc -l < src/icon.inl) lines"
 
       - name: Build .icns icon

@@ -61,8 +61,8 @@ jobs:
           pip install --quiet cairosvg Pillow
           python3 scripts/gen_icon.py \
             --svg       scripts/icon.svg \
-            --out       src/icon.inl \
-            --icons-dir scripts/icons
+            --out-inl        src/icon.inl \
+            --out-dir scripts/icons
           PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
           if [[ "$PNG_COUNT" -eq 0 ]]; then
             echo "::error::Icon PNGs were not generated – check cairosvg/Pillow install"

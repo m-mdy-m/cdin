@@ -4,11 +4,11 @@ ICON_INL := src/icon.inl
 
 $(ICON_INL): scripts/gen_icon.py scripts/icon.svg
 	@command -v python3 >/dev/null || { echo '✗ python3 not found (needed to generate $(ICON_INL))'; exit 1; }
-	python3 scripts/gen_icon.py --svg scripts/icon.svg --out $(ICON_INL) --icons-dir scripts/icons
+	python3 scripts/gen_icon.py --svg scripts/icon.svg --out $(ICON_INL) --out-dir scripts/icons
 
 .PHONY: gen-icons
 gen-icons: scripts/gen_icon.py scripts/icon.svg
-	python3 scripts/gen_icon.py --svg scripts/icon.svg --no-inl --icons-dir scripts/icons
+	python3 scripts/gen_icon.py --svg scripts/icon.svg --no-inl --out-dir scripts/icons
 
 build: $(OUT)
 	@if [ -d data ] && [ ! -e $(OUT_DIR)/data ]; then \
