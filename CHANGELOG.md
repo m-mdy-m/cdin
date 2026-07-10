@@ -170,3 +170,221 @@ This release focuses on improving the startup experience and fixing several issu
 ### Refactoring
 
 - **Session:** Added a new option to automatically reopen the last active file on startup — disabled (`false`) by default. ([`29b11ae`](../../commit/29b11ae))
+
+## [0.1.0-beta.5] — 2026-07-10
+
+### Overview
+
+This release is a major architectural milestone for cdin.
+
+The focus of this release is not a large set of user-facing features, but a complete improvement of the internal foundation: the Lua layer has been simplified, core functionality has moved behind cleaner C-powered APIs, the event bus system has been removed, and several internal systems have been redesigned for better modularity and future extensibility.
+
+Filesystem operations, searching, Git integration, state handling, and lifecycle management are now organized around dedicated APIs and modules, creating a cleaner foundation for future plugins and editor features.
+
+Due to the scope of these changes, some internal Lua APIs and plugin behaviors may require updates.
+
+---
+
+# Breaking Changes
+
+### Event system removal
+
+- Removed the old `eventbus` system from both C and Lua.
+- Plugins using `eventbus.emit(...)` or depending on event bus initialization must migrate to the new architecture.
+
+### Lua structure changes
+
+- Reorganized the `data/` Lua structure.
+- Removed redundant modules and moved functionality into cleaner core APIs.
+- Internal module paths may have changed.
+
+### Keymap changes
+
+- Centralized default keymap registration into `core/keymaps/default.lua`.
+- Plugins or user configurations that relied on previous startup ordering may require adjustments.
+
+### Document hooks
+
+- Replaced document method monkey-patching with a structured hook table system.
+- Plugins extending document behavior should migrate to the new hook mechanism.
+
+---
+
+# New Features
+
+## Core Architecture
+
+### State and project management
+
+- Added `core.state` for centralized runtime state management.
+- Added `core.project` for project lifecycle and project-related operations.
+- Created a cleaner foundation for future session and workspace features.
+
+### Lifecycle system
+
+- Added Lua initialization and lifecycle management.
+- Plugins can now follow structured initialization phases instead of relying on implicit loading behavior.
+
+### Logging system
+
+- Added a unified logger available from both C and Lua.
+- Improved debugging and internal diagnostics.
+
+### Core helpers
+
+- Added `core.active_docview()` helper.
+- Reduced the need for plugins and internal components to manually traverse views.
+- Added shared utilities such as configuration helpers and copy utilities.
+
+---
+
+# Public APIs
+
+## Filesystem API
+
+- Added a public `fs` API exposed to Lua.
+- Provides unified filesystem operations and path handling.
+- Reduces duplicated filesystem logic across plugins and core modules.
+
+## Search API
+
+- Added a public `search` API exposed to Lua.
+- Search functionality is now powered by the native C search engine.
+- Plugins can use the same search implementation as the editor core.
+
+## Git API
+
+- Added centralized `core.git` APIs.
+- Git operations are now shared between core components and plugins.
+- Removed duplicated Git command handling from individual modules.
+
+---
+
+# Search Improvements
+
+- Reworked search around the native `search.c` engine.
+- Improved consistency between project search and internal search functionality.
+- Removed older duplicated Lua-based search logic.
+- Added a cleaner API layer for future search extensions.
+
+---
+
+# Git Integration
+
+- Centralized Git status, branch, and repository operations.
+- Improved Git usage across treeview, statusbar, and plugins.
+- Git information is now provided through `core.git.status`.
+
+### Git UI improvements
+
+- Treeview Git badges now use centralized Git APIs.
+- Status bar Git information now reads from the Git API instead of executing commands directly.
+
+---
+
+# UI & Editor Improvements
+
+## Status bar
+
+- Redesigned status bar layout.
+- Added Vim mode indicator/pill.
+- Git branch and status information are now integrated through the new Git API.
+
+## Project search
+
+- Improved search result presentation.
+- Added match context display.
+- Added highlighted matches.
+- Added progress indication during searches.
+
+## Tabs and windows
+
+- Added tab/window command support.
+- Improved tab and window management architecture.
+- Removed unnecessary tab abstractions by integrating logic directly into the tab system.
+
+## Theme
+
+- Added a new built-in theme.
+
+## Log view
+
+- Added copy and paste support for log entries.
+
+---
+
+# Vim Improvements
+
+- Unified write/quit mappings through the `ex` command system.
+- Improved usage of `core.active_docview()`.
+- Reduced duplicated view lookup logic.
+
+---
+
+# Configuration & Initialization
+
+- Added dedicated configuration and event modules.
+- Improved initialization order and module separation.
+- Boot sequence has been simplified.
+
+---
+
+# Bug Fixes
+
+### Git
+
+- Fixed Linux Git ignored-file detection error:
+
+```bash
+git ls-files -i must be used with either -o or -c
+```
+
+- Fixed Git subprocess handling issues on Windows.
+
+### Editor behavior
+
+- Fixed insert mode `m` key incorrectly opening menus.
+- Fixed incorrect directory label rendering in empty views.
+
+### Build & Platform
+
+- Fixed several platform-specific build issues.
+- Improved consistency of Git and shell behavior across supported platforms.
+
+---
+
+# Refactoring & Internal Changes
+
+- Removed event bus dependencies from the codebase.
+- Replaced document monkey-patching with hook tables.
+- Removed obsolete Lua files and duplicated logic.
+- Simplified core module boundaries.
+- Fixed C core submodule paths.
+- Updated Makefile and build structure.
+- Marked required build scripts as executable through Git attributes.
+- Improved internal synchronization between C and Lua layers.
+
+---
+
+# Platform Notes
+
+| Platform | Status |
+|----------|--------|
+| Linux | Supported. Native APIs and Git integration improved. |
+| Windows | Supported. Git subprocess handling improved. |
+| macOS | Supported. Existing release pipeline improvements continue. |
+
+---
+
+# Stability Notes
+
+This release focuses on architecture rather than major visual changes.
+
+The main goal is creating a cleaner and more maintainable foundation for future cdin development, including:
+
+- More powerful plugins
+- Better project management
+- Advanced editor automation
+- Improved language tooling support
+
+The beta cycle continues, and APIs may still change before the first stable release.
