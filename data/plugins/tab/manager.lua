@@ -1,64 +1,49 @@
--- Design contract
--- ───────────────
--- Each Tab has its OWN root_node (Node tree).
--- When we switch tabs we swap core.root_view.root_node and restore the saved
--- active_view.  The locked nodes (title_bar, command_view, status_view) live
--- ABOVE the editable region in the outer root and are NEVER touched.
-
-local core   = require "core"
-local Tab    = require "plugins.tab.tab"
+local core = require "core"
 
 local M = {}
+local _next_id = 1
+local function new_tab(name)
+  local id = _next_id
+  _next_id  = _next_id + 1
+  return {
+    id          = id,
+    name        = name or ("Tab " .. id),
+    root_node   = nil,
+    active_view = nil,
+    pinned      = false,
+  }
+end
+
+local function tab_display_name(tab)
+  local av = tab.active_view
+  if av and av.get_name then
+    local ok, n = pcall(av.get_name, av)
+    if ok and n and n ~= "" then return n end
+  end
+  return tab.name
+end
 
 M.tabs         = {}   -- { [id] = Tab }
 M.tab_order    = {}   -- { id, id, … } display order
 M.active_id    = nil
 M.closed_stack = {}   -- for reopen-closed-tab
 
--- ─── helpers ────────────────────────────────────────────────────────────────
-
-local function emit(event, payload)
-  if core.emit then core.emit(event, payload) end
-  core.redraw = true
-end
-
--- Layout after setup_views + treeview:
---   root_node (vsplit)
---     a  →  title_bar  (locked)
---     b  (vsplit)
---       a  →  editor slot  ← may be split further by treeview/window
---       b  (vsplit)
---           a  →  command_view (locked)
---           b  →  status_view  (locked)
---
--- After treeview loads it splits root_node.b.a into:
---   root_node.b.a (hsplit)
---     .a  →  TreeView  (locked)   ← permanent, shared across all tabs
---     .b  →  actual editor pane   ← THIS is what each tab owns
---
--- We must ONLY swap the unlocked child, never the locked side-panels.
 
 local function get_editor_slot()
-  -- Returns (parent_node, key) so the caller can read or write parent[key].
   local rn = core.root_view.root_node
   if not (rn and rn.b and rn.b.a) then return nil, nil end
   local ea = rn.b.a
   if ea.type == "leaf" then
-    -- No treeview yet; the slot is rn.b.a directly.
     return rn.b, "a"
   end
-  -- ea is an hsplit (e.g. treeview on the left).
-  -- Find the unlocked child — that is the per-tab editor area.
   if ea.b and not ea.b.locked then return ea, "b" end
   if ea.a and not ea.a.locked then return ea, "a" end
-  -- Both locked (shouldn't happen) — fall back to the outer slot.
   return rn.b, "a"
 end
 
 local function editor_node()
   local parent, key = get_editor_slot()
   if parent then return parent[key] end
-  -- Emergency fallback: first unlocked leaf in the whole tree.
   local function find_unlocked(n)
     if n.type == "leaf" then return (not n.locked) and n or nil end
     return find_unlocked(n.a) or find_unlocked(n.b)
@@ -71,7 +56,6 @@ local function set_editor_node(node)
   if parent then parent[key] = node end
 end
 
--- ─── freeze / restore ───────────────────────────────────────────────────────
 
 local function freeze(tab)
   if not tab then return end
@@ -82,13 +66,10 @@ end
 local function restore(tab)
   if not tab then return end
 
-  -- swap in this tab's node tree
   set_editor_node(tab.root_node)
 
-  -- recalc layout with current window dimensions
   core.root_view.root_node:update_layout()
 
-  -- restore the active view
   local av = tab.active_view
   if av then
     local node = core.root_view.root_node:get_node_for_view(av)
@@ -98,7 +79,6 @@ local function restore(tab)
     end
   end
 
-  -- fallback: focus the first unlocked leaf
   local function first_unlocked_leaf(n)
     if n.type == "leaf" then return (not n.locked) and n or nil end
     return first_unlocked_leaf(n.a) or first_unlocked_leaf(n.b)
@@ -109,33 +89,30 @@ local function restore(tab)
   end
 end
 
--- ─── bootstrap: create the very first tab around existing state ──────────────
 
 function M.bootstrap()
-  local tab = Tab("Tab 1")
+  local tab = new_tab("Tab 1")
   tab.root_node   = editor_node()
   tab.active_view = core.active_view
   M.tabs[tab.id]  = tab
   table.insert(M.tab_order, tab.id)
   M.active_id = tab.id
-  emit("tab:create", { id = tab.id, tab = tab })
+  core.redraw = true
 end
 
--- ─── create ─────────────────────────────────────────────────────────────────
 
 function M.create(name, activate)
-  -- build a brand-new Node for the new tab
   local Node      = require "core.rootview.node"
   local EmptyView = require "core.rootview.empty_view"
 
-  local tab  = Tab(name)
+  local tab  = new_tab(name)
   local node = Node()   -- fresh leaf with EmptyView inside
   tab.root_node = node
 
   M.tabs[tab.id] = tab
   table.insert(M.tab_order, tab.id)
 
-  emit("tab:create", { id = tab.id, tab = tab })
+  core.redraw = true
 
   if activate ~= false then
     M.activate(tab.id)
@@ -144,7 +121,6 @@ function M.create(name, activate)
   return tab.id, tab
 end
 
--- ─── activate ───────────────────────────────────────────────────────────────
 
 function M.activate(id)
   if not M.tabs[id] then return false end
@@ -157,11 +133,10 @@ function M.activate(id)
 
   restore(M.tabs[id])
 
-  emit("tab:activate", { id = id, prev_id = prev_id })
+  core.redraw = true
   return true
 end
 
--- ─── close ──────────────────────────────────────────────────────────────────
 
 function M.close(id, force)
   id = id or M.active_id
@@ -177,7 +152,6 @@ function M.close(id, force)
     return false
   end
 
-  -- save for reopen
   table.insert(M.closed_stack, {
     name      = tab.name,
     root_node = tab.root_node,
@@ -197,7 +171,7 @@ function M.close(id, force)
     if tid == id then table.remove(M.tab_order, i); break end
   end
 
-  emit("tab:close", { id = id })
+  core.redraw = true
   return true
 end
 
@@ -214,7 +188,6 @@ function M.close_all()
   end
 end
 
--- ─── reopen ─────────────────────────────────────────────────────────────────
 
 function M.reopen_closed()
   if #M.closed_stack == 0 then
@@ -222,25 +195,23 @@ function M.reopen_closed()
     return
   end
   local data = table.remove(M.closed_stack)
-  local tab  = Tab(data.name)
+  local tab  = new_tab(data.name)
   tab.root_node   = data.root_node
   tab.active_view = data.active_view
   M.tabs[tab.id]  = tab
   table.insert(M.tab_order, tab.id)
-  emit("tab:create", { id = tab.id, tab = tab })
+  core.redraw = true
   M.activate(tab.id)
 end
 
--- ─── rename ─────────────────────────────────────────────────────────────────
 
 function M.rename(id, name)
   local tab = M.tabs[id or M.active_id]
   if not tab then return end
   tab.name = name
-  emit("tab:rename", { id = tab.id, name = name })
+  core.redraw = true
 end
 
--- ─── move ───────────────────────────────────────────────────────────────────
 
 function M.move(id, to_idx)
   local from_idx = M.get_index(id)
@@ -248,21 +219,19 @@ function M.move(id, to_idx)
   table.remove(M.tab_order, from_idx)
   to_idx = math.max(1, math.min(to_idx, #M.tab_order + 1))
   table.insert(M.tab_order, to_idx, id)
-  emit("tab:move", { id = id, index = to_idx })
+  core.redraw = true
   core.redraw = true
 end
 
--- ─── pin ────────────────────────────────────────────────────────────────────
 
 function M.pin(id, state)
   local tab = M.tabs[id or M.active_id]
   if not tab then return end
   tab.pinned = (state == nil) and (not tab.pinned) or state
-  emit("tab:update", { id = tab.id, pinned = tab.pinned })
+  core.redraw = true
   core.redraw = true
 end
 
--- ─── duplicate ──────────────────────────────────────────────────────────────
 
 function M.duplicate(id)
   id = id or M.active_id
@@ -271,7 +240,6 @@ function M.duplicate(id)
   -- Create a new tab; re-open whatever docs were visible in src
   local new_id, new_tab = M.create(src.name .. " (copy)", true)
 
-  -- collect filenames from src's node tree
   local files = {}
   local function walk(node)
     if node.type == "leaf" then
@@ -293,10 +261,9 @@ function M.duplicate(id)
     end)
   end
 
-  emit("tab:update", { id = new_id })
+  core.redraw = true
 end
 
--- ─── navigation ─────────────────────────────────────────────────────────────
 
 function M.next()
   local idx = M.get_index(M.active_id)
@@ -311,7 +278,6 @@ function M.prev()
 end
 
 function M.go_to(n)
-  -- Vim: 9gt → last tab when n > count
   local id = M.tab_order[n] or M.tab_order[#M.tab_order]
   if id then M.activate(id) end
 end
@@ -324,7 +290,6 @@ function M.last()
   if #M.tab_order > 0 then M.activate(M.tab_order[#M.tab_order]) end
 end
 
--- ─── helpers ────────────────────────────────────────────────────────────────
 
 function M.get_index(id)
   for i, tid in ipairs(M.tab_order) do

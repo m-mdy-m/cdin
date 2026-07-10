@@ -4,7 +4,6 @@ local W = {}
 
 
 local function emit(event, payload)
-  if core.emit then core.emit(event, payload) end
   core.redraw = true
 end
 
@@ -101,8 +100,6 @@ function W.only()
   if #leaves <= 1 then return end
   for _, leaf in ipairs(leaves) do
     if leaf ~= active_node() then
-      -- We can't call close_active_view on each because that mutates the tree.
-      -- Instead rebuild by consuming all others.
     end
   end
   local Node = require "core.rootview.node"

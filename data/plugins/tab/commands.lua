@@ -4,7 +4,7 @@ local core    = require "core"
 local M       = require "plugins.tab.manager"
 
 command.add(nil, {
-  -- ── lifecycle ──────────────────────────────────────────────────────────
+  -- ── lifecycle 
   ["tab:new"]           = function() M.create() end,
   ["tab:close"]         = function() M.close(M.active_id, false) end,
   ["tab:close-force"]   = function() M.close(M.active_id, true) end,
@@ -22,7 +22,7 @@ command.add(nil, {
     end, nil, nil, tab.name)
   end,
 
-  -- ── navigation ────────────────────────────────────────────────────────
+  -- ── navigation 
   ["tab:next"]    = function() M.next() end,
   ["tab:prev"]    = function() M.prev() end,
   ["tab:first"]   = function() M.first() end,
@@ -38,7 +38,7 @@ command.add(nil, {
   ["tab:go-8"]    = function() M.go_to(8) end,
   ["tab:go-9"]    = function() M.go_to(9) end,
 
-  -- ── reorder ───────────────────────────────────────────────────────────
+  -- ── reorder
   ["tab:move-left"] = function()
     local idx = M.get_index(M.active_id)
     if idx then M.move(M.active_id, idx - 1) end
@@ -48,7 +48,7 @@ command.add(nil, {
     if idx then M.move(M.active_id, idx + 1) end
   end,
 
-  -- ── session ───────────────────────────────────────────────────────────
+  -- ── session 
   ["tab:session-save"] = function()
     local s = require "plugins.tab.session"
     if s.save() then core.log("tab-session: saved") end
