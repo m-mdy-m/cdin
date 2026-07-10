@@ -11,6 +11,7 @@
 #include "../ui/renderer_cache.h"
 #include "../core/window.h"
 #include "../core/logger.h"
+#include "../search/find.h" 
 
 #ifndef _WIN32
   #include <unistd.h>
@@ -420,26 +421,12 @@ static int f_exec(lua_State *L) {
   return 0;
 }
 
-
 static int f_fuzzy_match(lua_State *L) {
   const char *str = luaL_checkstring(L, 1);
   const char *ptn = luaL_checkstring(L, 2);
-  int score = 0, run = 0;
-  while (*str && *ptn) {
-    while (*str == ' ') str++;
-    while (*ptn == ' ') ptn++;
-    if (tolower((unsigned char)*str) == tolower((unsigned char)*ptn)) {
-      score += run * 10 - (*str != *ptn);
-      run++;
-      ptn++;
-    } else {
-      score -= 10;
-      run = 0;
-    }
-    str++;
-  }
-  if (*ptn) return 0;
-  lua_pushnumber(L, score - (int)strlen(str));
+  int score;
+  if (!fuzzy_match_c(str, ptn, &score)) return 0;
+  lua_pushnumber(L, score);
   return 1;
 }
 static int f_popen(lua_State *L) {
