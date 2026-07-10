@@ -254,7 +254,7 @@ function StatusView:get_items()
     if ro then
       push(left, style.dim, "[RO]", style.text, style.dim, sep, style.text)
     elseif dirty then
-      push(left, style.git_modified or style.accent, "●", style.text, style.dim, sep, style.text)
+      push(left, style.git_modified or style.accent, "-", style.text, style.dim, sep, style.text)
     end
 
     -- RIGHT:  [1] 2 3 | 42:18 | 37% | lf
