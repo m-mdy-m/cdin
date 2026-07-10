@@ -2,7 +2,6 @@ local core = require "core"
 local common = require "core.utils.common"
 local config = require "core.config"
 local command = require "core.input.command"
-local keymap = require "core.input.keymap"
 local translate = require "core.doc.translate"
 local RootView = require "core.rootview"
 local DocView = require "core.views.docview"
@@ -272,12 +271,6 @@ command.add(predicate, {
 })
 
 
-keymap.add {
-  ["tab"]    = "autocomplete:complete",
-  ["up"]     = "autocomplete:previous",
-  ["down"]   = "autocomplete:next",
-  ["escape"] = "autocomplete:cancel",
-}
 
 
 return autocomplete

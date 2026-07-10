@@ -1,7 +1,6 @@
 local core = require "core"
 local style = require "core.style"
 local View = require "core.views.view"
-local keymap = require "core.input.keymap"
 local command = require "core.input.command"
 
 
@@ -242,9 +241,5 @@ command.add(function() return core.active_view and core.active_view:is(LogView) 
   end,
 })
 
-keymap.add {
-  ["ctrl+c"] = "log:copy-selection",
-  ["ctrl+a"] = "log:select-all",
-}
 
 return LogView

@@ -33,8 +33,9 @@ return {
 
     ["ctrl+f"] = "find-replace:find",
     ["ctrl+r"] = "find-replace:replace",
-    ["f3"] = "find-replace:repeat-find",
-    ["shift+f3"] = "find-replace:previous-find",
+    ["shift+e"] = "find-replace:repeat-find",
+    ["shift+r"] = "find-replace:previous-find",
+    ["ctrl+shift+h"] = "find-replace:clear-highlight",
     ["ctrl+g"] = "doc:go-to-line",
     ["ctrl+s"] = "doc:save",
     ["ctrl+shift+s"] = "doc:save-as",

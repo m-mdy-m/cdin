@@ -2,7 +2,6 @@ local core    = require "core"
 local style   = require "core.style"
 local common  = require "core.utils.common"
 local View    = require "core.views.view"
-local keymap  = require "core.input.keymap"
 local command = require "core.input.command"
 local logo    = require "core.rootview.logo"
 
@@ -82,10 +81,6 @@ command.add(nil, {
   end,
 })
 
-keymap.add {
-  ["ctrl+o"]       = "empty-view:open-file",
-  ["ctrl+shift+o"] = "empty-view:open-folder",
-}
 
 
 function EmptyView:new()

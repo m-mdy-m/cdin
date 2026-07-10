@@ -3,7 +3,6 @@ local style = require "core.style"
 local M     = require "plugins.tab.manager"
 
 require "plugins.tab.commands"
-require "plugins.tab.keymap"
 
 core.add_thread(function()
   coroutine.yield(0)   
