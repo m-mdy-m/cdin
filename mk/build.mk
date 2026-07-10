@@ -6,7 +6,6 @@ $(ICON_INL): scripts/gen_icon.py scripts/icon.svg
 	@command -v python3 >/dev/null || { echo '✗ python3 not found (needed to generate $(ICON_INL))'; exit 1; }
 	python3 scripts/gen_icon.py --svg scripts/icon.svg --out $(ICON_INL) --icons-dir scripts/icons
 
-# Convenience target: (re)generate only the pre-rendered PNGs
 .PHONY: gen-icons
 gen-icons: scripts/gen_icon.py scripts/icon.svg
 	python3 scripts/gen_icon.py --svg scripts/icon.svg --no-inl --icons-dir scripts/icons
@@ -21,7 +20,7 @@ $(OUT): _check_deps $(OBJS)
 	@mkdir -p $(dir $@)
 	$(CC) $(OBJS) -o $@ $(LDFLAGS)
 
-$(OUT_DIR)/src/core/windows.o: src/core/windows.c $(ICON_INL)
+$(OUT_DIR)/src/core/window.o: src/core/window.c $(ICON_INL)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
