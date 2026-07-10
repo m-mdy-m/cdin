@@ -124,12 +124,12 @@ void window_set_icon(SDL_Window *win) {
 #ifndef _WIN32
   /* icon.inl*/
   #include "../icon.inl"
-  (void)WINDOW_ICON_LEN;
+  (void)icon_data_len;
 
   SDL_Surface *surf = SDL_CreateSurfaceFrom(
     64, 64,
     SDL_PIXELFORMAT_RGBA32,
-    (void *)WINDOW_ICON,
+    (void *)icon_data,
     64 * 4
   );
 
