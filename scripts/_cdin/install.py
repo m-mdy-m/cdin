@@ -256,27 +256,72 @@ def _install_icon_windows(prefix: Path) -> str:
 
 
 def _create_shortcuts_windows(exe: Path, ico_path: str) -> None:
+    desktop   = Path(os.environ.get("USERPROFILE", "~")).expanduser() / "Desktop"
+    startmenu = (Path(os.environ.get("APPDATA", ""))
+                 / "Microsoft" / "Windows" / "Start Menu" / "Programs")
+
     shell = _com_shell()
-    if not shell:
-        warn("WScript.Shell unavailable — shortcuts skipped.")
-        return
+    if shell:
+        try:
+            for lnk_dir in (desktop, startmenu):
+                lnk_dir.mkdir(parents=True, exist_ok=True)
+                lnk_path = lnk_dir / "cdin.lnk"
+                lnk = shell.CreateShortcut(str(lnk_path))
+                lnk.TargetPath       = str(exe)
+                lnk.WorkingDirectory = str(exe.parent)
+                lnk.Description      = "cdin – Lightweight Code Editor"
+                if ico_path:
+                    lnk.IconLocation = ico_path
+                lnk.Save()
+                ok(f"Shortcut         → {lnk_path}")
+            return
+        except Exception as e:
+            warn(f"COM shortcut failed ({e}), trying ctypes fallback…")
 
     try:
-        desktop   = Path(os.environ.get("USERPROFILE", "~")).expanduser() / "Desktop"
-        startmenu = (Path(os.environ.get("APPDATA", ""))
-                     / "Microsoft" / "Windows" / "Start Menu" / "Programs")
-
+        ico_line = f'    lnk.IconLocation = "{ico_path}"' if ico_path else ""
+        vbs_blocks = []
+        lnk_paths = []
         for lnk_dir in (desktop, startmenu):
             lnk_dir.mkdir(parents=True, exist_ok=True)
             lnk_path = lnk_dir / "cdin.lnk"
-            lnk = shell.CreateShortcut(str(lnk_path))
-            lnk.TargetPath       = str(exe)
-            lnk.WorkingDirectory = str(exe.parent)
-            lnk.Description      = "cdin – Lightweight Code Editor"
+            lnk_paths.append(lnk_path)
+            # Escape backslashes for VBScript string literals
+            exe_s    = str(exe).replace("\\", "\\\\")
+            parent_s = str(exe.parent).replace("\\", "\\\\")
+            lnk_s    = str(lnk_path).replace("\\", "\\\\")
+            ico_s    = ico_path.replace("\\", "\\\\") if ico_path else ""
+            block = (
+                'Set sh  = CreateObject("WScript.Shell")\n'
+                f'Set lnk = sh.CreateShortcut("{lnk_s}")\n'
+                f'lnk.TargetPath       = "{exe_s}"\n'
+                f'lnk.WorkingDirectory = "{parent_s}"\n'
+                'lnk.Description      = "cdin - Lightweight Code Editor"\n'
+            )
             if ico_path:
-                lnk.IconLocation = ico_path
-            lnk.Save()
-            ok(f"Shortcut         → {lnk_path}")
+                block += f'lnk.IconLocation = "{ico_s}"\n'
+            block += "lnk.Save\n"
+            vbs_blocks.append(block)
+
+        vbs_script = "\n".join(vbs_blocks)
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".vbs", delete=False, encoding="utf-8"
+        ) as tf:
+            tf.write(vbs_script)
+            vbs_path = tf.name
+
+        result = subprocess.run(
+            ["wscript.exe", "//NoLogo", "//B", vbs_path],
+            capture_output=True, timeout=15,
+        )
+        os.unlink(vbs_path)
+
+        if result.returncode == 0:
+            for lnk_path in lnk_paths:
+                ok(f"Shortcut         \u2192 {lnk_path}")
+        else:
+            warn(f"wscript shortcut failed (rc={result.returncode}) \u2014 create shortcuts manually.")
     except Exception as e:
         warn(f"Could not create shortcuts: {e}")
 
@@ -307,19 +352,65 @@ def _register_filetypes_windows(exe: Path) -> None:
         root    = r"Software\Classes"
         prog_id = "cdin"
         base    = winreg.HKEY_CURRENT_USER
+        exe_str = str(exe).replace("/", "\\")
 
-        for sub, val in [
-            (f"{root}\\{prog_id}", "cdin Document"),
-            (f"{root}\\{prog_id}\\shell\\open\\command", f'"{exe}" "%1"'),
-        ]:
-            k = winreg.CreateKey(base, sub)
-            winreg.SetValue(k, "", winreg.REG_SZ, val)
-            winreg.CloseKey(k)
+        # --- ProgID root: friendly display name ---
+        k = winreg.CreateKey(base, f"{root}\\{prog_id}")
+        winreg.SetValueEx(k, "",                  0, winreg.REG_SZ, "cdin Document")
+        winreg.SetValueEx(k, "FriendlyTypeName",  0, winreg.REG_SZ, "cdin Document")
+        winreg.CloseKey(k)
+
+        # --- DefaultIcon: so the icon appears in Explorer / Open With ---
+        k = winreg.CreateKey(base, f"{root}\\{prog_id}\\DefaultIcon")
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe_str}",0')
+        winreg.CloseKey(k)
+
+        # --- shell\open\command ---
+        k = winreg.CreateKey(base, f"{root}\\{prog_id}\\shell\\open\\command")
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe_str}" "%1"')
+        winreg.CloseKey(k)
+
+        # --- shell\open: FriendlyAppName shown in "Open With" dialog ---
+        k = winreg.CreateKey(base, f"{root}\\{prog_id}\\shell\\open")
+        winreg.SetValueEx(k, "FriendlyAppName", 0, winreg.REG_SZ, "cdin")
+        winreg.CloseKey(k)
+
+        # --- Applications\cdin.exe: canonical Open-With entry (name + icon) ---
+        app_key = f"Software\\Classes\\Applications\\{exe.name}"
+        k = winreg.CreateKey(base, app_key)
+        winreg.SetValueEx(k, "FriendlyAppName", 0, winreg.REG_SZ, "cdin")
+        winreg.CloseKey(k)
+
+        k = winreg.CreateKey(base, f"{app_key}\\DefaultIcon")
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe_str}",0')
+        winreg.CloseKey(k)
+
+        k = winreg.CreateKey(base, f"{app_key}\\shell\\open\\command")
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe_str}" "%1"')
+        winreg.CloseKey(k)
 
         for ext in EXTENSIONS:
             k = winreg.CreateKey(base, f"{root}\\{ext}")
             winreg.SetValueEx(k, "", 0, winreg.REG_SZ, prog_id)
             winreg.CloseKey(k)
+
+            k = winreg.CreateKey(base, f"{root}\\{ext}\\OpenWithProgids")
+            winreg.SetValueEx(k, prog_id, 0, winreg.REG_NONE, b"")
+            winreg.CloseKey(k)
+
+            k = winreg.CreateKey(base, f"{root}\\{ext}\\OpenWithList\\{exe.name}")
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "")
+            winreg.CloseKey(k)
+
+        try:
+            import ctypes
+            ctypes.windll.shell32.SHChangeNotify(  # type: ignore[attr-defined]
+                0x08000000,  # SHCNE_ASSOCCHANGED
+                0x0000,      # SHCNF_IDLIST
+                None, None,
+            )
+        except Exception:
+            pass  # non-fatal
 
         ok(f"Registered {len(EXTENSIONS)} file-type associations (HKCU)")
     except Exception as e:
