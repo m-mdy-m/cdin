@@ -136,5 +136,16 @@ function common.bench(name, fn, ...)
   return res
 end
 
+function common.ensure_dir(path)
+  local IS_WIN = PATHSEP == "\\"
+  local dir = path:match("^(.+)[\\/][^\\/]+$")
+  if not dir then return end
+  if IS_WIN then
+    os.execute('mkdir "' .. dir .. '" 2>nul')
+  else
+    os.execute('mkdir -p "' .. dir .. '"')
+  end
+end
+
 
 return common

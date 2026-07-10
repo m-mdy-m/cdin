@@ -1,7 +1,6 @@
 local core    = require "core"
 local config  = require "core.config"
 local command = require "core.input.command"
-local keymap  = require "core.input.keymap"
 local common  = require "core.utils.common"
 
 if config.session_max_recent  == nil then config.session_max_recent  = 10  end
@@ -21,15 +20,7 @@ local function session_path()
   end
 end
 
-local function ensure_dir(path)
-  local dir = path:match("^(.+)[\\/][^\\/]+$")
-  if not dir then return end
-  if IS_WIN then
-    os.execute('mkdir "' .. dir .. '" 2>nul')
-  else
-    os.execute('mkdir -p "' .. dir .. '"')
-  end
-end
+local ensure_dir = common.ensure_dir
 
 local function load_session()
   local path = session_path()
@@ -130,20 +121,13 @@ end
 
 local Doc = require "core.doc"
 
-local _orig_load = Doc.load
-local _orig_save = Doc.save
-
-Doc.load = function(self, ...)
-  local res = _orig_load(self, ...)
-  if self.filename then push_recent_file(self.filename) end
-  return res
-end
-
-Doc.save = function(self, ...)
-  local res = _orig_save(self, ...)
-  if self.filename then push_recent_file(self.filename) end
-  return res
-end
+-- Register hooks instead of monkey-patching Doc.load / Doc.save
+table.insert(Doc._after_load, function(doc)
+  if doc.filename then push_recent_file(doc.filename) end
+end)
+table.insert(Doc._after_save, function(doc)
+  if doc.filename then push_recent_file(doc.filename) end
+end)
 
 local _restored = false
 core.add_thread(function()
@@ -289,11 +273,6 @@ command.add(nil, {
   end,
 })
 
-keymap.add {
-  ["ctrl+shift+r"] = "session:open-recent",
-  ["ctrl+shift+d"] = "session:open-recent-dirs",
-  ["ctrl+alt+s"]   = "session:save",
-}
 
 local M = {}
 

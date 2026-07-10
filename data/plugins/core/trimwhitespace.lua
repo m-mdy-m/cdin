@@ -1,7 +1,6 @@
-local core = require "core"
+local core    = require "core"
 local command = require "core.input.command"
-local Doc = require "core.doc"
-
+local Doc     = require "core.doc"
 
 local function trim_trailing_whitespace(doc)
   local cline, ccol = doc:get_selection()
@@ -20,16 +19,11 @@ local function trim_trailing_whitespace(doc)
   end
 end
 
-
 command.add("core.views.docview", {
   ["trim-whitespace:trim-trailing-whitespace"] = function()
     trim_trailing_whitespace(core.active_view.doc)
   end,
 })
 
-
-local save = Doc.save
-Doc.save = function(self, ...)
-  trim_trailing_whitespace(self)
-  save(self, ...)
-end
+-- Register _before_save hook instead of monkey-patching Doc.save
+table.insert(Doc._before_save, trim_trailing_whitespace)

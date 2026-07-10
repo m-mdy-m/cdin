@@ -1,5 +1,6 @@
 local core   = require "core"
 local config = require "core.config"
+local common = require "core.utils.common"
 
 if config.tab_session_restore == nil then config.tab_session_restore = false end
 
@@ -16,15 +17,7 @@ local function session_path()
   end
 end
 
-local function ensure_dir(path)
-  local dir = path:match("^(.+)[\\/][^\\/]+$")
-  if not dir then return end
-  if IS_WIN then
-    os.execute('mkdir "' .. dir .. '" 2>nul')
-  else
-    os.execute('mkdir -p "' .. dir .. '"')
-  end
-end
+local ensure_dir = common.ensure_dir
 
 local function collect_files(node, out)
   if not node then return end
