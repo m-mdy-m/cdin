@@ -2,7 +2,6 @@
 
 #include <SDL3/SDL.h>
 #include <stdio.h>
-// 
 #include <stdlib.h>
 #include <string.h>
 
@@ -42,7 +41,7 @@ void utils_get_exe_filename(char *buf, int size) {
   }
   buf[len] = '\0';
 #elif __APPLE__
-  unsigned sz = (unsigned)size;
+  uint32_t sz = (uint32_t)size;
   if (_NSGetExecutablePath(buf, &sz) != 0) {
     log_warn("utils: _NSGetExecutablePath buffer too small");
     buf[0] = '\0';
