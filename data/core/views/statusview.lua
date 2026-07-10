@@ -12,108 +12,80 @@ local StatusView = View:extend()
 -- Vim-like pipe separator
 StatusView.sep = " | "
 
--- ── vim mode labels (uppercase, minimal) ──────────────────────────────────────
-local MODES = {
-  normal  = { label = "NORMAL",  color = "dim"    },
-  insert  = { label = "INSERT",  color = "accent" },
-  visual  = { label = "VISUAL",  color = "accent" },
-  replace = { label = "REPLACE", color = "accent" },
-  command = { label = "COMMAND", color = "accent" },
+-- ── vim mode pill definitions ──────────────────────────────────────────────────
+local VIM_PILL = {
+  normal  = { bg = "vim_normal_bg",  label = "NORMAL"  },
+  insert  = { bg = "vim_insert_bg",  label = "INSERT"  },
+  visual  = { bg = "vim_visual_bg",  label = "VISUAL"  },
+  replace = { bg = "vim_replace_bg", label = "REPLACE" },
+  command = { bg = "vim_command_bg", label = "COMMAND" },
 }
 
-local function mode_items(dv, sep)
-  if not dv.vim_mode then return nil end
-  local m   = MODES[dv.vim_mode] or { label = dv.vim_mode:upper(), color = "dim" }
-  local clr = style[m.color] or style.dim
-  return {
-    clr,        m.label,
-    style.dim,  sep,
-    style.text,
-  }
-end
-
 -- ── git branch + status ───────────────────────────────────────────────────────
---
--- Format:  main ↑3↓2 +4*3 ! R
---
---  main          clean, in sync
---  main -        no upstream
---  main ↑3       3 ahead
---  main ↓2       2 behind
---  main ↑1↓2     diverged
---  main +2*3     2 staged, 3 unstaged/untracked
---  main *3       only unstaged
---  main +2       only staged
---  main !        conflicts
---  main R        rebasing
---  main M        merging
---
 local function git_items(sep)
-  local ok, Git = pcall(require, "plugins.treeview.git")
-  if not ok or not Git.branch then return nil end
+  local ok, Git = pcall(require, "core.git")
+  if not ok or not Git.status.branch then return nil end
 
   local out = {}
 
   -- branch name
   out[#out+1] = style.text
-  out[#out+1] = Git.branch
+  out[#out+1] = Git.status.branch
 
   -- no upstream
-  if not Git.has_remote then
+  if not Git.status.has_remote then
     out[#out+1] = style.dim
     out[#out+1] = " -"
   else
     -- ahead / behind
-    if Git.ahead > 0 then
+    if Git.status.ahead > 0 then
       out[#out+1] = style.accent
-      out[#out+1] = " \xe2\x86\x91" .. Git.ahead   -- ↑
+      out[#out+1] = " \xe2\x86\x91" .. Git.status.ahead   -- ↑
     end
-    if Git.behind > 0 then
+    if Git.status.behind > 0 then
       out[#out+1] = style.accent
-      out[#out+1] = " \xe2\x86\x93" .. Git.behind  -- ↓
+      out[#out+1] = " \xe2\x86\x93" .. Git.status.behind  -- ↓
     end
   end
 
   -- dirty: +staged *unstaged
-  if Git.repo_dirty then
-    local s = Git.staged   or 0
-    local u = Git.unstaged or 0
+  if Git.status.repo_dirty then
+    local s = Git.status.staged   or 0
+    local u = Git.status.unstaged or 0
     if s > 0 or u > 0 then
       out[#out+1] = style.dim
       out[#out+1] = " "
       if s > 0 then
-        out[#out+1] = style.accent
+        out[#out+1] = style.git_added or style.accent
         out[#out+1] = "+" .. s
       end
       if u > 0 then
-        out[#out+1] = style.dim
-        out[#out+1] = "*" .. u
+        out[#out+1] = style.git_modified or style.dim
+        out[#out+1] = " ~" .. u
       end
     else
       out[#out+1] = style.dim
-      out[#out+1] = " *"
+      out[#out+1] = " ·"
     end
   end
 
-  -- conflicts
-  if Git.conflicts and Git.conflicts > 0 then
-    out[#out+1] = style.titlebar_close_hover
+  if Git.status.conflicts and Git.status.conflicts > 0 then
+    out[#out+1] = style.git_conflict or style.titlebar_close_hover
     out[#out+1] = " !"
   end
 
-  -- special state: R=rebase, M=merge, C=cherry
-  if Git.state == "rebase" then
+  if Git.status.state == "rebase" then
+    out[#out+1] = style.git_modified or style.accent
+    out[#out+1] = " REBASE"
+  elseif Git.status.state == "merge" then
+    out[#out+1] = style.git_conflict or style.accent
+    out[#out+1] = " MERGE"
+  elseif Git.status.state == "cherry" then
     out[#out+1] = style.accent
-    out[#out+1] = " R"
-  elseif Git.state == "merge" then
+    out[#out+1] = " CHERRY"
+  elseif Git.status.state == "bisect" then
     out[#out+1] = style.accent
-    out[#out+1] = " M"
-  elseif Git.state == "cherry" then
-    out[#out+1] = style.accent
-    out[#out+1] = " C"
-  elseif Git.state == "bisect" then
-    out[#out+1] = style.accent
-    out[#out+1] = " B"
+    out[#out+1] = " BISECT"
   end
 
   out[#out+1] = style.dim
@@ -124,7 +96,6 @@ local function git_items(sep)
 end
 
 -- ── tab indicator ─────────────────────────────────────────────────────────────
--- Shows: 1 [2] 3
 local function tab_items(sep)
   local ok, tabM = pcall(require, "plugins.tab.manager")
   if not ok then return nil end
@@ -201,15 +172,55 @@ local function measure(font, _, text, _, x)
   return x + font:get_width(text)
 end
 
-function StatusView:draw_items(items, right_align, yoffset)
+-- xoffset shifts the left-aligned items (used to skip past the vim pill)
+function StatusView:draw_items(items, right_align, yoffset, xoffset)
   local x, y = self:get_content_offset()
   y = y + (yoffset or 0)
   if right_align then
     local w = draw_items(self, items, 0, 0, measure)
     draw_items(self, items, x + self.size.x - w - style.padding.x, y, common.draw_text)
   else
-    draw_items(self, items, x + style.padding.x, y, common.draw_text)
+    draw_items(self, items, x + style.padding.x + (xoffset or 0), y, common.draw_text)
   end
+end
+
+-- ── vim mode pill ─────────────────────────────────────────────────────────────
+-- Returns the total horizontal space consumed (so left items can be shifted).
+function StatusView:draw_vim_pill()
+  if not core.get_vim_mode_label then return 0 end
+  local label = core.get_vim_mode_label()
+  if not label then return 0 end
+
+  -- "[INSERT]" → "INSERT", "insert"
+  local mode_text = label:match("%[(.+)%]") or label
+  local mode_key  = mode_text:lower()
+
+  local info = VIM_PILL[mode_key] or VIM_PILL.normal
+  local bg   = style[info.bg]     or style.vim_normal_bg
+  local fg   = style.vim_pill_fg  or style.text
+
+  local ox, oy = self:get_content_offset()
+  local bar_h  = self.size.y
+  local font   = style.font
+
+  -- pill dimensions
+  local h_pad = style.padding.x
+  local tw    = font:get_width(mode_text)
+  local pw    = tw + h_pad * 2
+  local ph    = font:get_height() + math.floor(style.padding.y * 1.2)
+  local pill_y = oy + math.floor((bar_h - ph) / 2)
+  local pill_x = ox + math.floor(style.padding.x * 0.4)
+
+  -- draw background rect
+  if bg then
+    renderer.draw_rect(pill_x, pill_y, pw, ph, bg)
+  end
+
+  -- draw mode text centered in pill
+  common.draw_text(font, fg, mode_text, "center", pill_x, oy, pw, bar_h)
+
+  -- return total space taken (pill + a small gap)
+  return pw + math.floor(style.padding.x * 0.8)
 end
 
 -- ── item assembly ─────────────────────────────────────────────────────────────
@@ -234,11 +245,8 @@ function StatusView:get_items()
     local ro        = dv.doc.read_only
     local nlines    = #dv.doc.lines
 
-    -- LEFT:  MODE | branch ↑1 +2*3 ! R | [RO]  or  [m]
+    -- LEFT:  branch ↑1 ~3 | [RO] or [m]   (vim mode is drawn separately as pill)
     local left = {}
-
-    local mi = mode_items(dv, sep)
-    if mi then push_list(left, mi) end
 
     if gi then push_list(left, gi) end
 
@@ -246,7 +254,7 @@ function StatusView:get_items()
     if ro then
       push(left, style.dim, "[RO]", style.text, style.dim, sep, style.text)
     elseif dirty then
-      push(left, style.accent, "[m]", style.text, style.dim, sep, style.text)
+      push(left, style.git_modified or style.accent, "●", style.text, style.dim, sep, style.text)
     end
 
     -- RIGHT:  [1] 2 3 | 42:18 | 37% | lf
@@ -270,14 +278,12 @@ function StatusView:get_items()
       push(right, style.dim, sep, style.dim, pct_str, style.text)
     end
 
-    -- line endings
     local le = dv.doc.crlf and "crlf" or "lf"
     push(right, style.dim, sep, style.dim, le, style.text)
 
     return left, right
   end
 
-  -- ── non-editor view ─────────────────────────────────────────────────────────
   local left = {}
   if gi then push_list(left, gi) end
 
@@ -294,7 +300,11 @@ function StatusView:draw()
     self:draw_items(self.message, false, self.size.y)
   end
   local left, right = self:get_items()
-  self:draw_items(left)
+
+  -- Draw vim mode pill first; get its width to shift left items
+  local pill_w = self:draw_vim_pill()
+
+  self:draw_items(left,  false, nil, pill_w)
   self:draw_items(right, true)
 end
 
