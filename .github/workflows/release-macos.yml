@@ -55,6 +55,11 @@ jobs:
       - name: Generate PNG icons
         run: |
           mkdir -p scripts/icons
+          pip3 install --quiet cairosvg Pillow
+          python3 scripts/gen_icon.py \
+                      scripts/icon.svg \
+                      --out-inl src/icon.inl \
+                      --out-dir scripts/icons
           for sz in 16 22 24 32 48 64 128 256 512 1024; do
             rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
               -o "scripts/icons/cdin-${sz}.png"
