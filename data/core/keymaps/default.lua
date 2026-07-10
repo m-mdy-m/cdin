@@ -32,8 +32,6 @@ return {
     ["alt+9"] = "root:switch-to-tab-9",
 
     ["ctrl+f"] = "find-replace:find",
-    ["ctrl+r"] = "find-replace:replace",
-    ["shift+e"] = "find-replace:repeat-find",
     ["shift+r"] = "find-replace:previous-find",
     ["ctrl+shift+h"] = "find-replace:clear-highlight",
     ["ctrl+g"] = "doc:go-to-line",

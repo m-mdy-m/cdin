@@ -11,7 +11,7 @@ local function doc()
   return core.active_view.doc
 end
 
-local previous_finds
+local previous_finds = {}
 local last_doc
 local last_fn, last_text
 
@@ -128,6 +128,10 @@ command.add(has_selection, {
   end
 })
 
+local function has_active_find()
+  return core.active_view:is(DocView) and last_fn ~= nil
+end
+
 command.add("core.views.docview", {
   ["find-replace:find"] = function()
     local opt = { wrap = true, no_case = true }
@@ -143,34 +147,10 @@ command.add("core.views.docview", {
     end, opt)
   end,
 
-  ["find-replace:repeat-find"] = function()
-    if not last_fn then
-      core.error("No find to continue from")
-    else
-      local line, col = doc():get_selection()
-      local line1, col1, line2, col2 = last_fn(doc(), line, col, last_text)
-      if line1 then
-        push_previous_find(doc())
-        doc():set_selection(line2, col2, line1, col1)
-        core.active_view:scroll_to_line(line2, true)
-      end
-    end
-  end,
-
   ["find-replace:clear-highlight"] = function()
     M.clear_highlight(doc())
     last_fn  = nil
     last_text = nil
-  end,
-
-  ["find-replace:previous-find"] = function()
-    local sel = table.remove(previous_finds)
-    if not sel or doc() ~= last_doc then
-      core.error("No previous finds")
-      return
-    end
-    doc():set_selection(table.unpack(sel))
-    core.active_view:scroll_to_line(sel[3], true)
   end,
 
   ["find-replace:replace"] = function()
@@ -201,5 +181,27 @@ command.add("core.views.docview", {
       end)
       return res, n
     end)
+  end,
+})
+
+command.add(has_active_find, {
+  ["find-replace:repeat-find"] = function()
+    local line, col = doc():get_selection()
+    local line1, col1, line2, col2 = last_fn(doc(), line, col, last_text)
+    if line1 then
+      push_previous_find(doc())
+      doc():set_selection(line2, col2, line1, col1)
+      core.active_view:scroll_to_line(line2, true)
+    end
+  end,
+
+  ["find-replace:previous-find"] = function()
+    if doc() ~= last_doc or #previous_finds == 0 then
+      core.error("No previous finds")
+      return
+    end
+    local sel = table.remove(previous_finds)
+    doc():set_selection(table.unpack(sel))
+    core.active_view:scroll_to_line(sel[3], true)
   end,
 })

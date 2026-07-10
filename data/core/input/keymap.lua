@@ -64,11 +64,12 @@ function keymap.on_key_pressed(k)
     local stroke = key_to_stroke(k)
     local commands = keymap.map[stroke]
     if commands then
+      local performed = false
       for _, cmd in ipairs(commands) do
-        local performed = command.perform(cmd)
+        performed = command.perform(cmd)
         if performed then break end
       end
-      return true
+      return performed
     end
   end
   return false
