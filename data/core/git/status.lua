@@ -37,7 +37,7 @@ local _ignored_root = nil
 
 local function refresh_ignored(root, gc)
   local null = git.IS_WIN and "NUL" or "/dev/null"
-  local out  = run_capture(gc .. " ls-files --ignored --exclude-standard --directory 2>" .. null)
+  local out  = run_capture(gc .. " ls-files --ignored --others --exclude-standard --directory 2>" .. null)
   local t    = {}
   if out then
     for line in out:gmatch("[^\r\n]+") do
