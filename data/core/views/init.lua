@@ -1,7 +1,3 @@
--- core.views
--- All UI view classes. Each is a lazy-loaded module; require individually
--- or use this init to load the full set during core.init().
-
 local View        = require "core.views.view"
 local DocView     = require "core.views.docview"
 local CommandView = require "core.views.commandview"

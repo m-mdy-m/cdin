@@ -96,7 +96,6 @@ function TitleBar:draw_buttons()
     elseif name == "maximize" then
       local size = common.round(10 * SCALE)
       if maximized then
-        -- دو مربع روی هم (restore icon)
         local off = common.round(3 * SCALE)
         draw_square_outline(cx - size/2 + off, cy - size/2 - off, size, icon_color)
         renderer.draw_rect(cx - size/2 - 1, cy - size/2 - 1, size+2, size+2, style.background2)
