@@ -15,6 +15,28 @@ local previous_finds
 local last_doc
 local last_fn, last_text
 
+local highlight_map = setmetatable({}, { __mode = "k" })
+local M = {}
+
+function M.get_highlight(d)
+  return highlight_map[d]
+end
+
+function M.set_highlight(d, text, opt)
+  if text and text ~= "" then
+    highlight_map[d] = { text = text, opt = opt }
+  else
+    highlight_map[d] = nil
+  end
+  core.redraw = true
+end
+
+function M.clear_highlight(d)
+  highlight_map[d] = nil
+  core.redraw = true
+end
+core.findreplace = M
+
 
 local function push_previous_find(doc, sel)
   if last_doc ~= doc then
@@ -28,7 +50,7 @@ local function push_previous_find(doc, sel)
 end
 
 
-local function find(label, search_fn)
+local function find(label, search_fn, opt)
   local dv = core.active_view
   local sel = { dv.doc:get_selection() }
   local text = dv.doc:get_text(table.unpack(sel))
@@ -41,10 +63,13 @@ local function find(label, search_fn)
       last_fn, last_text = search_fn, text
       previous_finds = {}
       push_previous_find(dv.doc, sel)
+      -- keep highlight alive after closing find bar
+      M.set_highlight(dv.doc, text, opt)
     else
       core.error("Couldn't find %q", text)
       dv.doc:set_selection(table.unpack(sel))
       dv:scroll_to_make_visible(sel[1], sel[2])
+      M.clear_highlight(dv.doc)
     end
 
   end, function(text)
@@ -53,15 +78,20 @@ local function find(label, search_fn)
       dv.doc:set_selection(line2, col2, line1, col1)
       dv:scroll_to_line(line2, true)
       found = true
+      -- live highlight while typing
+      M.set_highlight(dv.doc, text, opt)
     else
       dv.doc:set_selection(table.unpack(sel))
       found = false
+      if text == "" then M.clear_highlight(dv.doc) end
     end
 
   end, function(explicit)
     if explicit then
+      -- user pressed Escape: clear highlight and restore position
       dv.doc:set_selection(table.unpack(sel))
       dv:scroll_to_make_visible(sel[1], sel[2])
+      M.clear_highlight(dv.doc)
     end
   end)
 end
@@ -100,17 +130,17 @@ command.add(has_selection, {
 
 command.add("core.views.docview", {
   ["find-replace:find"] = function()
+    local opt = { wrap = true, no_case = true }
     find("Find Text", function(doc, line, col, text)
-      local opt = { wrap = true, no_case = true }
       return search.find(doc, line, col, text, opt)
-    end)
+    end, opt)
   end,
 
   ["find-replace:find-pattern"] = function()
+    local opt = { wrap = true, no_case = true, pattern = true }
     find("Find Text Pattern", function(doc, line, col, text)
-      local opt = { wrap = true, no_case = true, pattern = true }
       return search.find(doc, line, col, text, opt)
-    end)
+    end, opt)
   end,
 
   ["find-replace:repeat-find"] = function()
@@ -125,6 +155,12 @@ command.add("core.views.docview", {
         core.active_view:scroll_to_line(line2, true)
       end
     end
+  end,
+
+  ["find-replace:clear-highlight"] = function()
+    M.clear_highlight(doc())
+    last_fn  = nil
+    last_text = nil
   end,
 
   ["find-replace:previous-find"] = function()

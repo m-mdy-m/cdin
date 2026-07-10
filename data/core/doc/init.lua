@@ -6,6 +6,10 @@ local common      = require "core.utils.common"
 
 local Doc = Object:extend()
 
+Doc._before_save = {}   -- called before writing to disk: fn(doc)
+Doc._after_save  = {}   -- called after  writing to disk: fn(doc)
+Doc._after_load  = {}   -- called after  reading from disk: fn(doc)
+
 local function split_lines(text)
   local res = {}
   for line in (text .. "\n"):gmatch("(.-)\n") do
@@ -101,10 +105,12 @@ function Doc:load(filename)
   if #self.lines == 0 then self.lines[1] = "\n" end
   fp:close()
   self:reset_syntax()
+  for _, fn in ipairs(Doc._after_load) do fn(self) end
 end
 
 function Doc:save(filename)
   filename = filename or assert(self.filename, "no filename set to default to")
+  for _, fn in ipairs(Doc._before_save) do fn(self) end
   local fp = assert(io.open(filename, "wb"))
   for _, line in ipairs(self.lines) do
     fp:write(self.crlf and line:gsub("\n", "\r\n") or line)
@@ -113,6 +119,7 @@ function Doc:save(filename)
   self.filename = filename
   self:reset_syntax()
   self:clean()
+  for _, fn in ipairs(Doc._after_save) do fn(self) end
 end
 
 function Doc:get_name()     return self.filename or "unsaved" end
