@@ -191,40 +191,31 @@ local function is_file_readonly(abs_path)
   return _ro_cache[abs_path]
 end
 
+-- Returns (label, color) or (nil, nil).
+-- Label is now a short single char (no brackets) for right-side display.
 local function git_badge(item, is_ro)
-  if is_ro then return "[RO]", style.dim end
+  if is_ro then return "RO", style.dim end
 
   if not Git.root then return nil end
   local status = Git.get_status(item)
   if not status then return nil end
 
-  local label
-  if     status == "M" then label = "M"
-  elseif status == "A" then label = "A"
-  elseif status == "D" then label = "D"
-  elseif status == "R" then label = "R"
-  elseif status == "C" then label = "C"
-  elseif status == "U" then label = "U"
-  elseif status == "?" then label = "??"
-  else                       label = status
-  end
-
-  return "[" .. label .. "]", Git.get_color(status)
+  local label = Git.ICON[status] or status
+  return label, Git.get_color(status)
 end
 
-local ELLIPSIS = "...."
+-- Truncate name to fit within max_w (no badge text mixed in — badge is separate now)
+local ELLIPSIS = "…"
 
-local function truncate_name(font, name, max_w, badge_text)
-  local full_text = badge_text and (name .. badge_text) or name
-
-  if font:get_width(full_text) <= max_w then
+local function truncate_name(font, name, max_w)
+  if font:get_width(name) <= max_w then
     return name
   end
 
   local stem, ext = name:match("^(.+)(%.[^%.]+)$")
   if not stem then stem = name; ext = "" end
 
-  local suffix = ELLIPSIS .. (badge_text or "") .. ext
+  local suffix   = ELLIPSIS .. ext
   local suffix_w = font:get_width(suffix)
   local avail_w  = max_w - suffix_w
 
@@ -288,18 +279,31 @@ function TreeView:draw()
 
     local is_ro = item.type == "file" and is_file_readonly(item.abs_filename)
     local badge, bcolor = git_badge(item, is_ro)
-    local name_area_w = w - (row_x - x) - style.padding.x
 
-    local display_name
+    -- ── right-aligned badge ────────────────────────────────────────────────────
+    -- The badge floats to the right edge; the filename is clipped before it.
+    local badge_w    = 0
+    local badge_x    = 0
+    local badge_marg = style.padding.x
+
     if badge then
-      display_name = truncate_name(style.font, item.name, name_area_w, badge)
-    else
-      display_name = truncate_name(style.font, item.name, name_area_w, nil)
+      badge_w = style.font:get_width(badge)
+      badge_x = x + w - style.padding.x - badge_w
     end
-    local name_w = common.draw_text(style.font, color, display_name, nil, row_x, y, 0, h) - row_x
-    local after_name_x = row_x + name_w
+
+    -- Name draws in whatever space remains before the badge
+    local name_max_w = w - (row_x - x) - style.padding.x
+                       - (badge and (badge_w + badge_marg) or 0)
+    local display_name = truncate_name(style.font, item.name, name_max_w)
+    common.draw_text(style.font, color, display_name, nil, row_x, y, 0, h)
+
+    -- Draw the badge on the right with a very subtle dim background dot
     if badge then
-      common.draw_text(style.font, bcolor, badge, nil, after_name_x, y, 0, h)
+      -- Tiny bg swatch so the badge letter pops against the tree background
+      local bg_pad = 3
+      local bg_col = { 0, 0, 0, 50 }
+      renderer.draw_rect(badge_x - bg_pad, y + 2, badge_w + bg_pad * 2, h - 4, bg_col)
+      common.draw_text(style.font, bcolor, badge, nil, badge_x, y, 0, h)
     end
   end
 end
@@ -333,6 +337,7 @@ local function context_dir()
   if item.type == "dir" then return item.filename end
   return item.filename:match("^(.*)[\\/][^\\/]+$") or "."
 end
+
 command.add(nil, {
   ["treeview:toggle"] = function()
     view.visible = not view.visible
@@ -439,15 +444,6 @@ command.add(nil, {
   end,
 })
 
-keymap.add {
-  ["f2"]            = {"treeview:toggle", "treeview:focus-and-refresh"},
-  ["f3"]            = {"treeview:focus"},
-  ["f4"]            = {"find-replace:repeat-find"},
-  ["ctrl+\\"]       = "treeview:toggle",
-  ["ctrl+shift+e"]  = "treeview:focus",
-  ["ctrl+shift+n"]  = "treeview:new-file",
-  ["ctrl+shift+alt+n"] = "treeview:new-directory",
-}
 
 command.add(function() return core.active_view == view end, {
   ["treeview:rename-key"]     = function() command.perform("treeview:rename") end,
@@ -459,15 +455,3 @@ command.add(function() return core.active_view == view end, {
   ["treeview:collapse-or-parent"]    = function() view:collapse_or_go_to_parent() end,
   ["treeview:expand-or-child"]       = function() view:expand_or_go_to_first_child() end,
 })
-
-keymap.add {
-  ["up"]            = "treeview:select-previous",
-  ["down"]          = "treeview:select-next",
-  ["return"]        = "treeview:open-cursor-item",
-  ["keypad enter"]  = "treeview:open-cursor-item",
-  ["left"]          = "treeview:collapse-or-parent",
-  ["right"]         = "treeview:expand-or-child",
-  ["ctrl+r"]        = "treeview:rename-key",
-  ["delete"]        = "treeview:delete-key",
-  ["ctrl+shift+r"]  = "treeview:refresh-key",
-}
