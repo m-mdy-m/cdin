@@ -2,7 +2,7 @@ local core    = require "core"
 local command = require "core.input.command"
 local common  = require "core.utils.common"
 local Doc     = require "core.doc"
-local fs      = require "plugins.vim.fs"
+local fs      = require "core.fs"
 local shell   = require "plugins.vim.shell"
 
 local M = {}
@@ -46,13 +46,7 @@ local function tokenize(s)
 end
 
 
-local function active_docview()
-  local DocView = require "core.views.docview"
-  local CommandView = require "core.views.commandview"
-  local v = core.active_view
-  if v and v:is(DocView) and not v:is(CommandView) then return v end
-  return nil
-end
+
 
 local function save_all()
   for _, doc in ipairs(core.docs) do
@@ -175,6 +169,25 @@ local function show_help()
   core.root_view:open_doc(doc)
 end
 
+
+-- Shared window-command map: used by both :wincmd here and Ctrl+W in vimode
+M.WMAP = {
+  h = "window:focus-left",  j = "window:focus-down",
+  k = "window:focus-up",    l = "window:focus-right",
+  w = "window:focus-next",  W = "window:focus-prev",
+  p = "window:focus-prev-window",
+  t = "window:focus-first", b = "window:focus-last",
+  s = "window:split",       v = "window:vsplit",
+  c = "window:close",       o = "window:only",
+  n = "window:new",         N = "window:vnew",
+  ["+"] = "window:increase-height",
+  ["-"] = "window:decrease-height",
+  [">"] = "window:increase-width",
+  ["<"] = "window:decrease-width",
+  ["="] = "window:equalize",
+  ["|"] = "window:maximize-width",
+  ["_"] = "window:maximize-height",
+}
 
 function M.submit(raw)
   local text = raw:gsub("^%s+",""):gsub("%s+$","")
@@ -325,44 +338,39 @@ function M.submit(raw)
 
   -- ── Tab commands ────────────────────────────────────────
   elseif cmd == "tabnew" or cmd == "tabe" or cmd == "tabedit" then
-    local ok, tabM = pcall(require, "plugins.tab.manager")
-    if ok then
-      tabM.create()
-      if arg1 then open_file(arg1, false) end
-    end
+    command.perform("tab:new")
+    if arg1 then open_file(arg1, false) end
 
   elseif cmd == "tabclose" or cmd == "tabc" then
-    local ok, tabM = pcall(require, "plugins.tab.manager")
-    if ok then tabM.close(tabM.active_id, false) end
+    command.perform("tab:close")
 
   elseif cmd == "tabonly" or cmd == "tabo" then
-    local ok, tabM = pcall(require, "plugins.tab.manager")
-    if ok then tabM.close_others() end
+    command.perform("tab:close-others")
 
   elseif cmd == "tabnext" or cmd == "tabn" then
-    local ok, tabM = pcall(require, "plugins.tab.manager")
-    if ok then
-      if arg1 then tabM.go_to(tonumber(arg1) or 1)
-      else tabM.next() end
+    if arg1 then
+      local ok, tabM = pcall(require, "plugins.tab.manager")
+      if ok then tabM.go_to(tonumber(arg1) or 1) end
+    else
+      command.perform("tab:next")
     end
 
   elseif cmd == "tabprevious" or cmd == "tabp" or cmd == "tabNext" then
-    local ok, tabM = pcall(require, "plugins.tab.manager")
-    if ok then tabM.prev() end
+    command.perform("tab:prev")
 
   elseif cmd == "tabfirst" or cmd == "tabr" or cmd == "tabrew" then
-    local ok, tabM = pcall(require, "plugins.tab.manager")
-    if ok then tabM.first() end
+    command.perform("tab:first")
 
   elseif cmd == "tablast" then
-    local ok, tabM = pcall(require, "plugins.tab.manager")
-    if ok then tabM.last() end
+    command.perform("tab:last")
 
   elseif cmd == "tabmove" or cmd == "tabm" then
-    local ok, tabM = pcall(require, "plugins.tab.manager")
-    if ok and arg1 then
-      local n = tonumber(arg1)
-      if n then tabM.move(tabM.active_id, n + 1) end
+    if arg1 then
+      local ok, tabM = pcall(require, "plugins.tab.manager")
+      if ok then
+        local n = tonumber(arg1)
+        if n then tabM.move(tabM.active_id, n + 1) end
+      end
     end
 
   -- ── Window commands ───────────────────────────────────────────────────────
@@ -387,24 +395,7 @@ function M.submit(raw)
   -- :wincmd {char}
   elseif cmd == "wincmd" or cmd == "winc" then
     local char = arg1 or ""
-    local wmap = {
-      h = "window:focus-left",  j = "window:focus-down",
-      k = "window:focus-up",    l = "window:focus-right",
-      w = "window:focus-next",  W = "window:focus-prev",
-      p = "window:focus-prev-window",
-      t = "window:focus-first", b = "window:focus-last",
-      s = "window:split",       v = "window:vsplit",
-      c = "window:close",       o = "window:only",
-      n = "window:new",         N = "window:vnew",
-      ["+"] = "window:increase-height",
-      ["-"] = "window:decrease-height",
-      [">"] = "window:increase-width",
-      ["<"] = "window:decrease-width",
-      ["="] = "window:equalize",
-      ["|"] = "window:maximize-width",
-      ["_"] = "window:maximize-height",
-    }
-    local wcmd = wmap[char]
+    local wcmd = M.WMAP[char]
     if wcmd then command.perform(wcmd)
     else core.error("ex: unknown :wincmd %q", char) end
 
@@ -412,7 +403,7 @@ function M.submit(raw)
     show_help()
 
   elseif text:match("^%d+$") then
-    local view = active_docview()
+    local view = core.active_docview()
     if view then
       local line = tonumber(text)
       view.doc:set_selection(line, 1)

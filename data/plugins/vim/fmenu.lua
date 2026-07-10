@@ -1,10 +1,146 @@
 local core    = require "core"
 local command = require "core.input.command"
 local common  = require "core.utils.common"
-local fs      = require "plugins.vim.fs"
-local engine  = require "plugins.vim.menu_engine"
+local fs      = require "core.fs"
+local git     = require "core.git"
 
 local M = {}
+
+local function build_items(entries)
+  local items = {}
+
+  local function add_entry(e, is_last_in_block)
+    local branch = is_last_in_block and "└─ " or "├─ "
+    local icon   = e.icon  or ""
+    local label  = e.label or ""
+    local key    = e.key   or "?"
+
+    local text = branch
+               .. "[" .. key .. "] "
+               .. (icon ~= "" and (icon .. " ") or "")
+               .. label
+
+    items[#items + 1] = {
+      text    = text,
+      info    = e.info,
+      _key    = key,
+      _action = e.action,
+    }
+  end
+
+  for i, item in ipairs(entries) do
+    if item.header then
+      items[#items + 1] = {
+        text      = "  ── " .. item.header .. " ──",
+        info      = "",
+        _key      = nil,
+        _action   = nil,
+        _is_header = true,
+      }
+      local sub = item.entries or {}
+      for j, e in ipairs(sub) do
+        add_entry(e, j == #sub)
+      end
+    else
+      add_entry(item, i == #entries)
+    end
+  end
+
+  return items
+end
+
+local function collect_all_entries(entries)
+  local flat = {}
+  for _, item in ipairs(entries) do
+    if item.header then
+      for _, e in ipairs(item.entries or {}) do
+        flat[#flat + 1] = e
+      end
+    else
+      flat[#flat + 1] = item
+    end
+  end
+  return flat
+end
+
+local function build_key_map(entries)
+  local map  = {}
+  local flat = collect_all_entries(entries)
+  for _, e in ipairs(flat) do
+    if e.key and e.action then
+      map[e.key] = e.action
+    end
+  end
+  return map
+end
+
+local function make_suggest(items, key_map)
+  return function(text)
+    local t = text:match("^%s*(.-)%s*$")
+    if t == "" then return items end
+    local first = t:sub(1, 1)
+    if key_map[first] then
+      for _, item in ipairs(items) do
+        if item._key == first then return { item } end
+      end
+    end
+    local lo      = t:lower()
+    local results = {}
+    for _, item in ipairs(items) do
+      if item._action then
+        if item.text:lower():find(lo, 1, true)
+        or (item.info and item.info:lower():find(lo, 1, true)) then
+          results[#results + 1] = item
+        end
+      end
+    end
+    return results
+  end
+end
+
+local function make_submit(items, key_map)
+  return function(text, item)
+    if item and item._action then
+      item._action()
+      return
+    end
+    local t = text:match("^%s*(.-)%s*$")
+    if t ~= "" then
+      local act = key_map[t:sub(1, 1)]
+      if act then act(); return end
+      local lo = t:lower()
+      for _, it in ipairs(items) do
+        if it._action and it.text:lower():find(lo, 1, true) then
+          it._action()
+          return
+        end
+      end
+    end
+    core.error("vim-menu: unknown option '%s'", text)
+  end
+end
+
+local function open_menu(opts)
+  local title   = opts.title   or "Menu"
+  local context = opts.context or ""
+  local entries = opts.entries or {}
+
+  local items   = build_items(entries)
+  local key_map = build_key_map(entries)
+
+  local label = title
+  if context ~= "" then
+    label = label .. "  " .. context .. "  (key / ↑↓ / Tab)"
+  else
+    label = label .. "  (key / ↑↓ / Tab)"
+  end
+
+  core.command_view:enter(
+    label,
+    make_submit(items, key_map),
+    make_suggest(items, key_map)
+  )
+end
 
 local function refresh_tree()
   command.perform("treeview:refresh")
@@ -156,19 +292,19 @@ local function build_entries(dir, file, is_dir)
       entries = {
         { key="s", icon="", label="Status",
           info = "git status",
-          action = function() sh().run_in_buffer("git status") end },
+          action = function() sh().run_in_buffer(git.commands.status) end },
 
         { key="l", icon="", label="Log",
           info = "--oneline -20",
-          action = function() sh().run_in_buffer("git log --oneline -20") end },
+          action = function() sh().run_in_buffer(git.commands.log) end },
 
         { key="d", icon="", label="Diff",
           info = "git diff",
-          action = function() sh().run_in_buffer("git diff") end },
+          action = function() sh().run_in_buffer(git.commands.diff) end },
 
         { key="a", icon="", label="Add All",
           info = "git add .",
-          action = function() sh().run_in_buffer("git add .") end },
+          action = function() sh().run_in_buffer(git.commands.add_all) end },
 
         { key="c", icon="", label="Commit",
           info = "interactive",
@@ -247,7 +383,7 @@ function M.open()
                or  "."
   local ctx_icon = is_dir and "" or ""
 
-  engine.open({
+  open_menu({
     title   = "Menu",
     context = ctx_icon .. " " .. ctx_name,
     entries = build_entries(dir, file, is_dir),
@@ -466,10 +602,10 @@ command.add(nil, {
   end,
 
   -- git shortcuts
-  ["vim-fmenu:git-status"]  = function() sh().run_in_buffer("git status") end,
-  ["vim-fmenu:git-log"]     = function() sh().run_in_buffer("git log --oneline -20") end,
-  ["vim-fmenu:git-add-all"] = function() sh().run_in_buffer("git add .") end,
-  ["vim-fmenu:git-diff"]    = function() sh().run_in_buffer("git diff") end,
+  ["vim-fmenu:git-status"]  = function() sh().run_in_buffer(git.commands.status) end,
+  ["vim-fmenu:git-log"]     = function() sh().run_in_buffer(git.commands.log) end,
+  ["vim-fmenu:git-add-all"] = function() sh().run_in_buffer(git.commands.add_all) end,
+  ["vim-fmenu:git-diff"]    = function() sh().run_in_buffer(git.commands.diff) end,
 })
 
 return M

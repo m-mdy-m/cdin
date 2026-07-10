@@ -25,11 +25,7 @@ local pending     = nil
 local count_buf   = ""
 local history_pos = nil
 
-local function active_docview()
-  local v = core.active_view
-  if v and v:is(DocView) and not v:is(CommandView) then return v end
-  return nil
-end
+
 
 local function get_mode(view)
   return view.vim_mode or MODE_NORMAL
@@ -122,7 +118,7 @@ local function handle_key(k)
     open_ex_commandline()
     return true
   end
-  local view = active_docview()
+  local view = core.active_docview()
 
   if k == "escape" then
     if view then
@@ -187,26 +183,7 @@ local function handle_key(k)
   if pending and pending.key == "ctrl_w" then
     pending   = nil
     count_buf = ""
-    local wmap = {
-      h="window:focus-left", j="window:focus-down",
-      k="window:focus-up",   l="window:focus-right",
-      w="window:focus-next", p="window:focus-prev-window",
-      t="window:focus-first",b="window:focus-last",
-      s="window:split",      v="window:vsplit",
-      c="window:close",      o="window:only",
-      n="window:new",
-    }
-    local wmap_shift = {
-      W="window:focus-prev",
-    }
-    local wmap_sym = {
-      ["+"]=  "window:increase-height",
-      ["-"]=  "window:decrease-height",
-      [">"]=  "window:increase-width",
-      ["<"]=  "window:decrease-width",
-      ["="]=  "window:equalize",
-    }
-    local wcmd = wmap[k] or wmap_shift[k] or wmap_sym[k]
+    local wcmd = ex.WMAP[k]
     if wcmd then command.perform(wcmd) end
     return true
   end

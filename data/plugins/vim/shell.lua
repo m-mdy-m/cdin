@@ -2,6 +2,7 @@ local core    = require "core"
 local command = require "core.input.command"
 local Doc     = require "core.doc"
 local config  = require "core.config"
+local git     = require "core.git"
 
 local IS_WIN = PATHSEP == "\\"
 
@@ -107,9 +108,9 @@ end
 -- ── Commands ──────────────────────────────────────────────────────────────────
 command.add(nil, {
   ["vim-shell:run-custom"]     = function() M.prompt_and_run() end,
-  ["vim-shell:git-status"]     = function() M.run_in_buffer("git status") end,
-  ["vim-shell:git-log"]        = function() M.run_in_buffer("git log --oneline -20") end,
-  ["vim-shell:git-diff"]       = function() M.run_in_buffer("git diff") end,
+  ["vim-shell:git-status"]     = function() M.run_in_buffer(git.commands.status) end,
+  ["vim-shell:git-log"]        = function() M.run_in_buffer(git.commands.log) end,
+  ["vim-shell:git-diff"]       = function() M.run_in_buffer(git.commands.diff) end,
   ["vim-shell:make"]           = function() M.run_in_buffer("make") end,
   ["vim-shell:make-test"]      = function() M.run_in_buffer("make test") end,
   -- Open a new interactive terminal window (non-blocking)
