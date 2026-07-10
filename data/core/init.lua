@@ -5,7 +5,7 @@ local config = require "core.config"
 local style  = require "core.style"
 
 local core = {}
-require("core.core.logging").install(core)
+require("core.logging").install(core)
 core.temp_filename = temp.filename
 function core.quit(force)
   if force then
@@ -28,10 +28,9 @@ function core.quit(force)
   core.quit(true)
 end
 
-require("core.core.lifecycle").install(core)
+require("core.lifecycle").install(core)
 
-local state    = require "core.core.state"
-local eventbus = require "core.core.eventbus"
+local state    = require "core.state"
 
 function core.init()
   local command     = require "core.input.command"
@@ -52,7 +51,6 @@ function core.init()
   end
   system.chdir(project_dir)
   state.setup_state(core)
-  eventbus.install(core)
   function core.set_active_view(view)
     assert(view, "Tried to set active view to nil")
     if view ~= core.active_view then
@@ -67,9 +65,9 @@ function core.init()
     core.threads[key] = { cr = coroutine.create(fn), wake = 0 }
   end
   state.setup_views(core, RootView, CommandView, StatusView, TitleBar)
-  require("core.core.docs").install(core, Doc)
-  require("core.core.events").install(core, keymap)
-  require("core.core.loop").install(core)
+  require("core.docs").install(core, Doc)
+  require("core.events").install(core, keymap)
+  require("core.loop").install(core)
   local project = require "core.project"
   core.add_thread(function() project.thread(core) end)
   command.add_defaults()
@@ -83,6 +81,17 @@ function core.init()
   if got_plugin_error or got_user_error or got_project_error then
     command.perform("core:open-log")
   end
+end
+
+
+-- Returns the active DocView, or nil if a non-doc view (e.g. CommandView) is focused.
+-- Shared helper used by vim plugins instead of being redefined in each.
+function core.active_docview()
+  local DocView     = require "core.views.docview"
+  local CommandView = require "core.views.commandview"
+  local v = core.active_view
+  if v and v:is(DocView) and not v:is(CommandView) then return v end
+  return nil
 end
 
 return core
