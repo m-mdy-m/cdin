@@ -55,7 +55,7 @@ jobs:
 
       - name: Generate icon assets
         run: |
-          pip3 install --quiet Pillow
+          pip3 install --quiet --break-system-packages Pillow
           mkdir -p scripts/icons
           for sz in 16 22 24 32 48 64 128 256 512 1024; do
             rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
