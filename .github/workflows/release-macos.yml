@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-macos-${{ github.ref }}
+  group: release-macos-${{ github.ref }}-${{ github.workflow_ref }}
   cancel-in-progress: true
 
 env:
