@@ -40,11 +40,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ── Cache: MSYS2 packages ────────────────────────────────────────────
+      # msys2/setup-msys2 has built-in cache support via cache: true
       - name: Set up MSYS2
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
+          cache: true
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-make
@@ -58,13 +61,24 @@ jobs:
             zip
             curl
 
+      # ── Cache: SDL3 zip download + extracted headers/libs ────────────────
+      - name: Cache SDL3 (MinGW)
+        uses: actions/cache@v4
+        id: cache-sdl3
+        with:
+          path: /tmp/sdl3
+          key: sdl3-mingw-${{ env.SDL_VERSION }}
+
       - name: Install SDL3 (MinGW pre-built)
         run: |
-          SDL_ZIP="SDL3-devel-${SDL_VERSION}-mingw.zip"
-          SDL_URL="https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/${SDL_ZIP}"
-
-          curl -fsSL -o "${SDL_ZIP}" "${SDL_URL}"
-          unzip -q "${SDL_ZIP}" -d /tmp/sdl3
+          if [[ ! -d "/tmp/sdl3/SDL3-${SDL_VERSION}" ]]; then
+            SDL_ZIP="SDL3-devel-${SDL_VERSION}-mingw.zip"
+            SDL_URL="https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/${SDL_ZIP}"
+            curl -fsSL -o "${SDL_ZIP}" "${SDL_URL}"
+            unzip -q "${SDL_ZIP}" -d /tmp/sdl3
+          else
+            echo "SDL3 ${SDL_VERSION} restored from cache"
+          fi
 
           SDL_ROOT="/tmp/sdl3/SDL3-${SDL_VERSION}/x86_64-w64-mingw32"
           cp -r "${SDL_ROOT}/include/"* /mingw64/include/

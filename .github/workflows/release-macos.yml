@@ -34,12 +34,35 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ── Cache: Homebrew packages ─────────────────────────────────────────
+      - name: Cache Homebrew packages
+        uses: actions/cache@v4
+        id: cache-brew
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/Cellar/lua
+            /opt/homebrew/Cellar/librsvg
+            /opt/homebrew/Cellar/pkg-config
+            /opt/homebrew/Cellar/create-dmg
+          key: brew-macos-15-cdin-v1
+          restore-keys: brew-macos-15-cdin-
+
       - name: Install build dependencies (Homebrew)
         run: |
           brew update --quiet
           brew install lua librsvg pkg-config create-dmg
 
+      # ── Cache: SDL3 built from source ────────────────────────────────────
+      - name: Cache SDL3
+        uses: actions/cache@v4
+        id: cache-sdl3
+        with:
+          path: /usr/local
+          key: sdl3-${{ env.SDL_VERSION }}-macos-15
+
       - name: Build & install SDL3
+        if: steps.cache-sdl3.outputs.cache-hit != 'true'
         run: |
           curl -fsSL -o SDL3-src.tar.gz \
             "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/SDL3-${SDL_VERSION}.tar.gz"
@@ -51,7 +74,16 @@ jobs:
             -DSDL_TEST=OFF  -DSDL_TESTS=OFF
           sudo cmake --build /tmp/sdl3-build --parallel $(sysctl -n hw.logicalcpu)
           sudo cmake --install /tmp/sdl3-build
-          pkg-config --modversion sdl3 && echo "SDL3 OK"
+
+      - name: Verify SDL3
+        run: pkg-config --modversion sdl3 && echo "SDL3 OK"
+
+      # ── Cache: pip (Pillow) ──────────────────────────────────────────────
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-pillow-macos-15
 
       - name: Generate icon assets
         run: |
@@ -110,8 +142,8 @@ jobs:
           else
             VER="dev-$(git rev-parse --short HEAD)"
           fi
-          echo "version=${VER}"               >> "$GITHUB_OUTPUT"
-          echo "plist_version=${VER#v}"       >> "$GITHUB_OUTPUT"
+          echo "version=${VER}"         >> "$GITHUB_OUTPUT"
+          echo "plist_version=${VER#v}" >> "$GITHUB_OUTPUT"
 
       - name: Create .app bundle
         run: |

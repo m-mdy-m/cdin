@@ -34,6 +34,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ── Cache: apt packages ──────────────────────────────────────────────
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        id: cache-apt
+        with:
+          path: /var/cache/apt/archives
+          key: apt-ubuntu-22.04-cdin-v1
+          restore-keys: apt-ubuntu-22.04-cdin-
+
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
@@ -49,7 +58,16 @@ jobs:
             libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
             wget ca-certificates
 
+      # ── Cache: SDL3 built from source ────────────────────────────────────
+      - name: Cache SDL3
+        uses: actions/cache@v4
+        id: cache-sdl3
+        with:
+          path: /usr/local
+          key: sdl3-${{ env.SDL_VERSION }}-ubuntu-22.04
+
       - name: Build & install SDL3
+        if: steps.cache-sdl3.outputs.cache-hit != 'true'
         run: |
           wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/SDL3-${SDL_VERSION}.tar.gz"
           tar xf "SDL3-${SDL_VERSION}.tar.gz"
@@ -61,8 +79,16 @@ jobs:
             -DSDL_TEST=OFF  -DSDL_TESTS=OFF
           sudo cmake --build /tmp/sdl3-build --parallel $(nproc)
           sudo cmake --install /tmp/sdl3-build
-          sudo ldconfig
-          echo "SDL3 installed: $(pkg-config --modversion sdl3)"
+
+      - name: Register SDL3 (ldconfig)
+        run: sudo ldconfig && pkg-config --modversion sdl3
+
+      # ── Cache: pip (Pillow) ──────────────────────────────────────────────
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-pillow-${{ runner.os }}
 
       - name: Generate icon assets
         run: |
