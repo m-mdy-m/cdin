@@ -2,7 +2,8 @@ local M = {}
 
 local function item_hash(item)
   local modified = item.modified or 0
-  return item.filename .. "\0" .. (item.type or "") .. "\0" .. tostring(modified)
+  local ignored  = item.git_ignored and "1" or "0"
+  return item.filename .. "\0" .. (item.type or "") .. "\0" .. tostring(modified) .. "\0" .. ignored
 end
 
 local _store = {}
@@ -42,6 +43,7 @@ function M.get(item)
     name         = item.filename:match("[^\\/]+$"),
     depth        = get_depth(item.filename),
     type         = item.type,
+    git_ignored  = item.git_ignored or false,
     skip         = nil,
     _hash        = h,
   }

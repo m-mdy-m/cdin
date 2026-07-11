@@ -241,7 +241,7 @@ function TreeView:draw()
   local active_filename = doc and system.absolute_path(doc.filename or "")
 
   for item, x, y, w, h in self:each_item() do
-    local color = style.text
+    local color = item.git_ignored and style.dim or style.text
 
     if item.abs_filename == active_filename then color = style.accent end
 

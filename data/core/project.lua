@@ -40,12 +40,13 @@ local function scan_shallow(path)
     if not common.match_pattern(file, config.ignore_files) then
       local full = (path ~= "." and path .. PATHSEP or "") .. file
       local a    = abs_path(full)
-      if not is_git_ignored(a) then
-        local info = system.get_file_info(full)
-        if info and info.size < size_limit then
-          info.filename = full
-          table.insert(info.type == "dir" and dirs or files, info)
+      local info = system.get_file_info(full)
+      if info and info.size < size_limit then
+        info.filename = full
+        if is_git_ignored(a) then
+          info.git_ignored = true
         end
+        table.insert(info.type == "dir" and dirs or files, info)
       end
     end
   end
@@ -132,6 +133,23 @@ function M.thread(core)
 
     if cycle % 5 == 1 then
       pcall(refresh_git_ignored)
+      -- Update git_ignored flag on already-scanned items so treeview reflects
+      -- changes (e.g. when a file is added to/removed from .gitignore)
+      if core.project_files then
+        local changed = false
+        for _, item in ipairs(core.project_files) do
+          local a       = abs_path(item.filename)
+          local ignored = is_git_ignored(a)
+          if (item.git_ignored or false) ~= ignored then
+            item.git_ignored = ignored
+            changed = true
+          end
+        end
+        if changed then
+          bump_revision(core)
+          core.redraw = true
+        end
+      end
     end
 
     if #_prio_q > 0 then
