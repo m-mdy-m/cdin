@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch: {}
+  workflow_call:
+    outputs:
+      artifact-name:
+        description: "Name of the uploaded artifact"
+        value: ${{ jobs.build-windows.outputs.artifact-name }}
 
 permissions:
   contents: read
@@ -23,6 +28,8 @@ jobs:
   build-windows:
     name: Build (Windows x86_64 / MinGW)
     runs-on: windows-latest
+    outputs:
+      artifact-name: cdin-windows-x86_64
     defaults:
       run:
         shell: msys2 {0}
@@ -49,6 +56,7 @@ jobs:
             make
             unzip
             zip
+            curl
 
       - name: Install SDL3 (MinGW pre-built)
         run: |
@@ -79,23 +87,23 @@ jobs:
           sed -i "s/SDL_VER_PLACEHOLDER/${SDL_VERSION}/" /mingw64/lib/pkgconfig/sdl3.pc
           pkg-config --modversion sdl3 && echo "SDL3 pkg-config OK"
 
-      - name: Generate PNG icons with rsvg-convert
+      - name: Generate icon assets
         run: |
           mkdir -p scripts/icons
           for sz in 16 22 24 32 48 64 128 256 512 1024; do
             rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
               -o "scripts/icons/cdin-${sz}.png"
-            echo "  cdin-${sz}.png: OK"
           done
-          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' | wc -l)
-          echo "Generated ${PNG_COUNT} PNG icons"
-
-      - name: Generate src/icon.inl from pre-rendered PNGs
-        run: |
           python3 scripts/gen_icon.py \
-                      scripts/icon.svg \
-                      --out-inl src/icon.inl \
-                      --out-dir scripts/icons
+                        scripts/icon.svg \
+            --out-inl        src/icon.inl \
+            --out-dir scripts/icons
+          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
+          if [[ "$PNG_COUNT" -eq 0 ]]; then
+            echo "::error::Icon PNGs were not generated"
+            exit 1
+          fi
+          echo "Generated ${PNG_COUNT} PNG icons"
 
       - name: Build cdin.ico
         run: |
@@ -153,31 +161,17 @@ jobs:
             exit 1
           fi
           file "$EXE"
-          echo "Binary: $EXE  ($(du -sh "$EXE" | cut -f1))"
           echo "EXE_PATH=$EXE" >> "$GITHUB_ENV"
 
-      - name: Collect SDL3.dll and Lua DLL
+      - name: Collect runtime DLLs
         run: |
           OUT_DIR="$(dirname "$EXE_PATH")"
-
           SDL_DLL="$(find /mingw64/bin -name 'SDL3.dll' | head -1)"
-          if [[ -n "$SDL_DLL" ]]; then
-            cp "$SDL_DLL" "$OUT_DIR/"
-            echo "Copied $(basename "$SDL_DLL")"
-          else
-            echo "::warning::SDL3.dll not found in MinGW bin"
-          fi
-
           LUA_DLL="$(find /mingw64/bin -name 'lua*.dll' | sort | head -1)"
-          if [[ -n "$LUA_DLL" ]]; then
-            cp "$LUA_DLL" "$OUT_DIR/"
-            echo "Copied $(basename "$LUA_DLL")"
-          else
-            echo "::warning::Lua DLL not found in MinGW bin"
-          fi
-
-          echo "Contents of $OUT_DIR:"
-          ls -lh "$OUT_DIR"
+          [[ -n "$SDL_DLL" ]] && { cp "$SDL_DLL" "$OUT_DIR/"; echo "SDL3.dll: OK"; } \
+                              || echo "::warning::SDL3.dll not found"
+          [[ -n "$LUA_DLL" ]] && { cp "$LUA_DLL" "$OUT_DIR/"; echo "lua dll: OK"; } \
+                              || echo "::warning::Lua DLL not found"
 
       - name: Determine version
         id: version
@@ -196,15 +190,13 @@ jobs:
           PKG_DIR="dist/${PKG_NAME}"
 
           mkdir -p "${PKG_DIR}"
-
-          cp "${EXE_PATH}"                          "${PKG_DIR}/cdin.exe"
-          cp "$(dirname "${EXE_PATH}")"/*.dll       "${PKG_DIR}/" 2>/dev/null || true
+          cp "${EXE_PATH}" "${PKG_DIR}/cdin.exe"
+          cp "$(dirname "${EXE_PATH}")"/*.dll "${PKG_DIR}/" 2>/dev/null || true
 
           [[ -d data ]] && cp -r data "${PKG_DIR}/"
 
-          [[ -f scripts/cdin.ico ]] && cp scripts/cdin.ico "${PKG_DIR}/" && echo "Bundled cdin.ico"
+          [[ -f scripts/cdin.ico ]] && cp scripts/cdin.ico "${PKG_DIR}/"
 
-          # Bundle the Python installer (replaces the old install.ps1)
           cp scripts/cdin.py "${PKG_DIR}/"
           cp -r scripts/_cdin "${PKG_DIR}/"
 
@@ -214,14 +206,12 @@ jobs:
 
           cd dist
           zip -r "${PKG_NAME}.zip" "${PKG_NAME}/" > /dev/null
-          echo "PKG_PATH=dist/${PKG_NAME}.zip" >> "$GITHUB_ENV"
           echo "Zip: $(du -sh ${PKG_NAME}.zip | cut -f1)"
 
-      - name: Upload build artifact
-        if: always()
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cdin-windows-x86_64
           path: dist/*.zip
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14

@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch: {}
+  workflow_call:
+    outputs:
+      artifact-name:
+        description: "Name of the uploaded artifact"
+        value: ${{ jobs.build-linux.outputs.artifact-name }}
 
 permissions:
   contents: read
@@ -20,6 +25,8 @@ jobs:
   build-linux:
     name: Build (Linux x86_64)
     runs-on: ubuntu-22.04
+    outputs:
+      artifact-name: cdin-linux-x86_64
 
     steps:
       - name: Checkout repository
@@ -32,6 +39,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             gcc make pkg-config python3 python3-pip \
+            librsvg2-bin \
             liblua5.4-dev \
             cmake ninja-build \
             libwayland-dev libxkbcommon-dev \
@@ -41,7 +49,7 @@ jobs:
             libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
             wget ca-certificates
 
-      - name: Install SDL3 from source
+      - name: Build & install SDL3
         run: |
           wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/SDL3-${SDL_VERSION}.tar.gz"
           tar xf "SDL3-${SDL_VERSION}.tar.gz"
@@ -58,7 +66,6 @@ jobs:
 
       - name: Generate icon assets
         run: |
-          sudo apt-get install -y --no-install-recommends librsvg2-bin
           pip install --quiet Pillow
           mkdir -p scripts/icons
           for sz in 16 22 24 32 48 64 128 256 512 1024; do
@@ -71,18 +78,14 @@ jobs:
             --out-dir scripts/icons
           PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
           if [[ "$PNG_COUNT" -eq 0 ]]; then
-            echo "::error::Icon PNGs were not generated – check rsvg-convert install"
+            echo "::error::Icon PNGs were not generated"
             exit 1
           fi
           echo "Generated ${PNG_COUNT} PNG icons:"
           ls -lh scripts/icons/
 
       - name: Build release binary
-        run: |
-          make -j$(nproc) \
-            BUILD=release \
-            PLATFORM=linux \
-            SDL_VERSION=3
+        run: make -j$(nproc) BUILD=release PLATFORM=linux SDL_VERSION=3
 
       - name: Verify binary
         run: |
@@ -116,22 +119,12 @@ jobs:
           cp "${BIN_PATH}" "${PKG_DIR}/bin/cdin"
           chmod 755 "${PKG_DIR}/bin/cdin"
 
-          if [[ -d data ]]; then
-            mkdir -p "${PKG_DIR}/bin/data"
-            cp -a data/. "${PKG_DIR}/bin/data/"
-          fi
+          [[ -d data ]] && cp -a data/. "${PKG_DIR}/bin/data/"
 
           mkdir -p "${PKG_DIR}/scripts"
-          if [[ -d scripts/icons ]]; then
-            cp -r scripts/icons "${PKG_DIR}/scripts/"
-            echo "Bundled $(find scripts/icons -name '*.png' | wc -l) PNG icons"
-          else
-            echo "::error::scripts/icons/ not found – icon generation must have failed"
-            exit 1
-          fi
+          cp -r scripts/icons "${PKG_DIR}/scripts/"
           [[ -f scripts/icon.svg ]] && cp scripts/icon.svg "${PKG_DIR}/scripts/"
 
-          # Bundle the Python installer (replaces the old install.sh)
           cp scripts/cdin.py "${PKG_DIR}/"
           cp -r scripts/_cdin "${PKG_DIR}/"
 
@@ -140,15 +133,12 @@ jobs:
           done
 
           tar -C dist -czf "dist/${PKG_NAME}.tar.gz" "${PKG_NAME}"
-          echo "PKG_PATH=dist/${PKG_NAME}.tar.gz" >> "$GITHUB_ENV"
-          echo "PKG_NAME=${PKG_NAME}"             >> "$GITHUB_ENV"
           echo "Tarball: $(du -sh dist/${PKG_NAME}.tar.gz | cut -f1)"
 
-      - name: Upload build artifact
-        if: always()
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cdin-linux-x86_64
           path: dist/*.tar.gz
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
