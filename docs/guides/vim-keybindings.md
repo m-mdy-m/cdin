@@ -2,9 +2,9 @@
 
 cdin's modal editing is implemented by the `plugins/vim` plugin family:
 `vimode.lua` (modes and normal-mode keys), `ex.lua` (the `:` command line),
-`fmenu.lua` (the `m` action menu) and `shell.lua` (shell commands in
-buffers). It is a deliberate subset of vim — the everyday keys, not an
-emulation layer. Counts, registers, marks and text objects are not
+`fmenu.lua` (the `m` action menu), and `shell.lua` (shell commands in
+scratch buffers). It's a deliberate subset of vim — the everyday keys, not
+a full emulation layer. Counts, registers, marks, and text objects are not
 implemented yet.
 
 Vim mode is on by default. To turn it off, set
@@ -15,7 +15,7 @@ modifiers are passed straight through to the normal keymap.
 ## Modes
 
 Every buffer starts in NORMAL mode. The status bar (bottom left) shows the
-current mode: `[NORMAL]`, `[INSERT]` or `[VISUAL]`.
+current mode: `[NORMAL]`, `[INSERT]`, or `[VISUAL]`.
 
 - `i` — insert at the caret
 - `a` — insert after the caret
@@ -24,7 +24,7 @@ current mode: `[NORMAL]`, `[INSERT]` or `[VISUAL]`.
 - `o` — open a line below and insert
 - `O` — open a line above and insert
 - `v` — visual mode (extends the selection with motions)
-- `Esc` — back to NORMAL mode; in NORMAL mode it clears the selection
+- `Esc` — back to NORMAL mode; in NORMAL mode it also clears the selection
 
 ## Motions (NORMAL and VISUAL)
 
@@ -34,8 +34,8 @@ current mode: `[NORMAL]`, `[INSERT]` or `[VISUAL]`.
 | `w` / `e` | next word end |
 | `b` | previous word start |
 | `0` | start of line |
-| `$` (`shift+4`) | end of line |
-| `^` (`shift+6`) | start of line |
+| `$` (`Shift+4`) | end of line |
+| `^` (`Shift+6`) | first non-blank character of line |
 | `gg` | start of file |
 | `G` | end of file |
 
@@ -46,10 +46,10 @@ caret.
 
 | Key | Action |
 |---|---|
-| `x` | delete the character under the caret |
+| `x` | delete character under the caret |
 | `dd` | delete the current line |
 | `yy` | yank (copy) the current line |
-| `cc` | change the current line (delete it and enter INSERT) |
+| `cc` | change the current line (delete and enter INSERT) |
 | `D` | delete to end of line |
 | `J` | join the next line onto this one |
 | `p` | paste |
@@ -71,7 +71,7 @@ In VISUAL mode:
 
 | Key | Action |
 |---|---|
-| `/` | open find |
+| `/` | open find bar |
 | `n` / `N` | next / previous match |
 | `*` | search for the word under the caret |
 
@@ -85,19 +85,19 @@ In VISUAL mode:
 
 ## Ex commands
 
-Press `:` to open the command line. `Up`/`Down` browse the command history
-(the last 100 commands). Tab-completion suggests command names and, for
-file commands, paths. `:help` opens this reference in a buffer.
+Press `:` to open the command line. `Up`/`Down` browse command history.
+Tab-completion suggests command names and, for file commands, paths.
+`:help` opens this reference in a buffer.
 
 File commands:
 
 ```
 :w              save current file
-:w!             force-save (same as :w in cdin)
+:w!             force-save
 :wa             save all open files
 :q              close current view (fails if unsaved)
 :q!             force-close without saving
-:qa  :qall      quit (fails if there are unsaved files)
+:qa  :qall      quit (fails if unsaved files exist)
 :qa! :qall!     force quit
 :wq  :x         save then close
 :wqa :xa        save all then quit
@@ -106,7 +106,7 @@ File commands:
 Open and create:
 
 ```
-:e <path>       open a file (error if it doesn't exist)
+:e <path>       open a file
 :edit <path>    alias for :e
 :new <path>     create a file and open it
 ```
@@ -139,17 +139,17 @@ Shell:
                 examples:  :!ls -la    :!git status    :!npm test
 ```
 
-Shell output buffers are ordinary documents — you can search them, copy from
-them, and close them with `:q`.
+Shell output buffers are ordinary documents — you can search them, copy
+from them, and close them with `:q`.
 
 ## The action menu (`m`)
 
-Press `m` to open a single-key action menu. It is context-aware: when the
-tree view has a selected item the actions apply to it, otherwise to the file
-in the active view. Sections and keys:
+Press `m` in NORMAL mode to open a single-key action menu. It's
+context-aware: when the tree view has a selected item the actions apply to
+it, otherwise to the file in the active view.
 
 **Files** — `n` new file, `N` new directory, `o` open file, `r` rename,
-`y` copy, `v` move, `x` delete (with a y/n confirmation).
+`y` copy, `v` move, `x` delete (with y/n confirmation).
 
 **Navigate** — `f` change directory, `u` up one level, `.` reveal in tree,
 `R` refresh tree, `/` project search.
@@ -163,13 +163,13 @@ Output opens in a scratch buffer.
 **Shell** — `!` run a custom command, `w` pwd, `e` env, `i` network info.
 
 The same actions are available as named commands (`vim-fmenu:*`,
-`vim-shell:*`) in the command palette, so you can bind them to keys directly.
+`vim-shell:*`) in the command palette, so you can bind them directly.
 
-## Known limitations in this beta
+## Known limitations
 
-- No counts (`5j`), registers, marks, macros or text objects.
+- No counts (`5j`), registers, marks, macros, or text objects.
 - `r` is redo, not replace-char.
-- `d`/`y`/`c` only work as line operations (`dd`, `yy`, `cc`) or on a visual
-  selection — `dw`, `ciw` and similar operator+motion combinations are not
-  implemented.
+- `d`/`y`/`c` only work as line operations (`dd`, `yy`, `cc`) or on a
+  visual selection — `dw`, `ciw`, and similar operator+motion combinations
+  are not implemented.
 - Yank/paste use the system clipboard; there are no separate registers.

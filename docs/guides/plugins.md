@@ -2,84 +2,129 @@
 
 ## Overview
 
-Plugins in cdin are Lua files placed in `data/plugins/`. They're loaded automatically at startup, after the core but before `data/user/init.lua`. If a plugin fails to load, the error is logged and startup continues — a broken plugin won't crash the editor.
+Plugins in cdin are Lua files in `data/plugins/`. They're loaded
+automatically at startup, after the core but before `data/user/init.lua`.
+A broken plugin logs the error and startup continues — one bad plugin won't
+crash the editor.
 
-Plugins are organized into subdirectories. The loader scans recursively, so you can put related files in a folder and structure them however makes sense.
-
-There's no package manager. To install a plugin, copy the file (or directory) into `data/plugins/`.
+Plugins are organized into subdirectories and the loader scans recursively.
+There's no package manager. To install a third-party plugin, copy its file
+(or directory) into `data/plugins/`.
 
 ---
 
 ## Bundled plugins
 
-### treeview (`data/plugins/core/treeview.lua`)
+### treeview (`data/plugins/treeview/`)
 
-A file tree panel showing the project directory. Displays files and directories, and optionally marks changed files using git status.
+A file tree panel showing the project directory. Optionally shows git status
+markers next to changed files.
 
 **Config options:**
 
 ```lua
-config.treeview_size = 200 * SCALE   -- panel width in pixels
+config.treeview_size = 200 * SCALE   -- panel width
 config.show_hidden_files = true       -- show dot files
 config.treeview_git_enabled = true    -- show git status markers
 config.treeview_git_update_rate = 2   -- seconds between git polls
 ```
 
-Git status markers appear next to file names: `A` for added, `M` for modified, `D` for deleted, `?` for untracked.
+Git markers: `A` added, `M` modified, `D` deleted, `?` untracked.
 
-**Keybinding:**
+**Keybindings:** `Ctrl+\` or `F2` toggle the panel. `Ctrl+Shift+E` or `F3`
+focus it. When focused, arrow keys navigate, `Return` opens the selected
+item, `Delete` deletes it, `Ctrl+R` renames it, `Ctrl+Shift+N` creates a
+new file, `Ctrl+Shift+Alt+N` creates a new directory.
 
-`Ctrl+Shift+H` — toggle visibility of hidden files (bound in `data/user/init.lua`; you can rebind it).
+### tab (`data/plugins/tab/`)
 
-**Commands:**
+Manages tabs with a status bar indicator showing the current position
+(`[2/5]`), jump-to-tab shortcuts, and tab reordering.
 
-| Command | Description |
-|---------|-------------|
-| `treeview:toggle-hidden` | Toggle hidden file visibility |
-| `treeview:focus-and-refresh` | Focus the tree and rescan |
-| `treeview:refresh` | Rescan without changing focus |
+**Keybindings:**
+
+| Binding | Action |
+|---------|--------|
+| `Ctrl+T` | New tab |
+| `Ctrl+Shift+W` | Close current tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
+| `Ctrl+1` – `Ctrl+9` | Jump to tab by number |
+| `Ctrl+Shift+PageUp/PageDown` | Move tab left/right |
+
+The tab indicator in the status bar is only shown when more than one tab
+is open.
+
+### window (`data/plugins/window/`)
+
+Richer split management than the core root commands. Handles focus movement,
+pane resizing, and shortcuts for common layouts.
+
+**Keybindings:**
+
+| Binding | Action |
+|---------|--------|
+| `Ctrl+\` | Vertical split (side by side) |
+| `Ctrl+Shift+\` | Horizontal split (stacked) |
+| `Alt+H/J/K/L` | Focus left/down/up/right |
+| `Alt+W` / `Alt+P` | Cycle focus forward/backward |
+| `Alt+C` | Close the focused pane |
+| `Alt+O` | Close all other panes |
+| `Alt+Arrow` | Resize the focused pane |
+| `Alt+=` | Equalize pane sizes |
 
 ### autocomplete (`data/plugins/core/autocomplete.lua`)
 
-Suggests completions as you type, drawn from words in all open documents.
-
-**Config options:**
+Suggests completions as you type, pulled from words in all open documents.
 
 ```lua
 config.autocomplete_max_suggestions = 6
 ```
 
-Press `Tab` while a suggestion list is open to accept the highlighted suggestion.
+`Tab` accepts the highlighted suggestion when the popup is open.
 
 ### projectsearch (`data/plugins/core/projectsearch.lua`)
 
-Searches for a string across all files in the project. Results open in a dedicated view showing file names, line numbers, and matching lines.
+Searches for a string across all files in the project. Results open in a
+dedicated view showing file names, line numbers, and matches.
 
-**Command:** `project-search:find` — there's no default keybinding; add one in your user config if you use this often:
+**Keybindings:** `Ctrl+Shift+F` opens the search. `F5` re-runs the last
+search. In the results view, `Up`/`Down` navigate and `Return` opens the
+selected file at the matching line.
+
+### session (`data/plugins/core/session.lua`)
+
+Tracks recently opened files and directories, and optionally restores the
+last session on startup.
 
 ```lua
-keymap.add {
-  ["ctrl+shift+f"] = "project-search:find",
-}
+config.session_restore = false      -- reopen last session on startup
+config.session_save_on_quit = true  -- save session automatically on quit
+config.session_max_recent = 10      -- how many recent files/dirs to remember
 ```
+
+**Keybindings:** `Ctrl+Shift+R` opens recent files, `Ctrl+Shift+D` opens
+recent directories, `Ctrl+Alt+S` saves the session manually.
 
 ### autoreload (`data/plugins/core/autoreload.lua`)
 
-Polls open documents for external changes. When a file is modified by another process, the editor offers to reload it.
+Polls open documents for external changes and offers to reload them when
+a file is modified by another process. No configuration needed.
 
 ### trimwhitespace (`data/plugins/core/trimwhitespace.lua`)
 
-Strips trailing whitespace from every line whenever a document is saved. Runs automatically on every save with no configuration needed.
+Strips trailing whitespace from every line whenever a document is saved.
+Runs automatically — no configuration or keybinding needed.
 
 ### Vim mode (`data/plugins/vim/`)
 
-The vim mode is itself a plugin. See [Vim Keybindings](vim-keybindings.md) for full documentation.
+The vim mode is a plugin. See [Vim Keybindings](vim-keybindings.md) for
+full documentation.
 
 ---
 
 ## Language support
 
-Syntax highlighting is provided by language plugins in `data/plugins/languages/`:
+Syntax highlighting lives in `data/plugins/languages/`:
 
 | File | Language |
 |------|----------|
@@ -90,13 +135,15 @@ Syntax highlighting is provided by language plugins in `data/plugins/languages/`
 | `python.lua` | Python |
 | `ts.lua` | TypeScript |
 
-Language plugins register a syntax definition via `syntax.add()`. They match files by extension pattern and define token types and patterns for the tokenizer.
+Language plugins register a syntax definition via `syntax.add()`. They match
+files by extension pattern and define token types and patterns for the
+tokenizer.
 
 ---
 
 ## Writing a plugin
 
-A minimal plugin looks like this:
+A minimal plugin:
 
 ```lua
 -- data/plugins/my_plugin.lua
@@ -115,14 +162,15 @@ keymap.add {
 }
 ```
 
-Drop this file into `data/plugins/` and restart. The command appears in the command palette and the keybinding works immediately.
+Drop this in `data/plugins/` and restart. The command appears in the command
+palette and the keybinding works immediately.
 
-### `command.add(predicate, commands)`
+### command.add(predicate, commands)
 
-`predicate` controls when the command is active. Pass `nil` for commands that are always available. Pass a class (like `"core.views.docview"`) to make the command active only when a view of that type is focused.
+`predicate` controls when the command is active. `nil` means always. Pass a
+class name to make it active only when a view of that type is focused:
 
 ```lua
--- only active when a document is open
 command.add("core.views.docview", {
   ["my-plugin:do-something"] = function()
     local doc = core.active_view.doc
@@ -131,13 +179,14 @@ command.add("core.views.docview", {
 })
 ```
 
-### `core.log(fmt, ...)`
+### core.log(fmt, ...)
 
-Writes a message to the status bar and the log view. Uses `string.format` conventions.
+Writes a message to the status bar and the log view. Uses `string.format`
+conventions.
 
-### `core.add_thread(fn)`
+### core.add_thread(fn)
 
-Registers a coroutine. Use `coroutine.yield(seconds)` inside it to sleep between iterations. Useful for background polling.
+Registers a coroutine for background work. Yield a number to sleep:
 
 ```lua
 core.add_thread(function()
@@ -165,17 +214,37 @@ syntax.add {
   name = "My Language",
   files = "%.mylang$",
   patterns = {
-    { pattern = "#.*",         type = "comment"  },
-    { pattern = { '"', '"' },  type = "string"   },
-    { pattern = "%d+",         type = "number"   },
-    { pattern = "[%a_][%w_]*", type = "symbol"   },
+    { pattern = "#.*",         type = "comment" },
+    { pattern = { '"', '"' },  type = "string"  },
+    { pattern = "%d+",         type = "number"  },
+    { pattern = "[%a_][%w_]*", type = "symbol"  },
   },
   symbols = {
-    ["if"]    = "keyword",
-    ["else"]  = "keyword",
-    ["end"]   = "keyword",
+    ["if"]   = "keyword",
+    ["else"] = "keyword",
+    ["end"]  = "keyword",
   },
 }
 ```
 
-Token types that map to style colors: `"normal"`, `"symbol"`, `"comment"`, `"keyword"`, `"keyword2"`, `"number"`, `"literal"`, `"string"`, `"operator"`, `"function"`.
+Token types that map to style colors: `"normal"`, `"symbol"`, `"comment"`,
+`"keyword"`, `"keyword2"`, `"number"`, `"literal"`, `"string"`,
+`"operator"`, `"function"`.
+
+### Wrapping existing behavior
+
+There's no event/hook system. Extend behavior by wrapping functions:
+
+```lua
+local Doc = require "core.doc"
+local _save = Doc.save
+
+function Doc:save(...)
+  -- do something before saving
+  _save(self, ...)
+  -- do something after saving
+end
+```
+
+This is how trimwhitespace hooks into saves, and how the vim plugin
+intercepts keystrokes.
