@@ -50,9 +50,10 @@ jobs:
 
       - name: Install build dependencies (Homebrew)
         run: |
-          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
           brew update --quiet
           brew install lua librsvg pkg-config create-dmg
+          brew link --force --overwrite librsvg lua pkg-config create-dmg || true
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
 
       # ── Cache: SDL3 built from source ────────────────────────────────────
       - name: Cache SDL3
@@ -92,8 +93,9 @@ jobs:
         run: |
           pip3 install --quiet --break-system-packages Pillow
           mkdir -p scripts/icons
+          RSVG="$(command -v rsvg-convert || echo /opt/homebrew/bin/rsvg-convert)"
           for sz in 16 22 24 32 48 64 128 256 512 1024; do
-            rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
+            "$RSVG" -w "$sz" -h "$sz" scripts/icon.svg \
               -o "scripts/icons/cdin-${sz}.png"
           done
           python3 scripts/gen_icon.py \
