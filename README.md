@@ -1,7 +1,8 @@
 # cdin
 
-A lightweight, keyboard-centric text editor with Vim-style modal editing.
-
+A small, fast, keyboard-driven text editor. Vim-style modal editing is on by
+default. The core is C; everything else is Lua you can read and change.
+![cdin](assets/CDIN-HOME.png)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0--beta.5-orange.svg)](CHANGELOG.md)
 
@@ -9,54 +10,100 @@ A lightweight, keyboard-centric text editor with Vim-style modal editing.
 
 ## What it is
 
-cdin started as a fork of [lite](https://github.com/rxi/lite) and has since grown into its own project. The core idea is simple: an editor that's fast to start, easy to read through, and straightforward to extend. The design borrows from lite-xl in a few places, especially around UX decisions, but cdin makes its own choices about what to keep and what to cut.
+cdin started as a fork of [lite](https://github.com/rxi/lite). The fork kept
+what made lite interesting — a tiny C runtime, a Lua editor on top, and a
+clean boundary between the two — and built from there.
 
-Vim-style modal editing is built in and on by default. Every buffer opens in Normal mode. If you've used Vim, the basics transfer directly. If you haven't, the status bar always shows which mode you're in.
+The C layer handles the window, the renderer, and the SDL bindings. It doesn't
+know anything about documents, keybindings, or plugins. The Lua layer, loaded
+at startup from `data/`, is the actual editor. This means you can change how
+almost anything works — commands, keybindings, UI behavior, syntax highlighting
+— without recompiling. The binary is just a host.
 
-The editor is written in C and Lua. The C layer handles the window, renderer, and SDL bindings. Everything else — the editor behavior, plugins, keybindings, configuration — is Lua, loaded at runtime from `data/`. This means you can change most of how the editor works without recompiling anything.
+![cdin editor screenshot](assets/CDIN-CODE.png)
+
+Vim-style modal editing is built in and on by default. Every buffer opens in
+Normal mode. The status bar always shows `[NORMAL]`, `[INSERT]`, or `[VISUAL]`
+so you always know where you are. If you've used vim the basics transfer
+directly. If you haven't, [Vim Keybindings](docs/guides/vim-keybindings.md)
+has everything you need.
 
 ## Philosophy
 
-Simplicity and hackability come first. The codebase is meant to be readable: you should be able to find the edit loop, understand what it does, and change it without needing to know the whole project. Performance matters — startup time, memory use, and rendering smoothness are all considered. Extensibility should feel natural, not bolted on. And the editor should be something you can carry with you: small, self-contained, not dependent on a runtime ecosystem.
+The codebase is meant to be readable. You should be able to find the edit loop,
+understand what it does, and change it. Functions are short. Modules are small.
+There are no clever abstractions that require you to know the whole project
+before touching any of it.
+
+Features belong in plugins. The core does the minimum that every editor needs.
+Anything optional is in `data/plugins/` where it can be read, copied, modified,
+or replaced without touching the core. This is how lite-xl approaches things
+too, and it works.
+
+Startup time and memory use matter. The renderer only redraws what actually
+changed. Background tasks are coroutines, not threads. An idle cdin draws
+almost nothing and uses almost no CPU.
 
 ## Features
 
-- Modal editing (Normal / Insert / Visual) with Vim keybindings
+- Modal editing (Normal / Insert / Visual) built on the vim model
 - Ex command line (`:w`, `:q`, `:e`, `:!cmd`, and more)
-- File manager menu (`m` in Normal mode)
-- Project tree view with optional git status markers
+- Project tree with optional git status markers (A / M / D / ?)
+- Multi-tab management and split panes
+- Project-wide search
+- Fuzzy file finder (`Ctrl+P`)
+- Session restore
+- Syntax highlighting for C, Lua, Markdown, Python, JavaScript, TypeScript
 - Trailing whitespace trimmed on save
 - Relative or absolute line numbers
-- Configurable via a single Lua file
-
-## Documentation
-
-- [Over View](docs/architecture/overview.md)
-- [Getting Started](docs/guides/getting-started.md.md)
-- [Building from Source](docs/guides/building.md)
-- [Configuration](docs/guides/configuration.md)
-- [Vim Keybindings](docs/guides/vim-keybindings.md)
-- [Plugins](docs/guides/plugins.md)
-- [Command Reference](docs/guides/commands.md)
-- [Contributing](CONTRIBUTING.md)
+- Three bundled themes; write your own in a single Lua file
+- Configurable through `data/user/init.lua` — plain Lua, no DSL
 
 ## Quick start
 
 ```sh
-# clone
 git clone https://github.com/m-mdy-m/cdin.git
 cd cdin
 
 # build (requires gcc, make, SDL3, Lua 5.4)
 make
 
-# run
-./build/linux-release/cdin
-# or open a file/directory
-./build/linux-release/cdin path/to/project
+# run in the current directory
+./build/linux-release/cdin .
+
+# or open a file
+./build/linux-release/cdin path/to/file.c
 ```
 
-See [Building from Source](docs/guides/building.md) for dependency details and platform-specific instructions.
+See [Building from Source](docs/guides/building.md) for dependencies and
+platform-specific notes. There's also a Python script if you prefer not to
+use make directly:
+
+```sh
+python3 scripts/cdin.py build-install
+```
+
+## Documentation
+
+- [Getting Started](docs/guides/getting-started.md) — the screen, modal
+  editing, essential keys, where things live
+- [Building from Source](docs/guides/building.md) — dependencies, make
+  targets, install, Windows
+- [Configuration](docs/guides/configuration.md) — every config option,
+  keybindings, themes, project-local config
+- [Vim Keybindings](docs/guides/vim-keybindings.md) — modes, motions,
+  operators, ex commands, the `m` action menu
+- [Themes](docs/guides/themes.md) — bundled themes, writing your own,
+  the full style table
+- [Plugins](docs/guides/plugins.md) — bundled plugins, writing your own,
+  the plugin API
+- [Command Reference](docs/guides/commands.md) — every command and its
+  default binding
+- [Troubleshooting](docs/guides/troubleshooting.md) — common problems
+  and how to fix them
+- [Architecture Overview](docs/architecture/overview.md) — the C/Lua
+  split, the frame loop, how commands and plugins work
+- [Contributing](CONTRIBUTING.md)
 
 ## Scripts
 
@@ -73,10 +120,11 @@ python3 scripts/cdin.py [command]
 | `build-install` | Build then install in one step |
 | `update` | Download the latest release from GitHub |
 | `uninstall` | Remove an installation |
-| `gen-icon` | Regenerate `.ico` / `.icns` / `.png` from `scripts/icon.svg` |
-| `gen-logo` | Regenerate `data/core/rootview/logo.lua` from `scripts/icon.svg` |
+| `gen-icon` | Regenerate icons from `scripts/icon.svg` |
+| `gen-logo` | Regenerate `data/core/rootview/logo.lua` |
 
-Run with no arguments for an interactive wizard. See [`scripts/README.md`](scripts/README.md) for full documentation.
+Run with no arguments for an interactive wizard. Full documentation is in
+[`scripts/README.md`](scripts/README.md).
 
 ## License
 
