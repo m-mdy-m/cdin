@@ -1,7 +1,29 @@
 from __future__ import annotations
 
+import io
 import os
 import sys
+
+def _ensure_utf8() -> None:
+    for attr in ("stdout", "stderr"):
+        stream = getattr(sys, attr)
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+        elif hasattr(stream, "buffer"):
+            try:
+                setattr(sys, attr,
+                        io.TextIOWrapper(stream.buffer,
+                                         encoding="utf-8",
+                                         errors="replace",
+                                         line_buffering=stream.line_buffering))
+            except Exception:
+                pass
+
+_ensure_utf8()
+
 
 def _supports_color() -> bool:
     if os.environ.get("NO_COLOR"):

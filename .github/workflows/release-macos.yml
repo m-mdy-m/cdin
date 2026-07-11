@@ -55,24 +55,16 @@ jobs:
       - name: Generate PNG icons
         run: |
           mkdir -p scripts/icons
-          pip3 install --quiet cairosvg Pillow
-          python3 scripts/gen_icon.py \
-                      scripts/icon.svg \
-                      --out-inl src/icon.inl \
-                      --out-dir scripts/icons
+          pip3 install --quiet Pillow
           for sz in 16 22 24 32 48 64 128 256 512 1024; do
             rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
               -o "scripts/icons/cdin-${sz}.png"
           done
-          echo "Generated $(find scripts/icons -name '*.png' | wc -l | tr -d ' ') PNGs"
-
-      - name: Generate src/icon.inl
-        run: |
           python3 scripts/gen_icon.py \
-                        scripts/icon.svg \
-            --out-inl        src/icon.inl \
-            --out-dir scripts/icons
-          echo "icon.inl: $(wc -l < src/icon.inl) lines"
+                      scripts/icon.svg \
+                      --out-inl src/icon.inl \
+                      --out-dir scripts/icons
+          echo "Generated $(find scripts/icons -name 'cdin-*.png' | wc -l | tr -d ' ') PNGs"
 
       - name: Build .icns icon
         run: |

@@ -58,14 +58,20 @@ jobs:
 
       - name: Generate icon assets
         run: |
-          pip install --quiet cairosvg Pillow
+          sudo apt-get install -y --no-install-recommends librsvg2-bin
+          pip install --quiet Pillow
+          mkdir -p scripts/icons
+          for sz in 16 22 24 32 48 64 128 256 512 1024; do
+            rsvg-convert -w "$sz" -h "$sz" scripts/icon.svg \
+              -o "scripts/icons/cdin-${sz}.png"
+          done
           python3 scripts/gen_icon.py \
                         scripts/icon.svg \
             --out-inl        src/icon.inl \
             --out-dir scripts/icons
-          PNG_COUNT=$(find scripts/icons -name 'icon-*.png' 2>/dev/null | wc -l)
+          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' 2>/dev/null | wc -l)
           if [[ "$PNG_COUNT" -eq 0 ]]; then
-            echo "::error::Icon PNGs were not generated – check cairosvg/Pillow install"
+            echo "::error::Icon PNGs were not generated – check rsvg-convert install"
             exit 1
           fi
           echo "Generated ${PNG_COUNT} PNG icons:"

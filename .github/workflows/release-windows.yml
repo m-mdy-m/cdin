@@ -17,6 +17,7 @@ env:
   SDL_VERSION: "3.2.14"
   MSYSTEM: MINGW64
   PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
 
 jobs:
   build-windows:

@@ -39,9 +39,32 @@ def _require(pkg: str, pip_name: Optional[str] = None):
     except ImportError:
         die(f"Missing dependency: pip install {pip_name or pkg}")
 
-def rasterize_png(svg_path: Path, size: int) -> bytes:
-    cairosvg = _require("cairosvg")
-    return cairosvg.svg2png(url=str(svg_path), output_width=size, output_height=size)
+def rasterize_png(svg_path: Path, size: int, out_dir: Optional[Path] = None) -> bytes:
+    # 1. Pre-rendered PNG on disk (rsvg-convert step in CI)
+    if out_dir is not None:
+        for stem in (f"cdin-{size}", f"icon-{size}x{size}"):
+            candidate = out_dir / f"{stem}.png"
+            if candidate.is_file():
+                return candidate.read_bytes()
+
+    # 2. rsvg-convert available on PATH
+    try:
+        result = subprocess.run(
+            ["rsvg-convert", "-w", str(size), "-h", str(size), str(svg_path)],
+            capture_output=True,
+        )
+        if result.returncode == 0 and result.stdout:
+            return result.stdout
+    except FileNotFoundError:
+        pass  # rsvg-convert not installed – fall through
+
+    # 3. cairosvg (Python package)
+    try:
+        import cairosvg as _cairosvg  # type: ignore
+        return _cairosvg.svg2png(url=str(svg_path),
+                                 output_width=size, output_height=size)
+    except ImportError:
+        die("Missing dependency: pip install cairosvg")
 
 
 def open_image(png_bytes: bytes):
@@ -149,7 +172,7 @@ def cmd_gen_icon(args: argparse.Namespace) -> None:
 
     images: dict = {}
     for size in ICON_SIZES:
-        png   = rasterize_png(svg, size)
+        png   = rasterize_png(svg, size, out_dir)
         img   = open_image(png)
         images[size] = img
         dest  = out_dir / f"icon-{size}x{size}.png"
