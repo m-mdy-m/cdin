@@ -91,46 +91,15 @@ jobs:
 
       - name: Generate icon assets
         run: |
-          pip3 install --quiet --break-system-packages Pillow
-          mkdir -p scripts/icons
-          RSVG="$(command -v rsvg-convert || echo /opt/homebrew/bin/rsvg-convert)"
-          for sz in 16 22 24 32 48 64 128 256 512 1024; do
-            "$RSVG" -w "$sz" -h "$sz" scripts/icon.svg \
-              -o "scripts/icons/cdin-${sz}.png"
-          done
+          pip3 install --quiet --break-system-packages Pillow cairosvg
           python3 scripts/gen_icon.py \
-                        scripts/icon.svg \
-            --out-inl        src/icon.inl \
+            scripts/icon.svg \
+            --out-inl src/icon.inl \
             --out-dir scripts/icons
-          PNG_COUNT=$(find scripts/icons -name 'cdin-*.png' | wc -l | tr -d ' ')
+          PNG_COUNT=$(find scripts/icons -name '*.png' | wc -l | tr -d ' ')
           [[ "$PNG_COUNT" -eq 0 ]] && { echo "::error::Icon PNGs not generated"; exit 1; }
           echo "Generated ${PNG_COUNT} PNG icons"
 
-      - name: Build .icns icon
-        run: |
-          ICONSET="scripts/cdin.iconset"
-          mkdir -p "$ICONSET"
-
-          ICON_NAMES=(
-            "icon_16x16.png"      "icon_16x16@2x.png"
-            "icon_32x32.png"      "icon_32x32@2x.png"
-            "icon_128x128.png"    "icon_128x128@2x.png"
-            "icon_256x256.png"    "icon_256x256@2x.png"
-            "icon_512x512.png"    "icon_512x512@2x.png"
-          )
-          ICON_SIZES=(16 32 32 64 128 256 256 512 512 1024)
-
-          for i in "${!ICON_NAMES[@]}"; do
-            src="scripts/icons/cdin-${ICON_SIZES[$i]}.png"
-            if [[ -f "$src" ]]; then
-              cp "$src" "$ICONSET/${ICON_NAMES[$i]}"
-            else
-              echo "::warning::Missing icon source: $src"
-            fi
-          done
-
-          iconutil -c icns "$ICONSET" -o scripts/cdin.icns
-          echo "cdin.icns: $(du -sh scripts/cdin.icns | cut -f1)"
 
       - name: Build release binary
         env:
@@ -163,7 +132,7 @@ jobs:
           chmod 755 "$MACOS_DIR/cdin"
           [[ -d data ]] && cp -r data "$MACOS_DIR/"
 
-          [[ -f scripts/cdin.icns ]] && cp scripts/cdin.icns "$RESOURCES/cdin.icns"
+          [[ -f scripts/icons/icon.icns ]] && cp scripts/icons/icon.icns "$RESOURCES/cdin.icns"
 
           SDL_LIB="$(PKG_CONFIG_PATH=/opt/sdl3/lib/pkgconfig pkg-config --variable=libdir sdl3)/libSDL3.dylib"
           if [[ -f "$SDL_LIB" ]]; then
@@ -233,7 +202,7 @@ jobs:
 
           create-dmg \
             --volname        "cdin ${VER}" \
-            --volicon        "scripts/cdin.icns" \
+            --volicon        "scripts/icons/icon.icns" \
             --window-pos     200 120 \
             --window-size    660 400 \
             --icon-size      128 \
