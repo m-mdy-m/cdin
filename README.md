@@ -3,7 +3,7 @@
 A lightweight, keyboard-centric text editor with Vim-style modal editing.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-orange.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.5-orange.svg)](CHANGELOG.md)
 
 ---
 
