@@ -50,6 +50,7 @@ jobs:
 
       - name: Install build dependencies (Homebrew)
         run: |
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
           brew update --quiet
           brew install lua librsvg pkg-config create-dmg
 
@@ -58,7 +59,7 @@ jobs:
         uses: actions/cache@v4
         id: cache-sdl3
         with:
-          path: /usr/local
+          path: /opt/sdl3
           key: sdl3-${{ env.SDL_VERSION }}-macos-15
 
       - name: Build & install SDL3
@@ -69,14 +70,16 @@ jobs:
           tar xf SDL3-src.tar.gz
           cmake -S "SDL3-${SDL_VERSION}" -B /tmp/sdl3-build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DCMAKE_INSTALL_PREFIX=/opt/sdl3 \
             -DSDL_SHARED=ON -DSDL_STATIC=OFF \
-            -DSDL_TEST=OFF  -DSDL_TESTS=OFF
+            -DSDL_TEST=OFF -DSDL_TESTS=OFF
           sudo cmake --build /tmp/sdl3-build --parallel $(sysctl -n hw.logicalcpu)
           sudo cmake --install /tmp/sdl3-build
 
       - name: Verify SDL3
-        run: pkg-config --modversion sdl3 && echo "SDL3 OK"
+        run: |
+          PKG_CONFIG_PATH=/opt/sdl3/lib/pkgconfig pkg-config --modversion sdl3
+          echo "SDL3 OK"
 
       # ── Cache: pip (Pillow) ──────────────────────────────────────────────
       - name: Cache pip
@@ -128,6 +131,8 @@ jobs:
           echo "cdin.icns: $(du -sh scripts/cdin.icns | cut -f1)"
 
       - name: Build release binary
+        env:
+          PKG_CONFIG_PATH: /opt/sdl3/lib/pkgconfig
         run: |
           make -j$(sysctl -n hw.logicalcpu) \
             BUILD=release PLATFORM=macos SDL_VERSION=3 CC=clang
@@ -158,7 +163,7 @@ jobs:
 
           [[ -f scripts/cdin.icns ]] && cp scripts/cdin.icns "$RESOURCES/cdin.icns"
 
-          SDL_LIB="$(pkg-config --variable=libdir sdl3)/libSDL3.dylib"
+          SDL_LIB="$(PKG_CONFIG_PATH=/opt/sdl3/lib/pkgconfig pkg-config --variable=libdir sdl3)/libSDL3.dylib"
           if [[ -f "$SDL_LIB" ]]; then
             cp "$SDL_LIB" "$MACOS_DIR/libSDL3.dylib"
             OLD_PATH="$(otool -L "$MACOS_DIR/cdin" | grep SDL3 | awk '{print $1}')"

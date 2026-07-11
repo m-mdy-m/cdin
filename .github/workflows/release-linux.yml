@@ -63,7 +63,7 @@ jobs:
         uses: actions/cache@v4
         id: cache-sdl3
         with:
-          path: /opt/sdl3   # ← به جای /usr/local
+          path: /opt/sdl3
           key: sdl3-${{ env.SDL_VERSION }}-ubuntu-22.04
 
       - name: Build & install SDL3
@@ -74,9 +74,9 @@ jobs:
           cmake -S "SDL3-${SDL_VERSION}" -B /tmp/sdl3-build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/sdl3 \   # ← اینجا هم
+            -DCMAKE_INSTALL_PREFIX=/opt/sdl3 \
             -DSDL_SHARED=ON -DSDL_STATIC=OFF \
-            -DSDL_TEST=OFF  -DSDL_TESTS=OFF
+            -DSDL_TEST=OFF -DSDL_TESTS=OFF
           sudo cmake --build /tmp/sdl3-build --parallel $(nproc)
           sudo cmake --install /tmp/sdl3-build
 
