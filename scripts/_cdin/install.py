@@ -15,6 +15,21 @@ from .platform import PLATFORM, EXE_NAME, default_prefix
 from .ui import banner, info, ok, warn, die
 from .utils import find_binary_candidate, find_icons_src, install_binary, install_data
 
+def _stop_running_cdin_windows() -> None:
+    """Terminate any running cdin.exe so its EXE and DLLs are not locked during install."""
+    import time
+    try:
+        result = subprocess.run(
+            ["taskkill", "/F", "/IM", EXE_NAME],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            warn(f"Stopped running {EXE_NAME} (was locking files).")
+            time.sleep(0.6)   # give the OS time to release all file handles
+    except Exception:
+        pass  # taskkill not available or process wasn't running — carry on
+
+
 def cmd_install(args: argparse.Namespace) -> None:
     banner("INSTALL")
 
@@ -30,6 +45,9 @@ def cmd_install(args: argparse.Namespace) -> None:
 
     info(f"Binary     : {binary}")
     info(f"Prefix     : {prefix}")
+
+    if PLATFORM == "windows":
+        _stop_running_cdin_windows()
 
     bin_dir = prefix / "bin"
     install_binary(binary, bin_dir / EXE_NAME)
@@ -177,6 +195,45 @@ def _install_windows_extras(
         _register_filetypes_windows(dest_exe, ico_path)
 
 
+def _safe_dll_copy(src: Path, dest: Path) -> None:
+    """Copy src → dest, skipping if already current, retrying if temporarily locked.
+
+    shutil.copy2 preserves the source mtime on the destination, so after a
+    successful install dest.st_mtime == src.st_mtime.  We exploit this: if size
+    AND mtime match we know the DLL is already up-to-date and skip the write
+    entirely, which avoids touching a file that may be locked by a running
+    process or by Windows Defender doing a deferred scan.
+
+    Only when the source DLL has genuinely changed do we need to overwrite — and
+    in that case cdin must not be running (we kill it at the start of
+    cmd_install), so the copy should succeed on the first or second attempt.
+    """
+    import time
+
+    if dest.exists():
+        ss, ds = src.stat(), dest.stat()
+        if ss.st_size == ds.st_size and abs(ss.st_mtime - ds.st_mtime) < 2.0:
+            return  #
+
+  
+    delays = [0.5, 1.5, 3.0]
+    for attempt, delay in enumerate(delays):
+        try:
+            shutil.copy2(src, dest)
+            return
+        except PermissionError:
+            if attempt == 0:
+                subprocess.run(
+                    ["taskkill", "/F", "/IM", EXE_NAME],
+                    capture_output=True,
+                )
+            warn(f"  {dest.name} is locked — retrying in {delay:.0f}s "
+                 f"(attempt {attempt + 1}/{len(delays)}) …")
+            time.sleep(delay)
+
+    shutil.copy2(src, dest)
+
+
 def _install_dlls_windows(binary_src_dir: Path, bin_dir: Path) -> None:
     """Copy SDL3.dll and lua*.dll from the binary's dir, MinGW paths, or PATH."""
     search_dirs: list[Path] = [binary_src_dir]
@@ -198,14 +255,14 @@ def _install_dlls_windows(binary_src_dir: Path, bin_dir: Path) -> None:
 
     sdl = find_dll(["SDL3.dll"])
     if sdl:
-        shutil.copy2(sdl, bin_dir / "SDL3.dll")
+        _safe_dll_copy(sdl, bin_dir / "SDL3.dll")
         ok(f"Installed SDL3.dll → {bin_dir}")
     else:
         warn("SDL3.dll not found — copy it manually to " + str(bin_dir))
 
     lua = find_dll(["lua55.dll", "lua54.dll", "lua5.4.dll", "lua53.dll", "lua5.3.dll", "lua.dll"])
     if lua:
-        shutil.copy2(lua, bin_dir / lua.name)
+        _safe_dll_copy(lua, bin_dir / lua.name)
         ok(f"Installed {lua.name} → {bin_dir}")
     else:
         warn("Lua DLL not found — copy it manually to " + str(bin_dir))
