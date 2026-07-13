@@ -388,3 +388,83 @@ The main goal is creating a cleaner and more maintainable foundation for future 
 - Improved language tooling support
 
 The beta cycle continues, and APIs may still change before the first stable release.
+
+## [0.1.0-beta.6] — 2026-07-13
+
+### Features
+
+- **Auto-update notifications:** cdin now checks GitHub for new releases once a month in a background coroutine thread. When a newer version is found, a badge appears in the status bar and a log entry is written. Zero startup delay — the check runs 5 seconds after the editor is fully loaded. ([`data/plugins/core/autoupdate.lua`](data/plugins/core/autoupdate.lua))
+
+- **In-editor update command:** `autoupdate:run-update` downloads and installs the latest release via the Python update script — no need to visit the repo, delete directories, or re-run the installer. Bind it to a key or run it from the command palette.
+
+- **Skip-version support:** `autoupdate:skip-version` silences notifications for the current latest version and persists the decision across restarts.
+
+- **Desktop shortcut & default text editor registration:** The installer now creates a desktop shortcut and registers cdin as a default text editor handler on supported platforms. ([`710cb08`](../../commit/710cb08))
+
+- **Windows file icons:** Files associated with cdin (`.txt`, `.py`, `.lua`, and all registered extensions) now show the cdin icon in Explorer across all view modes — Details, Large Icons, Tiles. Previously the icon appeared only on the desktop/taskbar shortcut; files themselves kept the Windows default icon.
+
+- **Gen-logo / gen-icon integrated into cdin script:** `python3 scripts/cdin.py gen-logo` and `gen-icon` are now first-class subcommands — no need to call the generator scripts directly. ([`38af4ab`](../../commit/38af4ab))
+
+- **Git: show ignored files in tree:** The treeview now surfaces git-ignored files when `config.treeview_git_enabled` is true. ([`b3ce889`](../../commit/b3ce889))
+
+- **Screenshots & README:** Added new screenshots to the repository and updated README copy. ([`497202b`](../../commit/497202b))
+
+### Bug Fixes
+
+- **Keymaps:** Fixed `R` and `E` keys misbehaving in Normal and Insert mode. ([`ddfd78d`](../../commit/ddfd78d))
+
+- **macOS:** Fixed `realpath` not available in stdlib on macOS — now uses a compatible alternative. ([`3760e43`](../../commit/3760e43))
+
+- **macOS build:** Fixed incorrect build in macOS/Linux/Windows CI pipeline. ([`e1bf07d`](../../commit/e1bf07d))
+
+- **Icon:** Fixed `icon.inl` filename mismatch causing build failures. ([`f5ad624`](../../commit/f5ad624))
+
+- **CI:** Fixed SDL3 cache not restoring correctly on Linux and macOS. ([`9002817`](../../commit/9002817), [`b99509f`](../../commit/b99509f))
+
+- **CI:** Fixed `rsvg-convert` installation step in the icon generation workflow. ([`0202de4`](../../commit/0202de4))
+
+- **Windows installer:** `--shortcut` now automatically implies `--register-filetypes` — previously the two flags had to be passed together or file-type associations were skipped entirely.
+
+### Refactoring & Tooling
+
+- **Build & install scripts:** Removed the old shell-based scripts and replaced them with a unified Python codebase (`scripts/cdin.py`) in sync with GitHub Actions workflows. ([`c6dbd2c`](../../commit/c6dbd2c))
+
+- **CI:** Platform release workflows are now reusable via `workflow_call`, eliminating duplication across Linux, macOS, and Windows jobs. ([`3106531`](../../commit/3106531))
+
+- **CI:** Added SDL3 dependency caching to reduce build times. ([`cb30186`](../../commit/cb30186))
+
+- **Old update script removed:** The previous standalone update script has been removed; all update logic now lives in `scripts/cdin.py update` and the new `autoupdate` plugin. ([`a0fe22f`](../../commit/a0fe22f))
+
+### UI & Theme
+
+- **Theme contrast:** Increased contrast across the default theme for better readability. ([`7a6f42c`](../../commit/7a6f42c))
+
+- **Theme & syntax highlight:** Updated color palette and syntax highlighting rules. ([`82bd197`](../../commit/82bd197))
+
+- **Status bar:** Changed the modified-file indicator symbol for clarity. ([`85ac6ee`](../../commit/85ac6ee))
+
+### Documentation
+
+- Updated contributing guide. ([`7edd665`](../../commit/7edd665))
+- Added new documentation pages. ([`cf5fee4`](../../commit/cf5fee4), [`bbdea32`](../../commit/bbdea32), [`2a44eab`](../../commit/2a44eab))
+
+### Configuration
+
+The auto-update checker can be configured in `data/user/init.lua`:
+
+```lua
+config.autoupdate_check    = true      -- set to false to disable entirely
+config.autoupdate_interval = 2592000   -- seconds between checks (default: 30 days)
+```
+
+| Command | Default bind | Description |
+|---|---|---|
+| `autoupdate:check` | `Ctrl+Shift+U` | Check for a newer release right now |
+| `autoupdate:run-update` | — | Download and install the latest release |
+| `autoupdate:skip-version` | — | Silence notifications for this version |
+
+### Stability
+
+- The update check is fully non-blocking. If GitHub is unreachable the editor starts normally — no error, no dialog, no delay.
+- No new C code. The autoupdate plugin is pure Lua, using `system.popen` / `system.exec` — the same bridge used by git integration.
+- Beta cycle continues; APIs may still change before the first stable release.
