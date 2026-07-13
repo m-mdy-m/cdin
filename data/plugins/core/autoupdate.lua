@@ -60,7 +60,6 @@ local function fetch_latest_tag()
       'powershell -NoProfile -Command "(Invoke-WebRequest -Uri \'%s\' -UseBasicParsing).Content"',
       url)
   else
-    -- prefer curl, fall back to wget
     if os.execute("command -v curl >/dev/null 2>&1") == 0 then
       cmd = string.format("curl -s --max-time 10 %s %q", hdr, url)
     else
@@ -68,7 +67,6 @@ local function fetch_latest_tag()
     end
   end
 
-  -- system.popen is our non-blocking bridge
   local raw
   if system.popen then
     raw = system.popen(cmd)
@@ -82,44 +80,28 @@ local function fetch_latest_tag()
   return tag and tag:gsub("^v", "")
 end
 
+local badge_dismissed = false
+
 local function notify_update_available(latest)
-  -- The status bar shows a transient message; we piggy-back on core.log so the
-  -- message also appears in the log view (accessible via core:open-log).
   core.log("cdin %s available — run :update or press <leader>U to upgrade.", latest)
 
-  -- Persist a longer-lived visual hint: override status bar items.
-  -- We inject a right-side item that stays until the editor is restarted or
-  -- the user dismisses it.
   local StatusView = require "core.views.statusview"
   local orig_get   = StatusView.get_items
 
-  local shown = false
   StatusView.get_items = function(self)
     local left, right = orig_get(self)
-    if not shown then
-      -- prepend update badge to the right side
+    if not badge_dismissed then
       table.insert(right, 1, style.text)
-      table.insert(right, 2, string.format(" ↑ v%s available ", latest))
+      table.insert(right, 2, string.format(" \xe2\x86\x91 v%s available ", latest))
       table.insert(right, 3, style.dim)
+    else
+      StatusView.get_items = orig_get
     end
     return left, right
-  end
-
-  -- Mark as "shown" after the user triggers :update so the badge disappears.
-  local orig_update = command.get("autoupdate:run-update")
-  if orig_update then
-    local orig_fn = orig_update.perform
-    orig_update.perform = function(...)
-      shown = true
-      StatusView.get_items = orig_get   -- restore
-      if orig_fn then orig_fn(...) end
-    end
   end
 end
 
 local function run_update()
-  -- The Python update script handles everything: download, verify, replace binary.
-  -- We launch it detached so cdin stays alive; user restarts manually afterward.
   local scripts_dir = EXEDIR .. "/scripts"
   local py_script   = scripts_dir .. "/cdin.py"
   local cmd
@@ -136,7 +118,6 @@ end
 
 local function start_check_thread()
   core.add_thread(function()
-    -- Delay first check so the editor fully starts before we hit the network.
     coroutine.yield(5)
 
     if not config.autoupdate_check then return end
@@ -144,22 +125,20 @@ local function start_check_thread()
     local st = read_state()
     local now = os.time()
 
-    -- Skip if we checked recently
     if (now - (st.last_check or 0)) < config.autoupdate_interval then
       return
     end
 
-    -- Update timestamp immediately so parallel instances don't double-fetch
     st.last_check = now
     write_state(st)
 
     local latest = fetch_latest_tag()
-    if not latest then return end  -- network unavailable — silent fail
+    if not latest then return end  
 
     local current = (VERSION or "0.0.0"):match("(%d+%.%d+%.%d+[%-%w%.]*)") or "0.0.0"
 
     if st.skip_version and st.skip_version == latest then
-      return  -- user asked to skip this version
+      return  
     end
 
     if version_gt(latest, current) then
@@ -187,11 +166,11 @@ command.add(nil, {
   end,
 
   ["autoupdate:run-update"] = function()
+    badge_dismissed = true
     run_update()
   end,
 
   ["autoupdate:skip-version"] = function()
-    -- Fetches latest tag and records it as "skip", silencing future nags.
     core.add_thread(function()
       local latest = fetch_latest_tag()
       if not latest then return end
