@@ -425,6 +425,10 @@ The beta cycle continues, and APIs may still change before the first stable rele
 
 - **Windows installer:** `--shortcut` now automatically implies `--register-filetypes` — previously the two flags had to be passed together or file-type associations were skipped entirely.
 
+- **Windows installer — locked DLL on reinstall:** Reinstalling over an existing installation raised `PermissionError: [WinError 32]` when trying to overwrite `SDL3.dll` or `lua*.dll`. The installer now terminates any running `cdin.exe` before touching the install directory, skips DLL copies whose size and modification time already match the source (the common case after a clean reinstall), and retries with back-off for transient locks from Windows Defender or the shell. ([`scripts/_cdin/install.py`](scripts/_cdin/install.py))
+
+- **Windows build — stale `data/` after source edits:** Changes to Lua files under `data/` (e.g. `data/core/init.lua`) were not reflected when running a freshly built binary. `make build` creates the `build/windows-release/data` entry only once (`[ ! -e ... ]` guard); on Windows, `ln -s` frequently produced an empty directory or a non-transparent junction instead of a working symlink, so all subsequent builds silently used the original copy. The build script now syncs `data/` into the build output directory after every successful `make build` when the existing entry is not a working junction. ([`scripts/_cdin/build.py`](scripts/_cdin/build.py))
+
 ### Refactoring & Tooling
 
 - **Build & install scripts:** Removed the old shell-based scripts and replaced them with a unified Python codebase (`scripts/cdin.py`) in sync with GitHub Actions workflows. ([`c6dbd2c`](../../commit/c6dbd2c))
