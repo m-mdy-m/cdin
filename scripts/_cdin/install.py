@@ -170,11 +170,11 @@ def _install_windows_extras(
 ) -> None:
     _install_dlls_windows(dest_exe.parent, bin_dir)
     _add_to_path_windows(bin_dir)
+    ico_path = _install_icon_windows(prefix)
     if shortcut:
-        ico_path = _install_icon_windows(prefix)
         _create_shortcuts_windows(dest_exe, ico_path)
-    if reg_ft:
-        _register_filetypes_windows(dest_exe)
+    if reg_ft or shortcut:
+        _register_filetypes_windows(dest_exe, ico_path)
 
 
 def _install_dlls_windows(binary_src_dir: Path, bin_dir: Path) -> None:
@@ -338,7 +338,7 @@ def _com_shell():
     return None
 
 
-def _register_filetypes_windows(exe: Path) -> None:
+def _register_filetypes_windows(exe: Path, ico_path: str = "") -> None:
     EXTENSIONS = [
         ".txt", ".log", ".ini", ".cfg", ".conf",
         ".html", ".htm", ".css", ".js", ".ts", ".jsx", ".tsx",
@@ -354,15 +354,20 @@ def _register_filetypes_windows(exe: Path) -> None:
         base    = winreg.HKEY_CURRENT_USER
         exe_str = str(exe).replace("/", "\\")
 
+        if ico_path:
+            icon_ref = f'"{ico_path.replace("/", chr(92))}",0'
+        else:
+            icon_ref = f'"{exe_str}",0'
+
         # --- ProgID root: friendly display name ---
         k = winreg.CreateKey(base, f"{root}\\{prog_id}")
-        winreg.SetValueEx(k, "",                  0, winreg.REG_SZ, "cdin Document")
-        winreg.SetValueEx(k, "FriendlyTypeName",  0, winreg.REG_SZ, "cdin Document")
+        winreg.SetValueEx(k, "",                 0, winreg.REG_SZ, "cdin Document")
+        winreg.SetValueEx(k, "FriendlyTypeName", 0, winreg.REG_SZ, "cdin Document")
         winreg.CloseKey(k)
 
-        # --- DefaultIcon: so the icon appears in Explorer / Open With ---
+        # --- ProgID\DefaultIcon: icon shown for all files associated to cdin ---
         k = winreg.CreateKey(base, f"{root}\\{prog_id}\\DefaultIcon")
-        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe_str}",0')
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, icon_ref)
         winreg.CloseKey(k)
 
         # --- shell\open\command ---
@@ -375,14 +380,14 @@ def _register_filetypes_windows(exe: Path) -> None:
         winreg.SetValueEx(k, "FriendlyAppName", 0, winreg.REG_SZ, "cdin")
         winreg.CloseKey(k)
 
-        # --- Applications\cdin.exe: canonical Open-With entry (name + icon) ---
+        # --- Applications\cdin.exe: canonical Open-With entry ---
         app_key = f"Software\\Classes\\Applications\\{exe.name}"
         k = winreg.CreateKey(base, app_key)
         winreg.SetValueEx(k, "FriendlyAppName", 0, winreg.REG_SZ, "cdin")
         winreg.CloseKey(k)
 
         k = winreg.CreateKey(base, f"{app_key}\\DefaultIcon")
-        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe_str}",0')
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, icon_ref)
         winreg.CloseKey(k)
 
         k = winreg.CreateKey(base, f"{app_key}\\shell\\open\\command")
@@ -390,8 +395,13 @@ def _register_filetypes_windows(exe: Path) -> None:
         winreg.CloseKey(k)
 
         for ext in EXTENSIONS:
+            # Point extension's default ProgID to ours so Explorer picks up the icon.
             k = winreg.CreateKey(base, f"{root}\\{ext}")
             winreg.SetValueEx(k, "", 0, winreg.REG_SZ, prog_id)
+            winreg.CloseKey(k)
+
+            k = winreg.CreateKey(base, f"{root}\\{ext}\\DefaultIcon")
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, icon_ref)
             winreg.CloseKey(k)
 
             k = winreg.CreateKey(base, f"{root}\\{ext}\\OpenWithProgids")
@@ -410,9 +420,11 @@ def _register_filetypes_windows(exe: Path) -> None:
                 None, None,
             )
         except Exception:
-            pass  # non-fatal
+            pass  # non-fatal; icons refresh on next Explorer restart
 
         ok(f"Registered {len(EXTENSIONS)} file-type associations (HKCU)")
+        if ico_path:
+            ok(f"File icons       → {ico_path}")
     except Exception as e:
         warn(f"Could not register file types: {e}")
 
