@@ -393,11 +393,11 @@ The beta cycle continues, and APIs may still change before the first stable rele
 
 ### Features
 
-- **Auto-update notifications:** cdin now checks GitHub for new releases once a month in a background coroutine thread. When a newer version is found, a badge appears in the status bar and a log entry is written. Zero startup delay — the check runs 5 seconds after the editor is fully loaded. ([`data/plugins/core/autoupdate.lua`](data/plugins/core/autoupdate.lua))
+- **Auto-update notifications:** cdin now includes a lightweight manual update checker that queries GitHub releases and notifies users when a newer version is available. The check runs asynchronously to avoid blocking the editor and displays an update badge in the status bar when a new release is found. ([`data/plugins/core/autoupdate.lua`](data/plugins/core/autoupdate.lua))
 
-- **In-editor update command:** `autoupdate:run-update` downloads and installs the latest release via the Python update script — no need to visit the repo, delete directories, or re-run the installer. Bind it to a key or run it from the command palette.
+- **In-editor update check command:** Added `autoupdate:check` to manually check for the latest cdin release from GitHub without leaving the editor. The command can be triggered from the command palette or bound to a key.
 
-- **Skip-version support:** `autoupdate:skip-version` silences notifications for the current latest version and persists the decision across restarts.
+- **Update notification dismissal:** Added `autoupdate:skip-version` to hide the current update badge for the active session.
 
 - **Desktop shortcut & default text editor registration:** The installer now creates a desktop shortcut and registers cdin as a default text editor handler on supported platforms. ([`710cb08`](../../commit/710cb08))
 
@@ -419,7 +419,7 @@ The beta cycle continues, and APIs may still change before the first stable rele
 
 - **Icon:** Fixed `icon.inl` filename mismatch causing build failures. ([`f5ad624`](../../commit/f5ad624))
 
-- **CI:** Fixed SDL3 cache not restoring correctly on Linux and macOS. ([`9002817`](../../commit/9002817), [`b99509f`](../../commit/b99509f))
+- **CI:** Fixed SDL3 cache SDL3 dependency caching issues across Linux and macOS. ([`9002817`](../../commit/9002817), [`b99509f`](../../commit/b99509f))
 
 - **CI:** Fixed `rsvg-convert` installation step in the icon generation workflow. ([`0202de4`](../../commit/0202de4))
 
@@ -433,7 +433,7 @@ The beta cycle continues, and APIs may still change before the first stable rele
 
 - **CI:** Added SDL3 dependency caching to reduce build times. ([`cb30186`](../../commit/cb30186))
 
-- **Old update script removed:** The previous standalone update script has been removed; all update logic now lives in `scripts/cdin.py update` and the new `autoupdate` plugin. ([`a0fe22f`](../../commit/a0fe22f))
+- **Old update script removed:** The previous standalone update script has been removed; update checking is now handled by the `autoupdate` plugin. ([`a0fe22f`](../../commit/a0fe22f))
 
 ### UI & Theme
 
@@ -450,21 +450,15 @@ The beta cycle continues, and APIs may still change before the first stable rele
 
 ### Configuration
 
-The auto-update checker can be configured in `data/user/init.lua`:
-
-```lua
-config.autoupdate_check    = true      -- set to false to disable entirely
-config.autoupdate_interval = 2592000   -- seconds between checks (default: 30 days)
-```
+The auto-update checker is a lightweight manual GitHub release checker.
 
 | Command | Default bind | Description |
 |---|---|---|
-| `autoupdate:check` | `Ctrl+Shift+U` | Check for a newer release right now |
-| `autoupdate:run-update` | — | Download and install the latest release |
-| `autoupdate:skip-version` | — | Silence notifications for this version |
+| `autoupdate:check` | `Ctrl+Shift+U` | Check GitHub for a newer release |
+| `autoupdate:skip-version` | — | Dismiss the current update badge |
 
 ### Stability
 
-- The update check is fully non-blocking. If GitHub is unreachable the editor starts normally — no error, no dialog, no delay.
-- No new C code. The autoupdate plugin is pure Lua, using `system.popen` / `system.exec` — the same bridge used by git integration.
+- The update check runs asynchronously and never blocks the editor UI. If GitHub is unreachable the editor continues normally.
+- No new C code. The autoupdate plugin is implemented entirely in Lua and uses standard system process execution for GitHub API requests.
 - Beta cycle continues; APIs may still change before the first stable release.
