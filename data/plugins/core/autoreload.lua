@@ -33,7 +33,7 @@ core.add_thread(function()
       if info and times[doc] ~= info.modified then
         reload_doc(doc)
       end
-      coroutine.yield()
+      coroutine.yield(0.05)
     end
     coroutine.yield(config.project_scan_rate)
   end

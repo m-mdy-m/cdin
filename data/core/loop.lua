@@ -1,6 +1,3 @@
--- Main render loop: step() polls SDL events, updates views, draws a frame.
--- run() drives the loop at config.fps and yields to the coroutine scheduler.
-
 local config = require "core.config"
 
 local function install(core)
@@ -8,14 +5,13 @@ local function install(core)
     while true do
       local max_time = 1 / config.fps - 0.004
       local ran_any  = false
+      local to_remove = {}
 
       for k, thread in pairs(core.threads) do
         if thread.wake < system.get_time() then
           local _, wait = assert(coroutine.resume(thread.cr))
           if coroutine.status(thread.cr) == "dead" then
-            if type(k) == "number" then table.remove(core.threads, k)
-            else                        core.threads[k] = nil
-            end
+            table.insert(to_remove, k)
           elseif wait then
             thread.wake = system.get_time() + wait
           end
@@ -23,6 +19,13 @@ local function install(core)
         end
         if system.get_time() - core.frame_start > max_time then
           coroutine.yield()
+        end
+      end
+
+      for i = #to_remove, 1, -1 do
+        local k = to_remove[i]
+        if type(k) == "number" then table.remove(core.threads, k)
+        else                        core.threads[k] = nil
         end
       end
 

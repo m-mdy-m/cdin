@@ -7,6 +7,9 @@ local style  = require "core.style"
 local core = {}
 require("core.logging").install(core)
 core.temp_filename = temp.filename
+
+core.project_dir = nil
+
 function core.quit(force)
   if force then
     temp.delete_all()
@@ -30,7 +33,7 @@ end
 
 require("core.lifecycle").install(core)
 
-local state    = require "core.state"
+local state = require "core.state"
 
 function core.init()
   local command     = require "core.input.command"
@@ -40,6 +43,7 @@ function core.init()
   local CommandView = require "core.views.commandview"
   local TitleBar    = require "core.views.titlebar"
   local Doc         = require "core.doc"
+
   local project_dir = EXEDIR
   local files = {}
   for i = 2, #ARGS do
@@ -49,8 +53,12 @@ function core.init()
     elseif info.type == "dir"  then project_dir = abs
     end
   end
+
   system.chdir(project_dir)
+  core.project_dir = system.absolute_path(".") or project_dir
+
   state.setup_state(core)
+
   function core.set_active_view(view)
     assert(view, "Tried to set active view to nil")
     if view ~= core.active_view then
@@ -64,16 +72,20 @@ function core.init()
     local fn  = function() return core.try(f) end
     core.threads[key] = { cr = coroutine.create(fn), wake = 0 }
   end
+
   state.setup_views(core, RootView, CommandView, StatusView, TitleBar)
   require("core.docs").install(core, Doc)
   require("core.events").install(core, keymap)
   require("core.loop").install(core)
+
   local project = require "core.project"
   core.add_thread(function() project.thread(core) end)
+
   command.add_defaults()
   local got_plugin_error  = not core.load_plugins()
   local got_user_error    = not core.try(require, "user")
   local got_project_error = not core.load_project_module()
+
   for _, filename in ipairs(files) do
     core.root_view:open_doc(core.open_doc(filename))
   end
@@ -84,8 +96,6 @@ function core.init()
 end
 
 
--- Returns the active DocView, or nil if a non-doc view (e.g. CommandView) is focused.
--- Shared helper used by vim plugins instead of being redefined in each.
 function core.active_docview()
   local DocView     = require "core.views.docview"
   local CommandView = require "core.views.commandview"

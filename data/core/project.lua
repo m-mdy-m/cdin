@@ -2,6 +2,11 @@ local common = require "core.utils.common"
 local config  = require "core.config"
 local git     = require "core.git"
 
+local function flush_treeview_cache()
+  local ok, Cache = pcall(require, "plugins.treeview.cache")
+  if ok and Cache and Cache.flush then Cache.flush() end
+end
+
 local M = {}
 
 local _scanned = {}
@@ -32,7 +37,7 @@ end
 local function scan_shallow(path)
   coroutine.yield()
   local size_limit = config.file_size_limit * 10e5
-  local all  = system.list_dir(path) or {}
+  local all   = system.list_dir(path) or {}
   local dirs  = {}
   local files = {}
 
@@ -88,12 +93,12 @@ function M.request_rescan(core)
   _scanned = {}
   _prio_q  = {}
   _bg_q    = {}
-  _root    = nil 
+  _root    = nil
 end
 
 function M.prioritize(path)
   local a = abs_path(path)
-  if _scanned[a] then return end 
+  if _scanned[a] then return end
   for _, p in ipairs(_prio_q) do
     if p == path then return end
   end
@@ -116,6 +121,8 @@ function M.thread(core)
       table.insert(_bg_q, s)
     end
     _root = get_root()
+
+    core.project_dir = _root
   end
 
   do_initial_scan()
@@ -127,14 +134,13 @@ function M.thread(core)
     local cur_root = get_root()
     if cur_root ~= _root then
       _scanned = {}
+      flush_treeview_cache()
       do_initial_scan()
       coroutine.yield()
     end
 
     if cycle % 5 == 1 then
       pcall(refresh_git_ignored)
-      -- Update git_ignored flag on already-scanned items so treeview reflects
-      -- changes (e.g. when a file is added to/removed from .gitignore)
       if core.project_files then
         local changed = false
         for _, item in ipairs(core.project_files) do

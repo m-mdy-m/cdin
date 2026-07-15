@@ -17,6 +17,21 @@ local function evict_oldest()
   end
 end
 
+local function make_abs(filename)
+  if PATHSEP == "\\" then
+    -- Windows: "C:\..." or "\\server\..."
+    if filename:match("^%a:\\") or filename:match("^\\\\") then return filename end
+  else
+    if filename:sub(1,1) == "/" then return filename end
+  end
+
+  local core = rawget(_G, "core")
+  local base = (core and core.project_dir and core.project_dir ~= "")
+               and core.project_dir
+               or (system.absolute_path(".") or ".")
+  return base .. PATHSEP .. filename
+end
+
 function M.get(item)
   local h = item_hash(item)
   local entry = _store[h]
@@ -39,7 +54,7 @@ function M.get(item)
 
   entry = {
     filename     = item.filename,
-    abs_filename = system.absolute_path(item.filename),
+    abs_filename = make_abs(item.filename),
     name         = item.filename:match("[^\\/]+$"),
     depth        = get_depth(item.filename),
     type         = item.type,

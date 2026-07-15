@@ -32,7 +32,14 @@ local function parse_porcelain_line(line)
   return x, y, path
 end
 
-local _ignored   = {}
+local function project_dir()
+  if core.project_dir and core.project_dir ~= "" then
+    return core.project_dir
+  end
+  return system.absolute_path(".") or "."
+end
+
+local _ignored      = {}
 local _ignored_root = nil
 
 local function refresh_ignored(root, gc)
@@ -41,7 +48,7 @@ local function refresh_ignored(root, gc)
   local t    = {}
   if out then
     for line in out:gmatch("[^\r\n]+") do
-      local l = line:gsub("/$", "")
+      local l   = line:gsub("/$", "")
       local abs = root .. PATHSEP .. git.normalize_path(l)
       t[abs] = true
     end
@@ -63,11 +70,16 @@ function M.is_ignored(abs_path)
 end
 
 function M.refresh_ignored_now()
-  local gc = git.exe_cwd()
+  local dir = project_dir()
+  local gc  = git.exe_with_dir(dir)
   if not gc then _ignored, _ignored_root = {}, nil; return end
-  local null = git.IS_WIN and "NUL" or "/dev/null"
+
+  local null     = git.IS_WIN and "NUL" or "/dev/null"
   local root_out = run_capture(gc .. " rev-parse --show-toplevel 2>" .. null)
-  if not root_out or root_out == "" then _ignored, _ignored_root = {}, nil; return end
+  if not root_out or root_out == "" then
+    _ignored, _ignored_root = {}, nil
+    return
+  end
   local root = git.normalize_path(root_out:gsub("[\r\n]+$", ""))
   refresh_ignored(root, gc)
 end
@@ -81,7 +93,8 @@ function M.refresh()
     return
   end
 
-  local gc = git.exe_cwd()
+  local dir = project_dir()
+  local gc  = git.exe_with_dir(dir)
   if not gc then
     M.status, M.root = {}, nil
     M.has_remote = false
@@ -110,23 +123,24 @@ function M.refresh()
   do
     local git_dir_out = run_capture(gc .. " rev-parse --git-dir 2>" .. null)
     local gd = git_dir_out and git_dir_out:gsub("[%s\r\n]+$", "") or ""
+    if not git.IS_WIN and gd:sub(1,1) ~= "/" then
+      gd = M.root .. "/" .. gd
+    elseif git.IS_WIN and not gd:match("^%a:\\") and not gd:match("^\\\\") then
+      gd = M.root .. "\\" .. gd
+    end
     if git.IS_WIN then gd = gd:gsub("/", "\\") end
+
     local function gfile(name)
       local p = gd .. PATHSEP .. name
       local f = io.open(p, "r")
       if f then f:close(); return true end
       return false
     end
-    if gfile("rebase-merge") or gfile("rebase-apply") then
-      M.state = "rebase"
-    elseif gfile("MERGE_HEAD") then
-      M.state = "merge"
-    elseif gfile("CHERRY_PICK_HEAD") then
-      M.state = "cherry"
-    elseif gfile("BISECT_LOG") then
-      M.state = "bisect"
-    else
-      M.state = nil
+    if     gfile("rebase-merge") or gfile("rebase-apply") then M.state = "rebase"
+    elseif gfile("MERGE_HEAD")                             then M.state = "merge"
+    elseif gfile("CHERRY_PICK_HEAD")                       then M.state = "cherry"
+    elseif gfile("BISECT_LOG")                             then M.state = "bisect"
+    else                                                        M.state = nil
     end
   end
 
@@ -146,7 +160,7 @@ function M.refresh()
 
   refresh_ignored(M.root, gc)
 
-  local out = run_capture(gc .. " status --porcelain 2>" .. null)
+  local out       = run_capture(gc .. " status --porcelain 2>" .. null)
   local t         = {}
   local dirty     = false
   local staged    = 0
@@ -170,11 +184,11 @@ function M.refresh()
         end
 
         t[abs] = { index = x, worktree = y, status = status }
-        dirty = true
+        dirty  = true
 
         if x ~= " " and x ~= "?" and x ~= "U" then staged    = staged    + 1 end
         if y ~= " " and y ~= "?" and y ~= "U" then unstaged  = unstaged  + 1 end
-        if status == "?" then unstaged = unstaged + 1 end
+        if status == "?" then unstaged  = unstaged  + 1 end
         if status == "U" then conflicts = conflicts + 1 end
       end
     end

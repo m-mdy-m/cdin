@@ -38,6 +38,8 @@ function DocView:new(doc)
   self.font       = "code_font"
   self.last_x_offset = {}
   self.blink_timer   = 0
+  self._gutter_width  = 0   -- cached; recomputed when line count changes
+  self._gutter_lines  = 0   -- line count at last gutter_width computation
 end
 
 function DocView:try_close(do_close)
@@ -65,7 +67,14 @@ end
 
 function DocView:get_font()           return style[self.font] end
 function DocView:get_line_height()    return math.floor(self:get_font():get_height() * config.line_height) end
-function DocView:get_gutter_width()   return self:get_font():get_width(#self.doc.lines) + style.padding.x * 2 end
+function DocView:get_gutter_width()
+  local n = #self.doc.lines
+  if n ~= self._gutter_lines then
+    self._gutter_lines = n
+    self._gutter_width = self:get_font():get_width(n) + style.padding.x * 2
+  end
+  return self._gutter_width
+end
 function DocView:get_scrollable_size() return self:get_line_height() * (#self.doc.lines - 1) + self.size.y end
 
 function DocView:get_line_screen_position(idx)

@@ -13,7 +13,6 @@ local function find_git_win()
     if not ok or not fp then return nil end
     local o = fp:read("*a"); fp:close(); return o
   end
-
   local wo = popen_raw('cmd.exe /C "where.exe git 2>NUL"')
   if wo and wo ~= "" then
     local preferred = wo:match("([^\r\n]+\\cmd\\git%.exe)")
@@ -51,12 +50,18 @@ function M.exe()
   return find_git_win()
 end
 
-function M.exe_cwd()
+function M.exe_with_dir(dir)
   local gc = M.exe()
   if not gc then return false end
-  local root = system.absolute_path(".")
-  if not root or root == "" then return gc end
-  return gc .. ' -C "' .. root .. '"'
+  if not dir or dir == "" then return gc end
+  if IS_WIN then dir = dir:gsub("/", "\\") end
+  return gc .. ' -C "' .. dir .. '"'
+end
+
+function M.exe_cwd()
+  local core = rawget(_G, "core")
+  local dir  = (core and core.project_dir) or system.absolute_path(".") or "."
+  return M.exe_with_dir(dir)
 end
 
 function M.popen(cmd)
