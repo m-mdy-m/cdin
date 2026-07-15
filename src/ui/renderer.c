@@ -69,6 +69,8 @@ void ren_init(SDL_Window *win) {
 
 void ren_update_rects(RenRect *rects, int count) {
   SDL_UpdateWindowSurfaceRects(window, (SDL_Rect *)rects, count);
+  surface = SDL_GetWindowSurface(window);
+  assert(surface);
   static bool initial_frame = true;
   if (initial_frame) {
     SDL_ShowWindow(window);
@@ -84,7 +86,6 @@ void ren_set_clip_rect(RenRect rect) {
 }
 
 void ren_get_size(int *x, int *y) {
-  surface = SDL_GetWindowSurface(window);
   assert(surface);
   *x = surface->w;
   *y = surface->h;

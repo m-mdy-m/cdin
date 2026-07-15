@@ -249,6 +249,11 @@ void rencache_end_frame(void) {
     *r = intersect_rects(*r, screen_rect);
   }
 
+  if (rect_count > 6) {
+    rect_buf[0] = screen_rect;
+    rect_count  = 1;
+  }
+
   log_trace("rencache: end_frame — cmds=%d dirty_rects=%d "
             "draw_text=%d draw_rect=%d buf=%d/%d bytes",
             total_cmd, rect_count,

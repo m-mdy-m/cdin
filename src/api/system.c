@@ -11,7 +11,7 @@
 #include "../ui/renderer_cache.h"
 #include "../core/window.h"
 #include "../core/logger.h"
-#include "../search/find.h" 
+#include "../search/find.h"
 
 #ifndef _WIN32
   #include <unistd.h>
@@ -255,7 +255,6 @@ static int f_set_hit_regions(lua_State *L) {
   return 0;
 }
 
-
 static int f_show_confirm_dialog(lua_State *L) {
   const char *title = luaL_checkstring(L, 1);
   const char *msg   = luaL_checkstring(L, 2);
@@ -462,8 +461,8 @@ static int f_popen(lua_State *L) {
   PROCESS_INFORMATION pi = { 0 };
   BOOL ok = CreateProcessW(
     NULL, wcmd, NULL, NULL,
-    TRUE,                         
-    CREATE_NO_WINDOW,             
+    TRUE,
+    CREATE_NO_WINDOW,
     NULL, NULL, &si, &pi);
   free(wcmd);
   CloseHandle(hWrite);

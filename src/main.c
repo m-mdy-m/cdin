@@ -66,7 +66,6 @@ int main(int argc, char **argv) {
     win_w = (int)(usable.w * 0.8f);
     win_h = (int)(usable.h * 0.8f);
   } else {
-    /* fallback: physical mode / content-scale — better than a hardcoded guess */
     const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(display);
     float dscale = SDL_GetDisplayContentScale(display);
     if (dscale < 0.5f) dscale = 1.0f;
