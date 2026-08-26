@@ -1,16 +1,19 @@
 import BottomBar from "@/components/BottomBartion/BottomBar";
 import Navbar from "@/components/Navigations/Navbar";
 import { Outlet } from "react-router";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export default function Layout() {
   return (
     <div
       id="fira-code-mono"
-      className="max-w-7xl min-h-svh grid grid-cols-1 grid-rows-[auto_1fr_auto] overflow-x-hidden border-x mx-auto"
+      className="relative max-w-5xl min-h-svh grid grid-cols-1 grid-rows-[auto_1fr_auto] overflow-x-clip border-x mx-auto"
     >
-      <Navbar />
-      <Outlet />
-      <BottomBar />
+      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+        <Navbar />
+        <Outlet />
+        <BottomBar />
+      </ThemeProvider>
     </div>
   );
 }
