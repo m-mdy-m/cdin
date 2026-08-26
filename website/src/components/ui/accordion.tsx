@@ -55,7 +55,7 @@ function AccordionTrigger({
           </span>
           <span
             data-slot="accordion-trigger-icon"
-            className="hidden w-3 text-center -translate-y-2.5 group-aria-expanded/accordion-trigger:inline"
+            className="hidden text-primary! w-3 text-center -translate-y-2.5 group-aria-expanded/accordion-trigger:inline"
           >
             *
           </span>
