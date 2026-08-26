@@ -1,3 +1,9 @@
+import Hero from "./components/Landing/Hero";
+
 export default function App() {
-  return <div className="h-240">Hello world man.</div>;
+  return (
+    <div className="">
+      <Hero />
+    </div>
+  );
 }
