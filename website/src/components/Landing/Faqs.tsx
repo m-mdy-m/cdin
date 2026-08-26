@@ -8,7 +8,7 @@ import { faqs } from "@/consts/faqs";
 
 export default function Faqs() {
   return (
-    <div className="px-10 mt-14">
+    <div className="px-10 mt-14 border-y py-10">
       <Accordion type="single" defaultValue="item-0">
         {faqs.map((faq, i) => (
           <AccordionItem
