@@ -1,10 +1,3 @@
-import { Button } from "@/components/ui/button";
-
 export default function App() {
-  return (
-    <div>
-      <Button>Click me</Button>
-      Hello world man.
-    </div>
-  );
+  return <div className="h-240">Hello world man.</div>;
 }
