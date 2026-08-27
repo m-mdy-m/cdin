@@ -1,7 +1,7 @@
 export default function Philosophy() {
   return (
     <div className="mt-14 border-t py-10 px-4 md:p-10">
-      <h1 className="lg:text-2xl font-semibold">What is our philosophy?</h1>
+      <h1 className="lg:text-2xl font-semibold">Our philosophy?</h1>
 
       <div className="mt-8 flex flex-col gap-4">
         <p className="text-muted-foreground lg:text-base text-sm">
