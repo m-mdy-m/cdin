@@ -16,7 +16,7 @@ export default function Hero() {
         <Button
           asChild
           variant={"default"}
-          className="flex flex-row w-fit items-center text-white gap-2 py-4 md:py-6 text-base md:text-xl font-semibold"
+          className="flex flex-row w-fit items-center gap-2 py-4 md:py-6 text-base md:text-xl font-semibold"
           size={"lg"}
         >
           <a href="download">
