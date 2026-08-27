@@ -23,7 +23,7 @@ export default function DesktopView() {
         .filter((link) => link.external)
         .map((link) => (
           <Button
-            className="h-fit py-2 lg:text-lg font-normal text-amber-50 flex items-center"
+            className="h-fit py-2 lg:text-lg font-normal flex items-center"
             size={"lg"}
             key={link.href}
             variant="default"

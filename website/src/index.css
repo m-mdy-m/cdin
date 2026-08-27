@@ -63,12 +63,12 @@
   --card-foreground: oklch(0.2215 0.0155 285.1);    /* #1a1a22 */
   --popover: oklch(0.9324 0.0067 286.3);            /* #e8e8ed */
   --popover-foreground: oklch(0.2215 0.0155 285.1); /* #1a1a22 */
-  --primary: oklch(0.7228 0.0884 293.8);            /* #a89bd8 style.accent */
-  --primary-foreground: oklch(0.2215 0.0155 285.1); /* #1a1a22 */
+  --primary: oklch(0.5510 0.1652 288.5);            /* #6c55cc syntax.keyword */
+  --primary-foreground: oklch(0.9851 0.0000 89.9); /* #fafafa */
   --secondary: oklch(0.9324 0.0067 286.3);          /* #e8e8ed */
   --secondary-foreground: oklch(0.2215 0.0155 285.1); /* #1a1a22 */
   --muted: oklch(0.9090 0.0108 286.2);              /* #e0e0e8 */
-  --muted-foreground: oklch(0.5334 0.0248 285.5);   /* #6b6b7b */
+  --muted-foreground: oklch(0.4300 0.0220 285.5);   /* #5d5d6b */
   --accent: oklch(0.7228 0.0884 293.8);             /* #a89bd8 style.accent */
   --accent-foreground: oklch(0.2215 0.0155 285.1);  /* #1a1a22 */
   --destructive: oklch(0.5769 0.1447 22.7);         /* #c05050 */
@@ -129,12 +129,12 @@
   --card-foreground: oklch(0.8843 0.0095 286.2);    /* #d8d8df style.text */
   --popover: oklch(0.1990 0.0139 285.1);            /* #15151c style.background3 */
   --popover-foreground: oklch(0.8843 0.0095 286.2); /* #d8d8df style.text */
-  --primary: oklch(0.7228 0.0884 293.8);            /* #a89bd8 style.accent */
-  --primary-foreground: oklch(0.1163 0.0062 285.4); /* #050507 style.background */
+  --primary: oklch(0.5510 0.1652 288.5);            /* #6c55cc syntax.keyword */
+  --primary-foreground: oklch(0.9851 0.0000 89.9); /* #fafafa */
   --secondary: oklch(0.1990 0.0139 285.1);          /* #15151c style.background3 */
   --secondary-foreground: oklch(0.8843 0.0095 286.2); /* #d8d8df style.text */
   --muted: oklch(0.2693 0.0203 285.0);              /* #252530 style.divider */
-  --muted-foreground: oklch(0.5508 0.0246 285.6);   /* #707080 style.dim */
+  --muted-foreground: oklch(0.6500 0.0200 286.0);   /* #9595a0 */
   --accent: oklch(0.7228 0.0884 293.8);             /* #a89bd8 style.accent */
   --accent-foreground: oklch(0.1163 0.0062 285.4);  /* #050507 style.background */
   --destructive: oklch(0.6263 0.1424 22.0);         /* #d06060 style.git_deleted */

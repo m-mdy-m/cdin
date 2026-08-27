@@ -51,7 +51,7 @@ export default function MobileView() {
           <SheetFooter className="flex flex-row">
             <ModeToggle />
             <Button
-              className="h-fit py-2 lg:text-lg font-normal text-amber-50 flex flex-1 items-center"
+              className="h-fit py-2 lg:text-lg font-normal flex flex-1 items-center"
               size={"lg"}
               variant="default"
               asChild

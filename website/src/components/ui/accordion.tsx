@@ -45,17 +45,17 @@ function AccordionTrigger({
         )}
         {...props}
       >
-        <span className="inline-flex shrink-0 items-center font-mono justify-between">
+        <span className="shrink-0 duration-100">
           [
           <span
             data-slot="accordion-trigger-icon"
-            className="inline-block w-3 text-center group-aria-expanded/accordion-trigger:hidden"
+            className="inline-block max-w-2 duration-100 text-center group-aria-expanded/accordion-trigger:hidden"
           >
             {/* empty when closed */}
           </span>
           <span
             data-slot="accordion-trigger-icon"
-            className="hidden text-primary! w-3 text-center -translate-y-2.5 group-aria-expanded/accordion-trigger:inline"
+            className="hidden text-primary! w-3 text-center relative -top-px group-aria-expanded/accordion-trigger:inline"
           >
             *
           </span>
