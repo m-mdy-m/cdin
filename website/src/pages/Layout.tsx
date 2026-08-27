@@ -7,7 +7,7 @@ export default function Layout() {
   return (
     <div
       id="fira-code-mono"
-      className="relative max-w-5xl min-h-svh grid grid-cols-1 grid-rows-[auto_1fr_auto] overflow-x-clip border-x mx-auto"
+      className="relative max-w-5xl min-h-svh grid grid-cols-1 grid-rows-[auto_1fr_auto]  border-x mx-auto"
     >
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
         <Navbar />
