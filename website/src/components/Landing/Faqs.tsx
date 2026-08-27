@@ -10,7 +10,7 @@ import { ArrowRight } from "lucide-react";
 
 export default function Faqs() {
   return (
-    <div className="md:px-10 px-4 border-y py-10">
+    <div className="md:px-10 px-4 border-t py-10">
       <Accordion type="single" defaultValue="item-0">
         {faqs.map((faq, i) => (
           <AccordionItem
