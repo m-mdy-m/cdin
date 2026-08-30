@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { Button } from "../ui/button";
-import { ModeToggle } from "../mode-toggle";
+import { ModeToggle } from "../ModeToggle";
 import { navLinks } from "@/consts/navLinks";
 
 export default function MobileView() {

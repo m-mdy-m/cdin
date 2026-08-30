@@ -2,11 +2,11 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import LogoImage from "@/components/Download/LogoImage";
-import LinuxInstallationMethod from "@/components/Download/installations/linux-installation-method";
-import WindowsInstallationMethod from "@/components/Download/installations/windows-installation-method";
+import LinuxInstallationMethod from "@/components/Download/installations/LinuxInstallationMethod";
+import WindowsInstallationMethod from "@/components/Download/installations/WindowsInstallationMethod";
 import { Separator } from "@/components/ui/separator";
-import MacOsInstallationMethod from "@/components/Download/installations/macos-installation-method";
-import QuickStart from "@/components/Download/installations/quickstart";
+import MacOsInstallationMethod from "@/components/Download/installations/MacOsInstallationMethod";
+import QuickStart from "@/components/Download/installations/QuickStart";
 
 export default function DownloadPage() {
   return (

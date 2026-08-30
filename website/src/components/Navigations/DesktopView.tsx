@@ -1,5 +1,5 @@
 import { navLinks } from "@/consts/navLinks";
-import { ModeToggle } from "../mode-toggle";
+import { ModeToggle } from "../ModeToggle";
 import { Button } from "../ui/button";
 
 export default function DesktopView() {
