@@ -8,7 +8,7 @@ export default function BottomBar() {
         {footerLinks.map((link) => (
           <a
             key={link.label}
-            className="py-10 text-center not-last:border-b sm:not-last:border-b-0 md:border-r-0 md:not-last:border-r m-0 hover:rng rounded-none hover:bg-foreground/10 duration-75"
+            className="py-10 text-center not-last:border-b sm:not-last:border-b-0 md:border-r-0 md:not-last:border-r m-0 rounded-none hover:bg-foreground/10 duration-100"
             href={link.href}
             target={link.external ? "_blank" : "_self"}
           >
