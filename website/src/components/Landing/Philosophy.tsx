@@ -1,9 +1,9 @@
 export default function Philosophy() {
   return (
-    <div className="mt-14 border-t py-10 px-4 md:p-10">
+    <div className="mt-10 border-t py-10 px-4 md:p-10">
       <h1 className="lg:text-2xl font-semibold">Our philosophy?</h1>
 
-      <div className="mt-8 flex flex-col gap-4">
+      <div className="mt-8 space-y-6">
         <p className="text-muted-foreground lg:text-base text-sm">
           <span className="font-semibold text-foreground text-base">
             [<span className="text-primary relative -top-px">*</span>]
