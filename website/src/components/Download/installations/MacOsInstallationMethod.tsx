@@ -25,7 +25,7 @@ export default function MacOsInstallationMethod() {
         </Button>
       </div>
       <Card className="col-span-6 lg:col-span-4 text-xs p-4 gap-0 min-h-0 h-fit overflow-x-auto">
-        <pre className="font-mono leading-relaxed whitespace-pre-wrap">
+        <p className="font-mono leading-relaxed whitespace-pre-wrap">
           <span className="block text-muted-foreground">
             // Download cdin-v0.1.0-beta.6-macos.dmg and double-click it.
           </span>
@@ -80,7 +80,7 @@ export default function MacOsInstallationMethod() {
               # remove installed files
             </span>
           </span>
-        </pre>
+        </p>
       </Card>
     </div>
   );

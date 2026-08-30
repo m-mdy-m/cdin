@@ -35,9 +35,19 @@ export default function DownloadPage() {
             </Button>
           </span>
           <Tabs defaultValue="stable" className="w-full min-w-0">
-            <TabsList className="w-full mb-4">
-              <TabsTrigger value="stable">Stable</TabsTrigger>
-              <TabsTrigger value="test">Test</TabsTrigger>
+            <TabsList className="w-full mb-4 md:py-6">
+              <TabsTrigger
+                value="stable"
+                className="md:py-5 md:text-xl cursor-pointer"
+              >
+                Stable
+              </TabsTrigger>
+              <TabsTrigger
+                value="test"
+                className="md:py-5 md:text-xl cursor-pointer"
+              >
+                Test
+              </TabsTrigger>
             </TabsList>
             <TabsContent className="flex flex-col" value="stable">
               <LinuxInstallationMethod />
