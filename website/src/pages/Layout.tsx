@@ -1,7 +1,7 @@
 import BottomBar from "@/components/BottomBartion/BottomBar";
 import Navbar from "@/components/Navigations/Navbar";
 import { Outlet } from "react-router";
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 export default function Layout() {
   return (
