@@ -25,7 +25,7 @@ export default function WindowsInstallationMethod() {
         </Button>
       </div>
       <Card className="col-span-6 lg:col-span-4 text-xs p-4 gap-0 overflow-x-auto h-fit min-h-0">
-        <p className="font-mono leading-relaxed whitespace-pre-wrap">
+        <p className="fira-code-mono leading-relaxed whitespace-pre-wrap">
           <span className="block text-muted-foreground">
             // Download cdin-v0.1.0-beta.6-windows-x86_64.zip and extract it.
           </span>

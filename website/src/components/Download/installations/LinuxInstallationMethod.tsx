@@ -25,7 +25,7 @@ export default function LinuxInstallationMethod() {
         </Button>
       </div>
       <Card className="col-span-6 lg:col-span-4 text-xs p-4 gap-0">
-        <p className="font-mono leading-relaxed whitespace-pre-wrap">
+        <p className="fira-code-mono leading-relaxed whitespace-pre-wrap">
           <span className="block text-muted-foreground">
             // Requires Python 3.8+ — comes pre-installed on all supported
             platforms.
@@ -87,17 +87,17 @@ export default function LinuxInstallationMethod() {
             </span>
           </span>
         </p>
-        <p className="font-mono text-muted-foreground leading-relaxed">
+        <p className="fira-code-mono text-muted-foreground leading-relaxed">
           // SDL3 runtime — needed at runtime if not already installed:
         </p>
-        <p className="font-mono leading-relaxed">
+        <p className="fira-code-mono leading-relaxed">
           <span className="text-muted-foreground">Ubuntu 24.04+:</span>{" "}
           <span className="text-chart-5">sudo</span>{" "}
           <span className="text-primary">apt</span>{" "}
           <span className="text-primary">install</span>{" "}
           <span className="text-chart-3">libsdl3-0</span>
         </p>
-        <p className="font-mono leading-relaxed">
+        <p className="fira-code-mono leading-relaxed">
           <span className="text-muted-foreground">Other distros: see </span>
           <Button asChild variant="link" className="p-0 underline h-fit w-fit">
             <a
