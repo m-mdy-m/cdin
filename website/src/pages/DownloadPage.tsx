@@ -17,7 +17,7 @@ export default function DownloadPage() {
           <h1 className="lg:text-2xl text-xl font-thin italic ">
             0.1.0-beta.6
           </h1>
-          <span className="flex items-center justify-between mb-8">
+          <span className="flex items-center justify-between mb-10">
             <h2>Jul 13, 2026</h2>
             <Button
               asChild
@@ -35,16 +35,16 @@ export default function DownloadPage() {
             </Button>
           </span>
           <Tabs defaultValue="stable" className="w-full min-w-0">
-            <TabsList className="w-full mb-8">
+            <TabsList className="w-full mb-4">
               <TabsTrigger value="stable">Stable</TabsTrigger>
               <TabsTrigger value="test">Test</TabsTrigger>
             </TabsList>
-            <TabsContent className="flex flex-col gap-6" value="stable">
+            <TabsContent className="flex flex-col" value="stable">
               <LinuxInstallationMethod />
 
-              <Separator className="my-4 " />
+              <Separator className="my-10" />
               <WindowsInstallationMethod />
-              <Separator className="my-4 " />
+              <Separator className="my-10" />
 
               <MacOsInstallationMethod />
             </TabsContent>
