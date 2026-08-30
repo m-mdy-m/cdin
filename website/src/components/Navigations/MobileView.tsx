@@ -14,7 +14,7 @@ import { navLinks } from "@/consts/navLinks";
 
 export default function MobileView() {
   return (
-    <div className="md:hidden flex">
+    <div className="md:hidden flex  ">
       <Sheet>
         <SheetTrigger asChild>
           <Button size={"icon-lg"} variant={"outline"}>
@@ -31,9 +31,11 @@ export default function MobileView() {
                 cdin
               </a>
             </SheetTitle>
-            <SheetDescription>trust me. it's worth it.</SheetDescription>
+            <SheetDescription className=" fira-code-mono tracking-tighter ">
+              trust me. it's worth it.
+            </SheetDescription>
           </SheetHeader>
-          <div className="flex flex-col items-start">
+          <div className="flex flex-col items-start fira-code-mono">
             {navLinks
               .filter((link) => !link.external)
               .map((link) => (
