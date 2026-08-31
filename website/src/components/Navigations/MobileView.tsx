@@ -11,6 +11,7 @@ import { Menu } from "lucide-react";
 import { Button } from "../ui/button";
 import { ModeToggle } from "../ModeToggle";
 import { navLinks } from "@/consts/navLinks";
+import { Link } from "react-router";
 
 export default function MobileView() {
   return (
@@ -46,7 +47,7 @@ export default function MobileView() {
                   variant={"ghost"}
                   asChild
                 >
-                  <a href={link.href}>{link.label}</a>
+                  <Link to={link.href}>{link.label}</Link>
                 </Button>
               ))}
           </div>
@@ -64,7 +65,7 @@ export default function MobileView() {
                 rel="noopener noreferrer"
               >
                 <img
-                  src="/github.svg"
+                  src={`${import.meta.env.BASE_URL}github.svg`}
                   alt="github logo"
                   className="w-5 invert"
                 />

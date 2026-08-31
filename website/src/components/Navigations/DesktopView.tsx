@@ -1,6 +1,7 @@
 import { navLinks } from "@/consts/navLinks";
 import { ModeToggle } from "../ModeToggle";
 import { Button } from "../ui/button";
+import { Link } from "react-router";
 
 export default function DesktopView() {
   return (
@@ -15,7 +16,7 @@ export default function DesktopView() {
             variant="ghost"
             asChild
           >
-            <a href={link.href}>{link.label}</a>
+            <Link to={link.href}>{link.label}</Link>
           </Button>
         ))}
       <ModeToggle />
@@ -30,7 +31,11 @@ export default function DesktopView() {
             asChild
           >
             <a href={link.href} target="_blank" rel="noopener noreferrer">
-              <img src="/github.svg" alt="github logo" className="w-5 invert" />
+              <img
+                src="/cdin/github.svg"
+                alt="github logo"
+                className="w-5 invert"
+              />
               {link.label}
             </a>
           </Button>
