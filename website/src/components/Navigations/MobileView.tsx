@@ -25,12 +25,12 @@ export default function MobileView() {
         <SheetContent>
           <SheetHeader className="border-b">
             <SheetTitle className="w-fit">
-              <a
-                href="/"
+              <Link
+                to="/"
                 className="flex items-center font-semibold text-3xl font-mono"
               >
                 cdin
-              </a>
+              </Link>
             </SheetTitle>
             <SheetDescription className=" fira-code-mono tracking-tighter ">
               trust me. it's worth it.
