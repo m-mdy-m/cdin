@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import logo from "../../../scripts/icon.svg";
 
 export default function NotFound() {
@@ -13,12 +14,12 @@ export default function NotFound() {
           404 - PAGE NOT FOUND
         </h1>
         <div className="grid grid-cols-2 mt-2 border-t w-full">
-          <a
-            href="/"
+          <Link
+            to={`/`}
             className="border-r hover:bg-foreground/10 py-6 underline"
           >
             HOME
-          </a>
+          </Link>
           <button
             onClick={() => window.history.back()}
             className="border-r hover:bg-foreground/10 py-6 underline cursor-pointer"

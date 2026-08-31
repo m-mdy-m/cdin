@@ -8,7 +8,7 @@ export default function MacOsInstallationMethod() {
       <div className="col-span-6 lg:col-span-2">
         <h6 className="flex mb-1 items-center gap-1 text-xl">
           <img
-            src="/os-icons/macos.svg"
+            src={`${import.meta.env.BASE_URL}os-icons/macos.svg`}
             alt="macos"
             className="w-5 aspect-square dark:invert"
           />{" "}

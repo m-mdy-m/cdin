@@ -1,5 +1,6 @@
 import { CodeXmlIcon, Download } from "lucide-react";
 import { Button } from "../ui/button";
+import { Link } from "react-router";
 
 export default function Hero() {
   return (
@@ -19,10 +20,10 @@ export default function Hero() {
           className="flex flex-row w-fit items-center gap-2 py-4 md:py-6 text-base md:text-xl font-semibold"
           size={"lg"}
         >
-          <a href="download">
+          <Link to={`download`}>
             <Download className="size-5 md:size-6" />
             Download
-          </a>
+          </Link>
         </Button>
         <Button
           asChild

@@ -8,7 +8,7 @@ export default function LinuxInstallationMethod() {
       <div className="col-span-6 lg:col-span-2">
         <h6 className="flex mb-1 items-center gap-1 text-xl">
           <img
-            src="/os-icons/linux.svg"
+            src={`${import.meta.env.BASE_URL}os-icons/linux.svg`}
             alt="linux"
             className="w-5 aspect-square dark:invert"
           />{" "}

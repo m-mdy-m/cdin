@@ -6,7 +6,7 @@ export const footerLinks = [
   },
   {
     label: "Docs",
-    href: "/docs",
+    href: "/cdin/docs",
   },
   {
     label: "Changelog",

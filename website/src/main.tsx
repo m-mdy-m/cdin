@@ -11,7 +11,7 @@ import Layout from "./pages/Layout.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/cdin">
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<App />} />
