@@ -7,6 +7,7 @@ import {
 import { faqs } from "@/consts/faqs";
 import { Button } from "../ui/button";
 import { ArrowRight } from "lucide-react";
+import { Link } from "react-router";
 
 export default function Faqs() {
   return (
@@ -32,9 +33,9 @@ export default function Faqs() {
         size={"lg"}
         asChild
       >
-        <a href="docs">
+        <Link to="docs">
           Read docs <ArrowRight />
-        </a>
+        </Link>
       </Button>
     </div>
   );
