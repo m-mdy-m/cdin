@@ -33,7 +33,7 @@ export default function Faqs() {
         size={"lg"}
         asChild
       >
-        <Link to="docs">
+        <Link to="/docs">
           Read docs <ArrowRight />
         </Link>
       </Button>

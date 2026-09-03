@@ -32,7 +32,7 @@ export default function DesktopView() {
           >
             <a href={link.href} target="_blank" rel="noopener noreferrer">
               <img
-                src="/cdin/github.svg"
+                src={`${import.meta.env.BASE_URL}github.svg`}
                 alt="github logo"
                 className="w-5 invert"
               />

@@ -47,6 +47,9 @@ jobs:
         working-directory: website
         run: pnpm build
 
+      - name: SPA fallback for GitHub Pages
+        run: cp website/dist/index.html website/dist/404.html
+
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
 

@@ -20,7 +20,7 @@ export default function Hero() {
           className="flex flex-row w-fit items-center gap-2 py-4 md:py-6 text-base md:text-xl font-semibold"
           size={"lg"}
         >
-          <Link to={`download`}>
+          <Link to={`/download`}>
             <Download className="size-5 md:size-6" />
             Download
           </Link>
