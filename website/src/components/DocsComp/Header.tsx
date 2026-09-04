@@ -13,7 +13,7 @@ import MobileView from "../Navigations/MobileView";
 
 export default function DocsHeader() {
   return (
-    <header className="flex border-b items-center justify-between pl-2 pr-6 py-4 sticky top-0">
+    <header className="flex border-b items-center justify-between pl-2 pr-6 py-4 ">
       <Link to={`/`}>
         <img src={logo} alt="logo.svg" className="w-14 md:w-16 aspect-square" />
       </Link>

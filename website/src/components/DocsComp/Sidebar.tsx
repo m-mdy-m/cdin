@@ -15,8 +15,8 @@ export default function Sidebar() {
   }, {});
 
   return (
-    <aside className="border-r p-6 overflow-y-auto h-full">
-      <nav className="space-y-6">
+    <aside className="border-r p-4 md:block hidden">
+      <nav className="space-y-6 sticky top-4 self-start">
         {Object.entries(grouped).map(([category, items]) => (
           <div key={category}>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
