@@ -2,28 +2,18 @@ import { Link } from "react-router";
 import logo from "../../../../scripts/icon.svg";
 import { ModeToggle } from "../ModeToggle";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { SearchIcon } from "lucide-react";
 import {
   InputGroup,
   InputGroupAddon,
-  InputGroupButton,
   InputGroupInput,
-  InputGroupText,
-  InputGroupTextarea,
 } from "@/components/ui/input-group";
 import MobileView from "../Navigations/MobileView";
 
 export default function DocsHeader() {
   return (
-    <header className="flex boder-b items-center justify-between pl-2 pr-6 py-4 sticky top-0">
+    <header className="flex border-b items-center justify-between pl-2 pr-6 py-4 sticky top-0">
       <Link to={`/`}>
         <img src={logo} alt="logo.svg" className="w-14 md:w-16 aspect-square" />
       </Link>
