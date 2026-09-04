@@ -2,14 +2,8 @@ import { Link } from "react-router";
 import logo from "../../../../scripts/icon.svg";
 import { ModeToggle } from "../ModeToggle";
 import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { SearchIcon } from "lucide-react";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import MobileView from "../Navigations/MobileView";
+import SearchDocs from "./SearchDocs";
 
 export default function DocsHeader() {
   return (
@@ -30,28 +24,7 @@ export default function DocsHeader() {
             <Link to={`/download`}>Download</Link>
           </Button>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button
-              size="lg"
-              variant="ghost"
-              className="lg:text-lg border border-accent/50 hover:border-accent font-normal h-fit p-0"
-            >
-              <div className="min-w-0 flex items-center px-4 gap-2 text-muted-foreground w-fit rounded py-2">
-                <SearchIcon />
-                Search docs...
-              </div>
-            </Button>
-          </DialogTrigger>
-          <DialogContent showCloseButton={false}>
-            <InputGroup>
-              <InputGroupInput placeholder="Search..." />
-              <InputGroupAddon>
-                <SearchIcon />
-              </InputGroupAddon>
-            </InputGroup>
-          </DialogContent>
-        </Dialog>
+        <SearchDocs />
       </section>
     </header>
   );
