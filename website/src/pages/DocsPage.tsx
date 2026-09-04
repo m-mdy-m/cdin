@@ -1,3 +1,3 @@
 export default function DocsPage() {
-  return <div className="h-full bg-red-500"></div>;
+  return <div className="h-full"></div>;
 }
