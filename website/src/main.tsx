@@ -7,7 +7,8 @@ import AboutPage from "./pages/AboutUs.tsx";
 import DownloadPage from "./pages/DownloadPage.tsx";
 import DocsPage from "./pages/DocsPage.tsx";
 import NotFound from "./components/NotFound.tsx";
-import Layout from "./pages/Layout.tsx";
+import Layout from "./pages/layouts/Layout.tsx";
+import DocsLayout from "./pages/layouts/DocsLayout.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -17,9 +18,11 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/" element={<App />} />
           <Route path="about-us" element={<AboutPage />} />
           <Route path="download" element={<DownloadPage />} />
-          <Route path="docs" element={<DocsPage />} />
-
           <Route path="*" element={<NotFound />} />
+        </Route>
+
+        <Route element={<DocsLayout />}>
+          <Route path="docs" element={<DocsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
