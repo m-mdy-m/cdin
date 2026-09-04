@@ -38,3 +38,26 @@ export const docs: Doc[] = Object.entries(modules)
 export function getDocBySlug(slug: string): Doc | undefined {
   return docs.find((d) => d.slug === slug);
 }
+
+export function headingToId(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+export interface Heading {
+  title: string;
+  id: string;
+}
+
+export function getHeadings(content: string): Heading[] {
+  const headings: Heading[] = [];
+  const regex = /^##\s+(.+)$/gm;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    const title = match[1].replace(/`/g, "").trim();
+    headings.push({ title, id: headingToId(title) });
+  }
+  return headings;
+}
