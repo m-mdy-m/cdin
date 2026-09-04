@@ -9,7 +9,7 @@ export default function DocsLayout() {
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
         <div className="fira-code-mono relative grid grid-rows-[auto_1fr] w-full h-screen overflow-hidden">
           <DocsHeader />
-          <div className="grid grid-cols-[auto_1fr] overflow-y-scroll">
+          <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] overflow-y-auto">
             <Sidebar />
             <Outlet />
           </div>

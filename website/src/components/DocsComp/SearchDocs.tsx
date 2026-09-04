@@ -4,7 +4,7 @@ import {
   DialogContent,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FileText, SearchIcon } from "lucide-react";
+import { FileText, SearchIcon, XIcon } from "lucide-react";
 import {
   InputGroup,
   InputGroupAddon,
@@ -58,7 +58,7 @@ export default function SearchDocs() {
         showCloseButton={false}
         className="duration-100 transition-all h-fit"
       >
-        <InputGroup className="h-12">
+        <InputGroup className="h-12 border-border border-2">
           <InputGroupInput
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -67,6 +67,13 @@ export default function SearchDocs() {
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
+          {query.length === 0 ? null : (
+            <InputGroupAddon className="" align="inline-end">
+              <Button size="icon" variant="ghost" onClick={() => setQuery("")}>
+                <XIcon />
+              </Button>
+            </InputGroupAddon>
+          )}
         </InputGroup>
 
         <section>
