@@ -6,6 +6,7 @@ import { BrowserRouter, Route, Routes } from "react-router";
 import AboutPage from "./pages/AboutUs.tsx";
 import DownloadPage from "./pages/DownloadPage.tsx";
 import DocsPage from "./pages/DocsPage.tsx";
+import DocView from "./pages/DocView.tsx";
 import NotFound from "./components/NotFound.tsx";
 import Layout from "./pages/layouts/Layout.tsx";
 import DocsLayout from "./pages/layouts/DocsLayout.tsx";
@@ -23,6 +24,7 @@ createRoot(document.getElementById("root")!).render(
 
         <Route element={<DocsLayout />}>
           <Route path="docs" element={<DocsPage />} />
+          <Route path="docs/:slug" element={<DocView />} />
         </Route>
       </Routes>
     </BrowserRouter>
