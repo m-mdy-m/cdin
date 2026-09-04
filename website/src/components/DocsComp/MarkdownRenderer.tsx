@@ -1,7 +1,18 @@
 import { Link } from "react-router";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { docs } from "@/lib/docs";
+import { docs, headingToId } from "@/lib/docs";
+
+function extractText(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (node && typeof node === "object" && "props" in node) {
+    const el = node as { props: { children?: React.ReactNode } };
+    return extractText(el.props.children);
+  }
+  return "";
+}
 
 const DOC_SLUGS = new Set(docs.map((d) => d.slug));
 
@@ -57,10 +68,7 @@ export default function MarkdownRenderer({ content }: { content: string }) {
         h2: ({ children, ...props }) => (
           <h2
             className="text-2xl font-semibold mt-8 mb-4"
-            id={String(children)
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/(^-|-$)/g, "")}
+            id={headingToId(extractText(children))}
             {...props}
           >
             {children}
