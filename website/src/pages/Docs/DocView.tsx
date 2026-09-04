@@ -33,10 +33,10 @@ export default function DocView() {
 
   return (
     <article className="px-4 md:px-8 py-0 h-full gap-4 grid grid-cols-9">
-      <div className="col-span-6">
+      <div className=" col-span-9 md:col-span-6">
         <MarkdownRenderer content={doc.content} />
       </div>
-      <div className="col-span-3">
+      <div className="hidden md:block col-span-3">
         <ShortCuts headings={headings} />
       </div>
     </article>
