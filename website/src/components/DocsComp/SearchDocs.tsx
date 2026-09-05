@@ -15,7 +15,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { docs } from "@/lib/docs";
 
-export default function SearchDocs() {
+export default function SearchDocs({ className }: { className: string }) {
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
 
@@ -46,9 +46,11 @@ export default function SearchDocs() {
         <Button
           size="lg"
           variant="ghost"
-          className="lg:text-lg border border-accent/50 hover:border-accent font-normal h-fit p-0"
+          className={` ${className} lg:text-lg border border-accent/50 hover:border-accent font-normal h-fit p-0`}
         >
-          <div className="min-w-0 flex items-center px-4 gap-2 text-muted-foreground w-fit rounded py-2">
+          <div
+            className={`min-w-0 flex items-center px-4 gap-2 text-muted-foreground rounded py-2`}
+          >
             <SearchIcon />
             Search docs...
           </div>

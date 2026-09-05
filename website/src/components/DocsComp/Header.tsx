@@ -2,8 +2,8 @@ import { Link } from "react-router";
 import logo from "../../../../scripts/icon.svg";
 import { ModeToggle } from "../ModeToggle";
 import { Button } from "../ui/button";
-import MobileView from "../Navigations/MobileView";
 import SearchDocs from "./SearchDocs";
+import MobileViewHeader from "./MobileViewHeader";
 
 export default function DocsHeader() {
   return (
@@ -11,7 +11,7 @@ export default function DocsHeader() {
       <Link to={`/`}>
         <img src={logo} alt="logo.svg" className="w-14 md:w-16 aspect-square" />
       </Link>
-      <MobileView />
+      <MobileViewHeader />
       <section className="md:flex items-center gap-4 hidden">
         <div className="flex items-center">
           <ModeToggle />
@@ -24,7 +24,7 @@ export default function DocsHeader() {
             <Link to={`/download`}>Download</Link>
           </Button>
         </div>
-        <SearchDocs />
+        <SearchDocs className="w-fit" />
       </section>
     </header>
   );
