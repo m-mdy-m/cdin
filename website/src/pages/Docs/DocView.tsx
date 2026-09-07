@@ -32,7 +32,7 @@ export default function DocView() {
   const headings = getHeadings(doc.content);
 
   return (
-    <article className="px-4 md:px-8 py-0 h-full gap-4 grid grid-cols-9">
+    <article className="px-4 md:px-8 py-0 h-full gap-4 grid grid-cols-9 overflow-y-scroll">
       <div className=" col-span-9 md:col-span-6">
         <MarkdownRenderer content={doc.content} />
       </div>
