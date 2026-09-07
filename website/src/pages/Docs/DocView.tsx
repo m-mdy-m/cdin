@@ -4,6 +4,7 @@ import { getDocBySlug, getHeadings } from "@/lib/docs";
 import MarkdownRenderer from "@/components/DocsComp/MarkdownRenderer";
 import NotFound from "@/components/NotFound";
 import ShortCuts from "./ShortCuts";
+import DocsFooter from "@/components/DocsComp/Footer";
 
 export default function DocView() {
   const { slug } = useParams<{ slug: string }>();
@@ -35,6 +36,7 @@ export default function DocView() {
     <article className="px-4 md:px-8 py-0 h-full gap-4 grid grid-cols-9 overflow-y-scroll">
       <div className=" col-span-9 md:col-span-6">
         <MarkdownRenderer content={doc.content} />
+        <DocsFooter />
       </div>
       <div className="hidden md:block col-span-3">
         <ShortCuts headings={headings} />
