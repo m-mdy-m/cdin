@@ -12,7 +12,7 @@ export function useContributors() {
     fetchContributors()
       .then((result) => {
         if (cancelled) return;
-        console.log("contributors:", result);
+        // console.log("contributors:", result);
         setData(result);
       })
       .catch((err: unknown) => {
