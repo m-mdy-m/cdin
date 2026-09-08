@@ -7,7 +7,7 @@ export default function HeroImage() {
         <img
           src={heroimage}
           alt="cdin home"
-          className="w-full aspect-auto object-cover rounded"
+          className="w-full aspect-video object-cover rounded"
         />
       </div>
     </div>
