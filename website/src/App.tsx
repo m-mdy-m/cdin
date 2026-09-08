@@ -1,3 +1,4 @@
+import Contributors from "./components/Landing/Contributor";
 import Faqs from "./components/Landing/Faqs";
 import Hero from "./components/Landing/Hero";
 import HeroImage from "./components/Landing/HeroImage";
@@ -10,6 +11,7 @@ export default function App() {
       <HeroImage />
       <Philosophy />
       <Faqs />
+      <Contributors />
     </div>
   );
 }
