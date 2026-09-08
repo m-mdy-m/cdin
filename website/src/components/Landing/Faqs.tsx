@@ -19,10 +19,10 @@ export default function Faqs() {
             value={`item-${i}`}
             key={i}
           >
-            <AccordionTrigger className="text-xl lg:text-2xl font-semibold cursor-pointer">
+            <AccordionTrigger className="text-lg lg:text-2xl font-semibold cursor-pointer">
               {faq.question}
             </AccordionTrigger>
-            <AccordionContent className="lg:text-base text-sm text-muted-foreground">
+            <AccordionContent className="lg:text-base sm:text-sm text-xs text-muted-foreground">
               {faq.answer}
             </AccordionContent>
           </AccordionItem>
