@@ -86,7 +86,7 @@ export default function AboutPage() {
       {/* Screenshot */}
       <div className="border-b">
         <div className="md:p-10 py-10 px-4">
-          <div className="border-4 rounded-lg hover:border-primary duration-100 hover:scale-101 p-2">
+          <div className="border-4 rounded-lg hover:border-primary border-primary md:border-secondary duration-100 hover:scale-101 p-2">
             <img
               src={cdinimage}
               alt="cdin editor in action"
