@@ -13,7 +13,7 @@ export default function DocsHeader() {
       </Link>
       <MobileViewHeader />
       <section className="md:flex items-center gap-4 hidden">
-        <div className="flex items-center">
+        <div className="flex items-center fira-code-mono">
           <ModeToggle />
           <Button
             asChild

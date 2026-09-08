@@ -43,7 +43,7 @@ export default function MobileViewHeader() {
                 cdin
               </Link>
             </SheetTitle>
-            <SheetDescription className="fira-code-mono tracking-tighter">
+            <SheetDescription className="tracking-tighter">
               trust me. it's worth it.
             </SheetDescription>
           </SheetHeader>
@@ -52,7 +52,7 @@ export default function MobileViewHeader() {
             <SearchDocs className="w-full" />
           </div>
 
-          <nav className="px-4 space-y-6 overflow-y-auto fira-code-mono">
+          <nav className="px-4 space-y-6 overflow-y-auto">
             {Object.entries(grouped).map(([category, items]) => (
               <div key={category}>
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
