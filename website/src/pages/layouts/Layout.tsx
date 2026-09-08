@@ -2,6 +2,7 @@ import BottomBar from "@/components/BottomBartion/BottomBar";
 import Navbar from "@/components/Navigations/Navbar";
 import { Outlet } from "react-router";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export default function Layout() {
   return (
@@ -9,7 +10,10 @@ export default function Layout() {
       <div className="h-px w-screen fixed top-0 left-0 right-0 z-50 bg-border" />
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
         <Navbar />
-        <Outlet />
+
+        <TooltipProvider>
+          <Outlet />
+        </TooltipProvider>
         <BottomBar />
       </ThemeProvider>
     </div>
