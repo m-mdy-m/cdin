@@ -1,10 +1,23 @@
 import { useEffect } from "react";
-import { useParams, useLocation } from "react-router";
+import { Link, useParams, useLocation } from "react-router";
 import { getDocBySlug, getHeadings } from "@/lib/docs";
 import MarkdownRenderer from "@/components/DocsComp/MarkdownRenderer";
 import NotFound from "@/components/NotFound";
 import ShortCuts from "./ShortCuts";
 import DocsFooter from "@/components/DocsComp/Footer";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+
+// const CATEGORY_LABELS: Record<string, string> = {
+//   guides: "Guides",
+//   architecture: "Architecture",
+// };
 
 export default function DocView() {
   const { slug } = useParams<{ slug: string }>();
@@ -34,7 +47,26 @@ export default function DocView() {
 
   return (
     <article className="px-4 md:px-8 py-0 h-full gap-4 grid grid-cols-9 overflow-y-scroll">
-      <div className=" col-span-9 md:col-span-6">
+      <div className=" col-span-9 md:col-span-6 mt-8">
+        <Breadcrumb className="mb-4">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link to="/">Home</Link>
+              </BreadcrumbLink>
+              <BreadcrumbSeparator />
+            </BreadcrumbItem>
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link to="/docs">Docs</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{doc.title}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
         <MarkdownRenderer content={doc.content} />
         <DocsFooter />
       </div>
