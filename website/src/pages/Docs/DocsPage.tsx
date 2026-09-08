@@ -13,7 +13,7 @@ export default function DocsPage() {
   }, {});
 
   return (
-    <div className="px-8 py-10 overflow-y-auto h-full">
+    <div className="px-4 md:px-8 py-10 overflow-y-auto h-full">
       <h1 className="text-3xl font-bold mb-2">Documentation</h1>
       <p className="text-muted-foreground mb-8">
         Everything you need to get started with cdin.

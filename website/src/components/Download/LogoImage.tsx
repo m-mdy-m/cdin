@@ -4,7 +4,7 @@ import logo from "../../../../scripts/icon.svg";
 export default function LogoImage() {
   return (
     <div className="col-span-12 sm:col-span-3">
-      <Card className="hover:border-primary duration-100 sm:w-full w-1/2 mx-auto">
+      <Card className="hover:border-primary md:border-secondary border-primary duration-100 sm:w-full w-1/2 mx-auto">
         <CardContent>
           <img
             src={logo}

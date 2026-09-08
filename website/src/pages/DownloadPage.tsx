@@ -46,7 +46,7 @@ export default function DownloadPage() {
                 value="test"
                 className="md:py-5 md:text-xl cursor-pointer"
               >
-                Test
+                Source
               </TabsTrigger>
             </TabsList>
             <TabsContent className="flex flex-col" value="stable">
