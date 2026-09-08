@@ -19,7 +19,7 @@ export default function BottomBar() {
           </a>
         ))}
       </div>
-      <div className="py-28">
+      <div className="py-28 lg:px-0 px-8 border-b mb-px">
         <p className="text-center w-full">
           MIT License Copyright (c) 2026{" "}
           <Button
