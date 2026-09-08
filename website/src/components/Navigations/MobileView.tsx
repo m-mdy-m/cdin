@@ -32,11 +32,11 @@ export default function MobileView() {
                 cdin
               </Link>
             </SheetTitle>
-            <SheetDescription className=" fira-code-mono tracking-tighter ">
+            <SheetDescription className="tracking-tighter">
               trust me. it's worth it.
             </SheetDescription>
           </SheetHeader>
-          <div className="flex flex-col items-start fira-code-mono">
+          <div className="flex flex-col items-start">
             {navLinks
               .filter((link) => !link.external)
               .map((link) => (
