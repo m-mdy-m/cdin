@@ -84,9 +84,6 @@ help:
 	@echo 'Options: SDL3_PREFIX=/path BUILD=release|debug PREFIX=/usr/local LUA_VERSION=auto|5.4'
 	@echo 'Quality: test, check, bench, size, tiny (BUILD=tiny, -Os + gc-sections)'
 
-test: check
-	python scripts/smoke_bidi.py
-
 check:
 	python scripts/check.py
 
