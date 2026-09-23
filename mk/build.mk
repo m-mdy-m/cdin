@@ -1,4 +1,5 @@
 .PHONY: build clean distclean info help run debug debug-san _check_deps
+.PHONY: test check bench size tiny
 
 ICON_INL := src/icon.inl
 
@@ -81,3 +82,23 @@ info:
 help:
 	@echo 'Targets: build (default), run, debug, clean, distclean, install, uninstall, info, help'
 	@echo 'Options: SDL3_PREFIX=/path BUILD=release|debug PREFIX=/usr/local LUA_VERSION=auto|5.4'
+	@echo 'Quality: test, check, bench, size, tiny (BUILD=tiny, -Os + gc-sections)'
+
+test: check
+	python scripts/smoke_bidi.py
+
+check:
+	python scripts/check.py
+
+bench:
+	python scripts/bench.py
+
+size:
+	@echo '-- binary / data sizes --'
+	@python scripts/bench.py
+	@echo ''
+	@echo '-- largest data dirs --'
+	@python -c "from pathlib import Path; r=Path('data'); ds=sorted(((sum(f.stat().st_size for f in d.rglob('*') if f.is_file()), d) for d in r.iterdir() if d.is_dir()), reverse=True); [print(f'  {d}: {s/1024:.1f} KiB') for s,d in ds]"
+
+tiny:
+	@$(MAKE) BUILD=tiny

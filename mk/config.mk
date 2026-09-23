@@ -11,6 +11,10 @@ PKG_CONFIG := $(shell command -v pkg-config 2>/dev/null)
 ifeq ($(BUILD),debug)
   OPT := -O0 -g3 -DDEBUG
   STRIP :=
+else ifeq ($(BUILD),tiny)
+  OPT := -Os -DNDEBUG -ffunction-sections -fdata-sections -flto
+  STRIP := -s
+  LDFLAGS_TINY := -Wl,--gc-sections
 else
   OPT := -O3 -DNDEBUG
   STRIP := -s
@@ -71,7 +75,7 @@ endif
 
 BASE_CFLAGS := -std=gnu11 -fno-strict-aliasing -Wall -Wextra -Wno-unused-parameter $(OPT) $(VERSION_CFLAGS) -Isrc
 CFLAGS := $(BASE_CFLAGS) $(SDL_CFLAGS) $(LUA_CFLAGS)
-LDFLAGS := $(SDL_LDFLAGS) $(LUA_LDFLAGS) -lm $(STRIP)
+LDFLAGS := $(SDL_LDFLAGS) $(LUA_LDFLAGS) -lm $(LDFLAGS_TINY) $(STRIP)
 ifeq ($(PLATFORM),windows)
   LDFLAGS += -mwindows
 endif
