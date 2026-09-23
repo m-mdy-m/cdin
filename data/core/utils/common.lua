@@ -2,13 +2,38 @@ local common = {}
 
 
 function common.is_utf8_cont(char)
-  local byte = char:byte()
+  if type(char) ~= "string" or #char == 0 then return false end
+  local byte = char:byte(1, 1)
+  if byte == nil then return false end
   return byte >= 0x80 and byte < 0xc0
 end
 
 
 function common.utf8_chars(text)
-  return text:gmatch("[\0-\x7f\xc2-\xf4][\x80-\xbf]*")
+  if type(text) ~= "string" then
+    return function() return nil end
+  end
+  local ok, t = pcall(require, "core.text.utf8")
+  if ok and t and t.chars then return t.chars(text) end
+  return text:gmatch("[%z\1-\127\194-\244][\128-\191]*")
+end
+
+
+function common.utf8_len(text)
+  local ok, t = pcall(require, "core.text.utf8")
+  if ok and t and t.len then return t.len(text) end
+  local n = 0
+  for _ in common.utf8_chars(text) do n = n + 1 end
+  return n
+end
+
+function common.visual_text(text, opts)
+  if type(text) ~= "string" then return "" end
+  local ok, t = pcall(require, "core.text")
+  if not ok or not t then return text end
+  local ok2, res = pcall(t.visual, text, opts)
+  if ok2 and type(res) == "string" then return res end
+  return text
 end
 
 
@@ -114,7 +139,9 @@ function common.match_pattern(text, pattern, ...)
 end
 
 
-function common.draw_text(font, color, text, align, x,y,w,h)
+function common.draw_text(font, color, text, align, x,y,w,h, opts)
+  if font == nil or text == nil then return x, y end
+  text = common.visual_text(text, opts)
   local tw, th = font:get_width(text), font:get_height(text)
   if align == "center" then
     x = x + (w - tw) / 2
@@ -137,13 +164,16 @@ function common.bench(name, fn, ...)
 end
 
 function common.ensure_dir(path)
+  if type(path) ~= "string" or path == "" then return end
   local IS_WIN = PATHSEP == "\\"
   local dir = path:match("^(.+)[\\/][^\\/]+$")
-  if not dir then return end
+  if not dir or dir == "" then return end
+  -- guard against command injection: only allow sane path chars
+  if dir:find('["\n\r`$&|;]') then return end
   if IS_WIN then
-    os.execute('mkdir "' .. dir .. '" 2>nul')
+    os.execute(string.format('mkdir "%s" 2>nul', dir))
   else
-    os.execute('mkdir -p "' .. dir .. '"')
+    os.execute(string.format('mkdir -p "%s"', dir))
   end
 end
 

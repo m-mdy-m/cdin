@@ -96,8 +96,14 @@ end
 
 function DocView:get_col_x_offset(line, col)
   local text = self.doc.lines[line]
-  if not text then return 0 end
-  return self:get_font():get_width(text:sub(1, col - 1))
+  if not text or type(col) ~= "number" then return 0 end
+  col = math.max(1, math.min(col, #text + 1))
+  local prefix = text:sub(1, col - 1)
+  if #prefix > 8192 then prefix = prefix:sub(-8192) end
+  local ok, w = pcall(self.get_font, self)
+  if not ok then return 0 end
+  local ok2, width = pcall(w.get_width, w, prefix)
+  return (ok2 and type(width) == "number") and width or 0
 end
 
 function DocView:get_x_offset_col(line, x)
@@ -231,9 +237,35 @@ end
 function DocView:draw_line_text(idx, x, y)
   local tx, ty = x, y + self:get_line_text_y_offset()
   local font   = self:get_font()
-  for _, type, text in self.doc.highlighter:each_token(idx) do
-    tx = renderer.draw_text(font, text, tx, ty, style.syntax[type])
+  local dir = config.direction or "auto"
+  local shaping = config.shaping_enabled ~= false
+  if dir == "ltr" then
+    for _, type, text in self.doc.highlighter:each_token(idx) do
+      tx = renderer.draw_text(font, text, tx, ty, style.syntax[type])
+    end
+    return
   end
+  local toks = {}
+  for _, type, text in self.doc.highlighter:each_token(idx) do
+    toks[#toks + 1] = { type = type, text = text }
+  end
+  if #toks == 0 then return end
+  local ok, textmod = pcall(require, "core.text")
+  if not ok or not textmod then
+    for _, t in ipairs(toks) do tx = renderer.draw_text(font, t.text, tx, ty, style.syntax[t.type]) end
+    return
+  end
+  local full = {}
+  for _, t in ipairs(toks) do full[#full + 1] = t.text end
+  full = table.concat(full)
+  local has_rtl = textmod.bidi.has_rtl(full)
+  if not has_rtl then
+    for _, t in ipairs(toks) do tx = renderer.draw_text(font, t.text, tx, ty, style.syntax[t.type]) end
+    return
+  end
+  local shaped = shaping and textmod.shaper.shape(full) or full
+  local visual = textmod.bidi.visual(shaped, dir)
+  tx = renderer.draw_text(font, visual, tx, ty, style.syntax[toks[1].type] or style.syntax["normal"])
 end
 
 -- Draw all occurrences of the current search term on this line
