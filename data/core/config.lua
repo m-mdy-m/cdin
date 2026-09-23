@@ -25,4 +25,20 @@ config.scrolloff = 5
 config.line_number_relative = false
 config.session_restore = false
 
+-- ── text direction & shaping ─────────────────────────────
+-- "auto": per-line base direction; "ltr": legacy; "rtl": force RTL.
+config.direction = "auto"
+config.shaping_enabled = true
+
+-- ── themes ───────────────────────────────────────────────
+config.theme = "default"
+config.theme_auto_reload = true
+
+-- ── optional plugins (data/plugins/optional/) ────────────
+config.optional_plugins = {
+  unicode_inspect = true,
+  rtl_toggle = true,
+  theme_switcher = true,
+}
+
 return config
