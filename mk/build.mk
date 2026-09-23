@@ -90,9 +90,6 @@ test: check
 check:
 	python scripts/check.py
 
-bench:
-	python scripts/bench.py
-
 size:
 	@echo '-- binary / data sizes --'
 	@python scripts/bench.py
