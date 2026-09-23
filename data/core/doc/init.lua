@@ -3,6 +3,7 @@ local Highlighter = require "core.doc.highlighter"
 local syntax      = require "core.syntax"
 local config      = require "core.config"
 local common      = require "core.utils.common"
+local unpack = table.unpack or unpack
 
 local Doc = Object:extend()
 
@@ -49,10 +50,10 @@ local function pop_undo(self, undo_stack, redo_stack)
   undo_stack.idx = undo_stack.idx - 1
 
   if cmd.type == "insert" then
-    local line, col, text = table.unpack(cmd)
+    local line, col, text = unpack(cmd)
     self:raw_insert(line, col, text, redo_stack, cmd.time)
   elseif cmd.type == "remove" then
-    local line1, col1, line2, col2 = table.unpack(cmd)
+    local line1, col1, line2, col2 = unpack(cmd)
     self:raw_remove(line1, col1, line2, col2, redo_stack, cmd.time)
   elseif cmd.type == "selection" then
     self.selection.a.line, self.selection.a.col = cmd[1], cmd[2]
