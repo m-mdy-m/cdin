@@ -466,3 +466,108 @@ The auto-update checker is a lightweight manual GitHub release checker.
 - The update check runs asynchronously and never blocks the editor UI. If GitHub is unreachable the editor continues normally.
 - No new C code. The autoupdate plugin is implemented entirely in Lua and uses standard system process execution for GitHub API requests.
 - Beta cycle continues; APIs may still change before the first stable release.
+
+## [0.1.0-beta.7] — 2026-09-23
+
+Largest release so far: 102 commits, 218 files changed, +21,760 / −149. Headline features are full UTF-8/RTL/Arabic shaping support, a theme system with 10 built-in themes, an optional-plugin system, a Lua test suite, Docker images, and a complete documentation website. The beta cycle continues; APIs may still change before the first stable release.
+
+### Features
+
+- **UTF-8, bidi & Arabic shaping pipeline:** New text modules `data/core/text/utf8.lua` (decode/encode/length/sanitize, invalid bytes become U+FFFD), `data/core/text/bidi.lua` (base-direction detection, directional runs, visual reordering) and `data/core/text/shaper.lua` (contextual Arabic presentation forms, lam-alef ligatures, correct joining for Persian پ چ ژ گ ک ی). Persian/Arabic text such as «سلام» now renders shaped and right-to-left. ([`dd5ac5d`](../../commit/dd5ac5d))
+
+- **RTL rendering in the editor:** `DocView:draw_line_text` detects RTL lines, shapes the whole line and reorders it visually; pure-LTR lines keep the fast token-by-token path. (`data/core/views/docview.lua`)
+
+- **Font fallback chain:** Bundled `data/fonts/fallback.ttf` (Vazirmatn, OFL — `LICENSE-fallback.txt`) and `data/fonts/emoji.ttf` (`LICENSE-emoji.txt`). `style.lua` auto-attaches them to the UI, big and code fonts via `font:add_fallback`, so Arabic/Persian glyphs and emoji resolve through the fallback chain — the primary fonts themselves contain no Arabic. ([`00bc28e`](../../commit/00bc28e), [`fc42267`](../../commit/fc42267))
+
+- **Theme system:** New registry `data/core/themes.lua` plus 10 built-in themes under `data/themes/`: `default`, `catppuccin-mocha`, `dracula`, `github-light`, `gruvbox-dark`, `monokai`, `nord`, `solarized-dark`, `solarized-light`, `tokyo-night`. Selected with `config.theme`. ([`fc42267`](../../commit/fc42267), [`523a427`](../../commit/523a427))
+
+- **Optional plugins:** New directory `data/plugins/optional/` with 3 plugins, each individually switchable through `config.optional_plugins` and skipped by the loader when disabled, with deterministic (sorted) plugin load order:
+  - `rtl_toggle` — `rtl:toggle-direction` (`Ctrl+Alt+R`, cycles auto → ltr → rtl) and `rtl:toggle-shaping` (`Ctrl+Alt+S`).
+  - `theme_switcher` — `core:change-theme` (`Ctrl+Alt+T`), a fuzzy picker over all registered themes.
+  - `unicode_inspect` — `unicode:inspect` (`Ctrl+Alt+U`), shows the codepoints of the selection or caret. ([`dd6a781`](../../commit/dd6a781), [`4c62daa`](../../commit/4c62daa))
+
+- **New config keys:** `direction` (`"auto" | "ltr" | "rtl"`), `shaping_enabled`, `theme`, `theme_auto_reload`, `optional_plugins`. (`data/core/config.lua`, [`ff3de84`](../../commit/ff3de84))
+
+- **Lua test suite:** New `tests/lua/` suite — runner `run.lua`, shared `harness.lua`, 4 unit tests (`text_utf8`, `text_bidi`, `text_shaper`, `themes`) and 3 integration tests (`text_pipeline`, `doc_edit`, `config_style_theme`). Green run: `LUA TESTS OK (1587 asserts, 7 files)`; failures print a traceback and exit with code 1. Run from the repo root with `lua tests/lua/run.lua`. ([`c4ea56c`](../../commit/c4ea56c), [`d899198`](../../commit/d899198), [`a395dad`](../../commit/a395dad), [`b9ad541`](../../commit/b9ad541))
+
+- **Docker:** New root `Dockerfile` (multi-stage, `ubuntu:22.04`, SDL 3.2.14 built from source, non-root user `cdin` uid 1000), `docker-compose.yml` (X11 socket + `ipc: host` for MIT-SHM, optional GPU passthrough) and `.dockerignore`. ([`99fa1c3`](../../commit/99fa1c3), [`c4baefc`](../../commit/c4baefc))
+
+- **CI: Docker publishing:** New `.github/workflows/docker.yml` builds the image on every push/PR to `main`/`develop` without pushing (GHA cache, amd64); `release.yml` gained a `publish-docker` job that pushes `bitsgenix/cdin` to Docker Hub on tagged releases using `DOCKER_USERNAME`/`DOCKER_TOKEN`. ([`3a2641a`](../../commit/3a2641a))
+
+- **Dependabot:** New `.github/dependabot.yml` — weekly (Monday 09:00 `Asia/Tehran`) updates for `github-actions`, `docker` and the website's `npm` dependencies, with `chore(ci)`/`chore(docker)`/`chore(website)` commit prefixes. Several bumps already merged (ubuntu base, login-action, buildx, upload/download-artifact, configure-pages, eslint, @types/node, typescript-eslint, globals). ([`99fa1c3`](../../commit/99fa1c3))
+
+- **Website:** New `website/` — a full Vite + React + TypeScript + TailwindCSS + shadcn/ui site with react-router: responsive sticky navbar, hero, features, FAQs, philosophy, contributors (GitHub API), footer, light/dark theme toggle, Fira Code typography and the cdin color theme. Docs pages render the repository markdown with a grouped search dialog (`/` / `Cmd+K`), a shortcuts panel with heading navigation, breadcrumbs, a mobile header with sidebar, and a docs footer. Plus a download page with per-platform install instructions, an About us page, a designed 404 page (`404.html` for GitHub Pages), favicon, SEO fixes and a11y/lint fixes. Deployed through the new `.github/workflows/deploy-website.yml` (GitHub Pages). ([`e67df22`](../../commit/e67df22), [`f926891`](../../commit/f926891), [`a7327dd`](../../commit/a7327dd), [`0bb6828`](../../commit/0bb6828))
+
+- **Build: new make targets:** `check`, `size` and `tiny` (`make tiny` = `BUILD=tiny`: `-Os -DNDEBUG -ffunction-sections -fdata-sections -flto` + `-Wl,--gc-sections` for a size-optimized binary). ([`58e9fcd`](../../commit/58e9fcd))
+
+- **Repo tooling:** Conventional-commit validation via `.husky/commit-msg` (accepts `feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert` with optional scope/`!`, skips merge/revert/fixup/squash lines). `CODEOWNERS` (`* @m-mdy-m`), `AGENTS.md` with AI-agent rules and skills, and `.gix/config` describing the gix branch flow (bugfix/feature topics off `develop`, merge up/downstream, `delete_on_finish`). ([`5461b3e`](../../commit/5461b3e), [`21be047`](../../commit/21be047), [`926fa9a`](../../commit/926fa9a))
+
+### Bug Fixes
+
+- **UTF-8 renderer hardening:** The C decoder no longer over-reads buffers, rejects overlong/surrogate/`> U+10FFFF` sequences (returns U+FFFD), caps width/draw loops and is NULL-safe for fonts and text. ([`8d654e7`](../../commit/8d654e7))
+
+- **Invalid UTF-8 from disk must not poison the buffer:** Files with broken byte sequences are sanitized on load instead of corrupting document lines. ([`aaf4a67`](../../commit/aaf4a67))
+
+- **UTF-8 display:** Fixed text rendering for multibyte characters, added a visual column (`colxy`) offset so the caret and status bar show the correct column for UTF-8 text, and fixed invalid-UTF-8 display bugs. ([`17541a6`](../../commit/17541a6), [`17389c1`](../../commit/17389c1))
+
+- **Scroll performance:** Editor lag and slowdown while scrolling is resolved (dirty-rect handling in the renderer cache). ([`9ebf8b2`](../../commit/9ebf8b2))
+
+- **Treeview git status:** When cdin was installed (rather than run from the checkout), Git status no longer appeared in the treeview — git now runs against the project directory instead of the process cwd. ([`c586d50`](../../commit/c586d50))
+
+- **Lua 5.1 compatibility:** `unpack` is a global in Lua 5.1, not `table.unpack`. ([`8785d57`](../../commit/8785d57))
+
+- **Lint/build:** Removed unused or misplaced code flagged by linting. ([`4b97a5b`](../../commit/4b97a5b))
+
+### Refactoring & Tooling
+
+- **Makefile cleanup:** The `test` and `bench` targets were removed; `check` and `size` replaced them. (Note: `.PHONY`/`help` still list `test`/`bench` — see Known issues.) ([`43b3484`](../../commit/43b3484), [`d9c4774`](../../commit/d9c4774))
+
+- **Base image bumps:** Docker base moved `ubuntu 22.04 → 26.04` via Dependabot and then back to `22.04` for SDL/package availability; `libasound` package updated. ([`646fcc9`](../../commit/646fcc9), [`63ec90b`](../../commit/63ec90b), [`4c22c62`](../../commit/4c22c62))
+
+- **Dependency updates:** CI actions (`docker/login-action` 3→4, `docker/setup-buildx-action` 3→4, `actions/download-artifact` 4→8, `actions/upload-pages-artifact` 4→5, `actions/configure-pages` 5→6) and website deps (`eslint` 10.11, `@types/node` 26.6.2, `typescript-eslint` 8.70, `globals` 17.12).
+
+- **Test cleanup:** Removed the old shell-based test/bench leftovers from the build scripts. ([`43b3484`](../../commit/43b3484))
+
+### Documentation
+
+- **Themes guide:** New docs section explaining how to add a theme (`docs/guides/themes.md`). ([`1ba6348`](../../commit/1ba6348))
+
+- **README:** Rewritten. ([`427e9b7`](../../commit/427e9b7))
+
+- **Repo docs:** `docs/.gitkeep` removed now that `docs/` has content. ([`ed24e02`](../../commit/ed24e02))
+
+- **Website docs:** The whole `website/` documentation set (markdown-driven docs pages, search, shortcuts, download instructions).
+
+### Configuration
+
+New configuration keys (`data/core/config.lua`):
+
+| Key | Default | Description |
+|---|---|---|
+| `direction` | `"auto"` | Base text direction: `auto` (per-line detection), `ltr`, or `rtl` |
+| `shaping_enabled` | `true` | Contextual Arabic/Persian presentation-form shaping |
+| `theme` | `"default"` | Startup theme name from `data/themes/` |
+| `theme_auto_reload` | `true` | Reload theme files on change (defined; not yet consumed by a watcher) |
+| `optional_plugins` | all `true` | Per-plugin enable flags for `data/plugins/optional/` |
+
+New keybindings (only active when the corresponding optional plugin is enabled):
+
+| Command | Default bind | Description |
+|---|---|---|
+| `rtl:toggle-direction` | `Ctrl+Alt+R` | Cycle text direction auto → ltr → rtl |
+| `rtl:toggle-shaping` | `Ctrl+Alt+S` | Toggle Arabic/Persian shaping |
+| `core:change-theme` | `Ctrl+Alt+T` | Fuzzy-pick a theme |
+| `unicode:inspect` | `Ctrl+Alt+U` | Show codepoints under the caret/selection |
+
+### Known issues and limitations
+
+- **`make check` / `make size` are broken:** both call scripts that do not exist in the repository yet (`scripts/check.py`, `scripts/bench.py`). `make test` and `make bench` targets were removed but are still listed in `.PHONY` and `make help`.
+- **Shaping is Lua-level, not HarfBuzz:** presentation forms are applied in `shaper.lua` (`config.shaping_enabled = false` disables it); no GSUB/GPOS, so Arabic kerning/mark positioning is not covered. Arabic coverage comes from `fallback.ttf` (Vazirmatn), which covers all checked base letters, Forms-A/B presentation forms and lam-alef ligatures; `font.ttf`/`monospace.ttf`/`icons.ttf`/`emoji.ttf` contain no Arabic.
+- **C-level test tiers (unit/integration/e2e) do not exist yet** — only the Lua suite (`tests/lua/`).
+- **`config.theme_auto_reload` is declared but no file watcher consumes it yet.**
+
+### Stability
+
+- The RTL path degrades safely: if `core.text` fails to load, lines render as plain LTR tokens; if `direction = "ltr"` or a line has no RTL characters, the original per-token drawing path is used unchanged.
+- The whole test suite (1587 asserts) is green on the release commit.
+- Beta cycle continues; APIs may still change before the first stable release.
