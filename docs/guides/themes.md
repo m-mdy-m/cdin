@@ -132,7 +132,7 @@ Fonts are set on the `style.font` and `style.code_font` fields. They take a
 `renderer.font` value, loaded with `renderer.font.load`:
 
 ```lua
-local font_path = EXEFILE .. "/../data/fonts/JetBrainsMono-Regular.ttf"
+local font_path = EXEFILE .. "/../data/fonts/monospace.ttf"
 style.code_font = renderer.font.load(font_path, 14 * SCALE)
 ```
 
@@ -144,11 +144,52 @@ The bundled fonts are in `data/fonts/`:
 
 | File | Default use |
 |------|------------|
-| `FiraSans-Regular.ttf` | UI text (menus, status bar, tree) |
-| `JetBrainsMono-Regular.ttf` | Editor (monospace) text |
-| `icomoon.ttf` | Icons (used internally by the UI) |
+| `font.ttf` | UI text (menus, status bar, tree) and `style.big_font` |
+| `monospace.ttf` | Editor (code) text |
+| `icons.ttf` | Icons (used internally by the UI) |
 
 To use a system font or your own, provide the full path.
+
+#### Fallback fonts (non-Latin scripts, emoji)
+
+`font.ttf`/`monospace.ttf` are typically Latin-only. stb_truetype (cdin's
+rasterizer) can only draw glyphs a font file actually contains and has no
+built-in "try another font" behavior, so any codepoint outside a font's
+coverage — Arabic/Persian presentation forms, CJK, emoji — renders as a
+blank box unless you give the font a fallback chain:
+
+```lua
+local arabic = renderer.font.load(EXEFILE .. "/../data/fonts/fallback.ttf", 14 * SCALE)
+style.code_font:add_fallback(arabic)
+-- keep a reference alongside the primary font — see the note below
+style._fallback_fonts = style._fallback_fonts or {}
+table.insert(style._fallback_fonts, arabic)
+```
+
+`add_fallback` tries the primary font first for each character, then walks
+the fallback chain (in the order added) until it finds a font with a real
+glyph for that codepoint; if none has one, it draws with the primary font
+(typically a `.notdef`/tofu box) rather than nothing. Up to 8 fallbacks per
+font.
+
+`style.lua` already does this automatically for `style.font`, `big_font`
+and `code_font` if `data/fonts/fallback.ttf` and/or `data/fonts/emoji.ttf`
+exist — drop suitable files there and no extra config is needed:
+
+- **`fallback.ttf`** — broad-coverage text font, e.g. Noto Sans Arabic or
+  Noto Naskh Arabic for Arabic/Persian/Urdu.
+- **`emoji.ttf`** — must be an *outline* (vector) font. stb_truetype
+  cannot rasterize color bitmap or `COLR`/`CPAL` emoji fonts (Noto Color
+  Emoji, Apple Color Emoji, Segoe UI Emoji all fail to load or render
+  blank); a monochrome outline emoji font is required. Both files are
+  optional — if absent, cdin runs exactly as it does today.
+
+The `style._fallback_fonts` table above is required, not cosmetic: the C
+side stores only a raw pointer to each fallback font in the chain. If
+nothing on the Lua side keeps the fallback font's userdata reachable,
+Lua's garbage collector can free it while it's still wired into the
+chain, and the next draw that needs it reads freed memory. Keep a
+reference for as long as the primary font (and thus the chain) is alive.
 
 ### Metrics
 
