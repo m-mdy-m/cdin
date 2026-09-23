@@ -1,23 +1,9 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# cdin — Docker image
-#   builder: Ubuntu 22.04, SDL3 built from source, release build
-#            (mirrors .github/workflows/release-linux.yml step for step)
-#   runtime: Ubuntu 22.04 + shared libs only, cdin runs as a non-root user
-#
-# Notes:
-#   * the version comes from `git describe` (mk/version.mk) — CI workflows
-#     check out with fetch-depth: 0; .git is excluded from the build context,
-#     so a plain `docker build` reports 0.0.0+unknown
-#   * multi-arch friendly: builds for linux/amd64 and linux/arm64 (QEMU)
-# ─────────────────────────────────────────────────────────────────────────────
-
 FROM ubuntu:22.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SDL_VERSION=3.2.14
 
 # ── Build dependencies — same list as release-linux.yml (plus build-essential
-#    and git: needed to compile and to resolve the version via git describe) ─
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
       build-essential git \
@@ -46,9 +32,8 @@ RUN wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_V
     cmake --install /tmp/sdl3-build && \
     rm -rf /tmp/sdl3-build "SDL3-${SDL_VERSION}" "SDL3-${SDL_VERSION}.tar.gz"
 
-# ── Register SDL3 (ldconfig) — same as release-linux.yml ────────────────────
 RUN echo "/opt/sdl3/lib" > /etc/ld.so.conf.d/sdl3.conf && \
-    ldconfig && \
+    (ldconfig || ldconfig || true) && \
     PKG_CONFIG_PATH=/opt/sdl3/lib/pkgconfig pkg-config --modversion sdl3
 
 WORKDIR /src
@@ -82,7 +67,6 @@ FROM ubuntu:22.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # ── Runtime dependencies — X11/wayland/audio/udev/GL shared libs SDL3 links
-#    against, plus liblua5.4-0 (cdin links liblua5.4) ───────────────────────
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
       ca-certificates liblua5.4-0 \
@@ -93,19 +77,16 @@ RUN apt-get update -qq && \
 
 # ── SDL3 runtime — same /opt/sdl3 prefix as the builder ─────────────────────
 COPY --from=builder /opt/sdl3/ /opt/sdl3/
-RUN echo "/opt/sdl3/lib" > /etc/ld.so.conf.d/sdl3.conf && ldconfig
+RUN echo "/opt/sdl3/lib" > /etc/ld.so.conf.d/sdl3.conf && (ldconfig || ldconfig || true)
 
 # ── cdin — the layout from mk/install.mk: the real binary and data/ live side
-#    by side under /usr/local/lib/cdin, /usr/local/bin/cdin is a symlink.
-#    cdin resolves data/ relative to the real executable (/proc/self/exe), so
-#    the symlink and the data dir must keep pointing at the same prefix. ─────
 RUN install -dm755 /usr/local/lib/cdin
 COPY --from=builder /src/build/linux-release/cdin /usr/local/lib/cdin/cdin
 COPY data/ /usr/local/lib/cdin/data/
 RUN chmod 755 /usr/local/lib/cdin/cdin && \
     ln -sf /usr/local/lib/cdin/cdin /usr/local/bin/cdin
 
-# ── Non-root user (uid 1000) ────────────────────────────────────────────────
+# ── Non-root user ────────────────────────────────────────────────
 RUN useradd -m -u 1000 cdin
 
 ENV HOME=/home/cdin \
