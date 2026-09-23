@@ -58,12 +58,24 @@ static int f_get_height(lua_State *L) {
 }
 
 
+static int f_add_fallback(lua_State *L) {
+  RenFont **self     = luaL_checkudata(L, 1, API_TYPE_FONT);
+  RenFont **fallback = luaL_checkudata(L, 2, API_TYPE_FONT);
+  log_debug("renderer.font: add_fallback(size=%.1f) -> chain",
+            ren_get_font_size(*fallback));
+  ren_font_add_fallback(*self, *fallback);
+  lua_pushvalue(L, 2);
+  return 1;
+}
+
+
 static const luaL_Reg lib[] = {
   { "__gc",          f_gc            },
   { "load",          f_load          },
   { "set_tab_width", f_set_tab_width },
   { "get_width",     f_get_width     },
   { "get_height",    f_get_height    },
+  { "add_fallback",  f_add_fallback  },
   { NULL, NULL }
 };
 

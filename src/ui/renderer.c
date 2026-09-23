@@ -12,7 +12,18 @@
 #include "renderer.h"
 #include "../core/logger.h"
 
-#define MAX_GLYPHSET 256
+/* Glyphs are baked in blocks of 256 codepoints ("pages"), keyed by the
+   codepoint's high bits (cp >> 8) — one page per 0x100 codepoint range,
+   e.g. page 0x1F3 covers U+1F300..U+1F3FF (misc symbols/pictographs).
+   Pages are looked up in a small open-addressing hash table sized for the
+   whole Unicode range (cp up to 0x10FFFF => up to ~4352 possible pages),
+   allocated lazily so this stays cheap for BMP-only text. This replaces a
+   fixed 256-bucket table indexed by `(cp >> 8) % 256`, which wrapped
+   around and silently collided unrelated blocks together once codepoints
+   went past the BMP (e.g. an emoji at U+1FA87 landed in the same bucket
+   as CJK Compatibility Ideographs at U+FA00-FAFF and could draw the
+   wrong glyph instead of just being missing). */
+#define GLYPHSET_TABLE_SIZE 8192  /* power of 2; open-addressed, ~65% max load */
 
 struct RenImage {
   RenColor *pixels;
@@ -22,14 +33,20 @@ struct RenImage {
 typedef struct {
   RenImage *image;
   stbtt_bakedchar glyphs[256];
+  int page;      /* cp >> 8 this set was baked for; -1 = empty slot */
+  bool has_bitmap;
 } GlyphSet;
+
+#define MAX_FALLBACK_FONTS 8
 
 struct RenFont {
   void *data;
   stbtt_fontinfo stbfont;
-  GlyphSet *sets[MAX_GLYPHSET];
+  GlyphSet **table;   /* GLYPHSET_TABLE_SIZE slots, lazily populated */
   float size;
   int height;
+  RenFont *fallback[MAX_FALLBACK_FONTS];
+  int fallback_count;
 };
 
 static SDL_Window   *window;
@@ -120,8 +137,9 @@ void ren_free_image(RenImage *image) {
 }
 
 
-static GlyphSet *load_glyphset(RenFont *font, int idx) {
+static GlyphSet *load_glyphset(RenFont *font, int page) {
   GlyphSet *set = check_alloc(calloc(1, sizeof(GlyphSet)));
+  set->page = page;
   int width = 128, height = 128;
 
 retry:
@@ -131,7 +149,7 @@ retry:
   int res = stbtt_BakeFontBitmap(
     font->data, 0, font->size * s,
     (void *)set->image->pixels,
-    width, height, idx * 256, 256, set->glyphs);
+    width, height, page * 256, 256, set->glyphs);
 
   if (res < 0) {
     width  *= 2;
@@ -148,6 +166,15 @@ retry:
   for (int i = 0; i < 256; i++) {
     set->glyphs[i].yoff     += scaled_ascent;
     set->glyphs[i].xadvance  = floorf(set->glyphs[i].xadvance);
+    /* A codepoint this font truly has no outline for bakes to a zero-area
+       glyph (unless it's whitespace, which is legitimately zero-area).
+       Recording that here lets callers fall back to another font instead
+       of silently drawing nothing. */
+    stbtt_bakedchar *g = &set->glyphs[i];
+    bool empty_box = (g->x1 <= g->x0 || g->y1 <= g->y0);
+    int cp = page * 256 + i;
+    bool expected_blank = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r');
+    if (!empty_box || expected_blank) set->has_bitmap = true;
   }
 
   for (int i = width * height - 1; i >= 0; i--) {
@@ -158,10 +185,49 @@ retry:
   return set;
 }
 
+static GlyphSet **glyphset_slot(RenFont *font, int page) {
+  if (!font->table) {
+    font->table = check_alloc(calloc(GLYPHSET_TABLE_SIZE, sizeof(GlyphSet *)));
+  }
+  unsigned h = ((unsigned)page * 2654435761u) & (GLYPHSET_TABLE_SIZE - 1);
+  for (int probes = 0; probes < GLYPHSET_TABLE_SIZE; probes++) {
+    GlyphSet **slot = &font->table[h];
+    if (*slot == NULL || (*slot)->page == page) return slot;
+    h = (h + 1) & (GLYPHSET_TABLE_SIZE - 1);
+  }
+  static GlyphSet *scratch;
+  return &scratch;
+}
+
 static GlyphSet *get_glyphset(RenFont *font, int codepoint) {
-  int idx = (codepoint >> 8) % MAX_GLYPHSET;
-  if (!font->sets[idx]) font->sets[idx] = load_glyphset(font, idx);
-  return font->sets[idx];
+  if (codepoint < 0 || codepoint > 0x10FFFF) codepoint = 0xFFFD;
+  int page = codepoint >> 8;
+  GlyphSet **slot = glyphset_slot(font, page);
+  if (!*slot) *slot = load_glyphset(font, page);
+  return *slot;
+}
+
+static bool font_has_glyph(RenFont *font, int codepoint) {
+  GlyphSet *set = get_glyphset(font, codepoint);
+  return set && set->has_bitmap;
+}
+
+static RenFont *resolve_font_for(RenFont *font, int codepoint) {
+  if (font_has_glyph(font, codepoint)) return font;
+  for (int i = 0; i < font->fallback_count; i++) {
+    if (font_has_glyph(font->fallback[i], codepoint)) return font->fallback[i];
+  }
+  return font;
+}
+
+void ren_font_add_fallback(RenFont *font, RenFont *fallback) {
+  if (!font || !fallback || font == fallback) return;
+  if (font->fallback_count >= MAX_FALLBACK_FONTS) {
+    log_warn("renderer: fallback chain full (%d), ignoring additional fallback font",
+             MAX_FALLBACK_FONTS);
+    return;
+  }
+  font->fallback[font->fallback_count++] = fallback;
 }
 
 RenFont *ren_load_font(const char *filename, float size) {
@@ -197,9 +263,12 @@ RenFont *ren_load_font(const char *filename, float size) {
 }
 
 void ren_free_font(RenFont *font) {
-  for (int i = 0; i < MAX_GLYPHSET; i++) {
-    GlyphSet *set = font->sets[i];
-    if (set) { ren_free_image(set->image); free(set); }
+  if (font->table) {
+    for (int i = 0; i < GLYPHSET_TABLE_SIZE; i++) {
+      GlyphSet *set = font->table[i];
+      if (set) { ren_free_image(set->image); free(set); }
+    }
+    free(font->table);
   }
   free(font->data);
   free(font);
@@ -222,7 +291,8 @@ int ren_get_font_width(RenFont *font, const char *text) {
   for (const char *p = text; *p && bytes < 65536; ) {
     p = utf8_to_codepoint(p, &cp);
     bytes = (int)(p - text);
-    GlyphSet *set = get_glyphset(font, (int)cp);
+    RenFont *use = font->fallback_count ? resolve_font_for(font, (int)cp) : font;
+    GlyphSet *set = get_glyphset(use, (int)cp);
     if (!set) break;
     x += (int)set->glyphs[cp & 0xff].xadvance;
   }
@@ -308,15 +378,22 @@ int ren_draw_text(RenFont *font, const char *text, int x, int y, RenColor color)
   if (!font || !text || color.a == 0) return x;
   unsigned cp;
   int drawn = 0;
+  /* Baseline offset so a fallback font (which may have different metrics/
+     ascent at the same pixel size) still sits on the same text baseline
+     as the primary font, instead of glyphs jumping up/down mid-line. */
+  int base_ascent = ren_get_font_height(font);
   for (const char *p = text; *p && drawn < 4096; ) {
     p = utf8_to_codepoint(p, &cp);
-    GlyphSet *set = get_glyphset(font, (int)cp);
+    RenFont *use = font->fallback_count ? resolve_font_for(font, (int)cp) : font;
+    GlyphSet *set = get_glyphset(use, (int)cp);
     if (!set) break;
     stbtt_bakedchar *g = &set->glyphs[cp & 0xff];
+    int yoff = y;
+    if (use != font) yoff += base_ascent - ren_get_font_height(use);
     /* Skip zero-size/dirty glyphs (e.g. missing coverage) safely. */
     if (g->x1 > g->x0 && g->y1 > g->y0) {
       RenRect rect = { g->x0, g->y0, g->x1 - g->x0, g->y1 - g->y0 };
-      ren_draw_image(set->image, &rect, x + (int)g->xoff, y + (int)g->yoff, color);
+      ren_draw_image(set->image, &rect, x + (int)g->xoff, yoff + (int)g->yoff, color);
     }
     x += (int)g->xadvance;
     drawn++;
