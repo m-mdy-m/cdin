@@ -4,11 +4,27 @@ local function install(core)
   function core.load_plugins()
     local no_errors = true
     local function load_dir(dir, prefix)
-      for _, filename in ipairs(system.list_dir(dir) or {}) do
+      local entries = system.list_dir(dir) or {}
+      table.sort(entries) -- deterministic order across platforms
+      for _, filename in ipairs(entries) do
+        if type(filename) ~= "string" or filename == "" then goto continue end
         local full = dir .. "/" .. filename
         local info = system.get_file_info(full)
         if info and info.type == "dir" then
-          load_dir(full, prefix .. filename .. ".")
+          -- Skip disabled optional plugins: data/plugins/optional/<name>
+          -- requires config.optional_plugins.<name> ~= false.
+          local skip = false
+          if prefix == "plugins." and dir:match("plugins$") and filename == "optional" then
+            -- still descend; filtering happens one level down
+          elseif prefix == "plugins.optional." then
+            local ok_cfg, cfg = pcall(require, "core.config")
+            local key = filename:gsub("%.lua$", "")
+            if ok_cfg and cfg and cfg.optional_plugins
+              and cfg.optional_plugins[key] == false then
+              skip = true
+            end
+          end
+          if not skip then load_dir(full, prefix .. filename .. ".") end
         elseif filename:match("%.lua$") then
           local modname = prefix .. filename:gsub("%.lua$", "")
           local ok = core.try(require, modname)
@@ -18,6 +34,7 @@ local function install(core)
             no_errors = false
           end
         end
+        ::continue::
       end
     end
     load_dir(EXEDIR .. "/data/plugins", "plugins.")
