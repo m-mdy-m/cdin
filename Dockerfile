@@ -11,7 +11,7 @@
 #   * multi-arch friendly: builds for linux/amd64 and linux/arm64 (QEMU)
 # ─────────────────────────────────────────────────────────────────────────────
 
-FROM ubuntu:26.04 AS builder
+FROM ubuntu:22.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SDL_VERSION=3.2.14
@@ -77,7 +77,7 @@ RUN PKG_CONFIG_PATH=/opt/sdl3/lib/pkgconfig \
 # Runtime
 # ═══════════════════════════════════════════════════════════════════════════
 
-FROM ubuntu:26.04
+FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -88,7 +88,7 @@ RUN apt-get update -qq && \
       ca-certificates liblua5.4-0 \
       libx11-6 libxext6 libxrandr2 libxcursor1 libxi6 libxinerama1 \
       libxkbcommon0 libwayland-cursor0 libwayland-egl1 \
-      libasound2t64 libpulse0 libdbus-1-3 libudev1 libgl1 && \
+      libasound2 libpulse0 libdbus-1-3 libudev1 libgl1 && \
     rm -rf /var/lib/apt/lists/*
 
 # ── SDL3 runtime — same /opt/sdl3 prefix as the builder ─────────────────────
