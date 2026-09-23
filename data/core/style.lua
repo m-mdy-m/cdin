@@ -15,63 +15,89 @@ style.big_font = renderer.font.load(EXEDIR .. "/data/fonts/font.ttf", 34 * SCALE
 style.icon_font = renderer.font.load(EXEDIR .. "/data/fonts/icons.ttf", 14 * SCALE)
 style.code_font = renderer.font.load(EXEDIR .. "/data/fonts/monospace.ttf", 13.5 * SCALE)
 
--- ── base backgrounds ─────────────────────────────────────────
-style.background        = { common.color "#050507" }
-style.background2       = { common.color "#0b0b10" }
-style.background3       = { common.color "#15151c" }
+do
+  style._fallback_fonts = style._fallback_fonts or {}
 
--- ── text & caret ─────────────────────────────────────────────
-style.text              = { common.color "#d8d8df" }
-style.caret             = { common.color "#ffffff" }
-style.caret_block_alpha = 0.55
+  local function add_fallback_if_present(path, size)
+    if not system.get_file_info(path) then return nil end
+    local ok, font = pcall(renderer.font.load, path, size)
+    if not ok or not font then
 
--- ── accent ────────────────────────────────────────────────────
-style.accent            = { common.color "#a89bd8" }
+      return nil
+    end
+    style.font:add_fallback(font)
+    style.big_font:add_fallback(font)
+    style.code_font:add_fallback(font)
+    table.insert(style._fallback_fonts, font)
+    return font
+  end
 
--- ── structural ────────────────────────────────────────────────
-style.dim               = { common.color "#707080" }
-style.divider           = { common.color "#252530" }
-style.selection         = { common.color "#252536" }
-style.line_number       = { common.color "#555565" }
-style.line_number2      = { common.color "#a89bd8" }
-style.line_highlight    = { common.color "#111119" }
-style.scrollbar         = { common.color "#090910" }
-style.scrollbar2        = { common.color "#55556a" }
-style.search_highlight  = { 255, 210, 80, 90 }
+  add_fallback_if_present(EXEDIR .. "/data/fonts/fallback.ttf", 14 * SCALE)
+  add_fallback_if_present(EXEDIR .. "/data/fonts/emoji.ttf", 14 * SCALE)
+end
 
--- ── titlebar ──────────────────────────────────────────────────
-style.titlebar_text         = { common.color "#9a9aaa" }
-style.titlebar_text_focus   = { common.color "#eeeeff" }
-style.titlebar_button_hover = { common.color "#303040" }
-style.titlebar_close_hover  = { common.color "#e06060" }
+local function fallback(key, hex)
+  if style[key] == nil then style[key] = { common.color(hex) } end
+end
 
--- ── vim mode ──────────────────────────────────────────────────
-style.vim_pill_fg       = { common.color "#eeeeff" }
-style.vim_normal_bg     = { common.color "#30303a" }
-style.vim_insert_bg     = { common.color "#12345a" }
-style.vim_visual_bg     = { common.color "#4a3300" }
-style.vim_replace_bg    = { common.color "#4a1616" }
-style.vim_command_bg    = { common.color "#204020" }
+fallback("background", "#050507")
+fallback("background2", "#0b0b10")
+fallback("background3", "#15151c")
+fallback("text", "#d8d8df")
+fallback("caret", "#ffffff")
+style.caret_block_alpha = style.caret_block_alpha or 0.55
+fallback("accent", "#a89bd8")
+fallback("dim", "#707080")
+fallback("divider", "#252530")
+fallback("selection", "#252536")
+fallback("line_number", "#555565")
+fallback("line_number2", "#a89bd8")
+fallback("line_highlight", "#111119")
+fallback("scrollbar", "#090910")
+fallback("scrollbar2", "#55556a")
+if style.search_highlight == nil then style.search_highlight = { 255, 210, 80, 90 } end
+fallback("titlebar_text", "#9a9aaa")
+fallback("titlebar_text_focus", "#eeeeff")
+fallback("titlebar_button_hover", "#303040")
+fallback("titlebar_close_hover", "#e06060")
+fallback("vim_pill_fg", "#eeeeff")
+fallback("vim_normal_bg", "#30303a")
+fallback("vim_insert_bg", "#12345a")
+fallback("vim_visual_bg", "#4a3300")
+fallback("vim_replace_bg", "#4a1616")
+fallback("vim_command_bg", "#204020")
+fallback("git_modified", "#d0ad55")
+fallback("git_added", "#65b875")
+fallback("git_deleted", "#d06060")
+fallback("git_conflict", "#e07050")
+fallback("git_untracked", "#888899")
+fallback("git_renamed", "#9b8de0")
 
--- ── git ───────────────────────────────────────────────────────
-style.git_modified      = { common.color "#d0ad55" }
-style.git_added         = { common.color "#65b875" }
-style.git_deleted       = { common.color "#d06060" }
-style.git_conflict      = { common.color "#e07050" }
-style.git_untracked     = { common.color "#888899" }
-style.git_renamed       = { common.color "#9b8de0" }
+style.syntax = style.syntax or {}
+local function syn(key, hex)
+  if style.syntax[key] == nil then style.syntax[key] = { common.color(hex) } end
+end
+syn("normal", "#d8d8df")
+syn("symbol", "#c4c4d0")
+syn("comment", "#686878")
+syn("keyword", "#9b8cff")
+syn("keyword2", "#7f75c8")
+syn("number", "#e0a060")
+syn("literal", "#aaaac0")
+syn("string", "#86c986")
+syn("operator", "#ccccd8")
+syn("function", "#75b9ed")
 
--- ── syntax ────────────────────────────────────────────────────
-style.syntax = {}
-style.syntax["normal"]   = { common.color "#d8d8df" }
-style.syntax["symbol"]   = { common.color "#c4c4d0" }
-style.syntax["comment"]  = { common.color "#686878" }
-style.syntax["keyword"]  = { common.color "#9b8cff" }
-style.syntax["keyword2"] = { common.color "#7f75c8" }
-style.syntax["number"]   = { common.color "#e0a060" }
-style.syntax["literal"]  = { common.color "#aaaac0" }
-style.syntax["string"]   = { common.color "#86c986" }
-style.syntax["operator"] = { common.color "#ccccd8" }
-style.syntax["function"] = { common.color "#75b9ed" }
+do
+  local ok_cfg, config = pcall(require, "core.config")
+  local name = (ok_cfg and config and config.theme) or "default"
+  local ok, themes = pcall(require, "core.themes")
+  if ok and themes then pcall(themes.apply, style, name) end
+end
+
+function style.set_theme(name)
+  local themes = require "core.themes"
+  return themes.apply(style, name)
+end
 
 return style
