@@ -46,17 +46,30 @@ static void *check_alloc(void *ptr) {
 }
 
 static const char *utf8_to_codepoint(const char *p, unsigned *dst) {
-  unsigned res, n;
-  switch (*p & 0xf0) {
-    case 0xf0: res = *p & 0x07; n = 3; break;
-    case 0xe0: res = *p & 0x0f; n = 2; break;
-    case 0xd0:
-    case 0xc0: res = *p & 0x1f; n = 1; break;
-    default:   res = *p;        n = 0; break;
+  /* Hardened decoder: never over-reads, rejects overlong/truncated
+     sequences and surrogates, returns U+FFFD on error. */
+  unsigned char c = (unsigned char)*p;
+  if (c < 0x80) { *dst = c; return p + 1; }
+  unsigned res = 0, n = 0, lo = 0x80, hi = 0xBF;
+  if ((c & 0xE0) == 0xC0)      { res = c & 0x1F; n = 1; lo = (c == 0xC0 || c == 0xC1) ? 0x100 : 0x80; }
+  else if ((c & 0xF0) == 0xE0) { res = c & 0x0F; n = 2; }
+  else if ((c & 0xF8) == 0xF0) { res = c & 0x07; n = 3; }
+  else { *dst = 0xFFFD; return p + 1; }
+  for (unsigned i = 1; i <= n; i++) {
+    unsigned char cc = (unsigned char)p[i];
+    if (i == 1 && n > 1) {
+      if (c == 0xE0) lo = 0xA0;
+      else if (c == 0xED) hi = 0x9F;
+      else if (c == 0xF0) lo = 0x90;
+      else if (c == 0xF4) hi = 0x8F;
+    }
+    if (cc < lo || cc > hi || p[i] == '\0') { *dst = 0xFFFD; return p + 1; }
+    lo = 0x80; hi = 0xBF;
+    res = (res << 6) | (cc & 0x3F);
   }
-  while (n--) res = (res << 6) | (*(++p) & 0x3f);
+  if (res > 0x10FFFF || (res >= 0xD800 && res <= 0xDFFF)) res = 0xFFFD;
   *dst = res;
-  return p + 1;
+  return p + n + 1;
 }
 
 void ren_init(SDL_Window *win) {
@@ -201,11 +214,17 @@ int ren_get_font_tab_width(RenFont *font) {
 }
 
 int ren_get_font_width(RenFont *font, const char *text) {
+  if (!font || !text) return 0;
   int x = 0;
   unsigned cp;
-  for (const char *p = text; *p; ) {
+  /* Cap measured length so a multi-MB line cannot stall a frame. */
+  int bytes = 0;
+  for (const char *p = text; *p && bytes < 65536; ) {
     p = utf8_to_codepoint(p, &cp);
-    x += (int)get_glyphset(font, cp)->glyphs[cp & 0xff].xadvance;
+    bytes = (int)(p - text);
+    GlyphSet *set = get_glyphset(font, (int)cp);
+    if (!set) break;
+    x += (int)set->glyphs[cp & 0xff].xadvance;
   }
   return x;
 }
@@ -286,14 +305,21 @@ void ren_draw_image(RenImage *image, RenRect *sub, int x, int y, RenColor color)
 }
 
 int ren_draw_text(RenFont *font, const char *text, int x, int y, RenColor color) {
+  if (!font || !text || color.a == 0) return x;
   unsigned cp;
-  for (const char *p = text; *p; ) {
+  int drawn = 0;
+  for (const char *p = text; *p && drawn < 4096; ) {
     p = utf8_to_codepoint(p, &cp);
-    GlyphSet *set = get_glyphset(font, cp);
+    GlyphSet *set = get_glyphset(font, (int)cp);
+    if (!set) break;
     stbtt_bakedchar *g = &set->glyphs[cp & 0xff];
-    RenRect rect = { g->x0, g->y0, g->x1 - g->x0, g->y1 - g->y0 };
-    ren_draw_image(set->image, &rect, x + (int)g->xoff, y + (int)g->yoff, color);
+    /* Skip zero-size/dirty glyphs (e.g. missing coverage) safely. */
+    if (g->x1 > g->x0 && g->y1 > g->y0) {
+      RenRect rect = { g->x0, g->y0, g->x1 - g->x0, g->y1 - g->y0 };
+      ren_draw_image(set->image, &rect, x + (int)g->xoff, y + (int)g->yoff, color);
+    }
     x += (int)g->xadvance;
+    drawn++;
   }
   return x;
 }
