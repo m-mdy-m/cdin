@@ -94,12 +94,18 @@ function Doc:load(filename)
   self:reset()
   self.filename = filename
   self.lines    = {}
+  local ok_utf8, text_utf8 = pcall(require, "core.text.utf8")
   for line in fp:lines() do
     local text = line
     if text:byte(-1) == 13 then
       text = text:sub(1, -2)
       self.crlf = true
     end
+    if ok_utf8 and text_utf8 and text_utf8.sanitize then
+      local ok2, clean = pcall(text_utf8.sanitize, text)
+      if ok2 and type(clean) == "string" then text = clean end
+    end
+    if text:find("%z", 1, true) then text = text:gsub("%z", "<NUL>") end
     self.lines[#self.lines + 1] = text .. "\n"
   end
   if #self.lines == 0 then self.lines[1] = "\n" end
