@@ -88,7 +88,7 @@ RUN apt-get update -qq && \
       ca-certificates liblua5.4-0 \
       libx11-6 libxext6 libxrandr2 libxcursor1 libxi6 libxinerama1 \
       libxkbcommon0 libwayland-cursor0 libwayland-egl1 \
-      libasound2 libpulse0 libdbus-1-3 libudev1 libgl1 && \
+      libasound2t64 libpulse0 libdbus-1-3 libudev1 libgl1 && \
     rm -rf /var/lib/apt/lists/*
 
 # ── SDL3 runtime — same /opt/sdl3 prefix as the builder ─────────────────────
