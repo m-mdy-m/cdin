@@ -222,10 +222,124 @@ jobs:
           zip -r "${PKG_NAME}.zip" "${PKG_NAME}/" > /dev/null
           echo "Zip: $(du -sh ${PKG_NAME}.zip | cut -f1)"
 
+      - name: Write Inno Setup script
+        env:
+          ISS_TEMPLATE: |
+            #define MyAppName "cdin"
+            #define MyAppVersion "__ISS_VER__"
+            #define MyAppPublisher "m-mdy-m"
+            #define MyAppURL "https://github.com/m-mdy-m/cdin"
+            #define MyAppExeName "cdin.exe"
+
+            [Setup]
+            AppId={{B6E1B1F0-7C2E-4C7B-9C1D-CDIN00000001}
+            AppName={#MyAppName}
+            AppVersion={#MyAppVersion}
+            AppPublisher={#MyAppPublisher}
+            AppPublisherURL={#MyAppURL}
+            AppSupportURL={#MyAppURL}
+            AppUpdatesURL={#MyAppURL}
+            DefaultDirName={autopf}\__MyAppName__
+            DefaultGroupName={#MyAppName}
+            DisableProgramGroupPage=yes
+            PrivilegesRequiredOverridesAllowed=dialog
+            OutputDir=__OUT_DIR__
+            OutputBaseFilename=cdin-__ISS_VER__-windows-setup
+            SetupIconFile=__SRC_DIR__\cdin.ico
+            Compression=lzma2
+            SolidCompression=yes
+            WizardStyle=modern
+            LicenseFile=__SRC_DIR__\LICENSE
+            ArchitecturesAllowed=x64compatible
+            ArchitecturesInstallIn64BitMode=x64compatible
+            UninstallDisplayIcon={app}\{#MyAppExeName}
+
+            [Languages]
+            Name: "english"; MessagesFile: "compiler:Default.isl"
+
+            [Tasks]
+            Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
+            Name: "addtopath"; Description: "Add cdin to PATH"; GroupDescription: "Additional shortcuts:"
+
+            [Files]
+            Source: "__SRC_DIR__\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+            [Icons]
+            Name: "{group}\cdin"; Filename: "{app}\{#MyAppExeName}"
+            Name: "{group}\Uninstall cdin"; Filename: "{uninstallexe}"
+            Name: "{autodesktop}\cdin"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+            [Registry]
+            Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; \
+              ValueData: "{olddata};{app}"; Tasks: addtopath; Check: NeedsAddPath('{app}')
+
+            [Run]
+            Filename: "{app}\{#MyAppExeName}"; Description: "Launch cdin"; Flags: nowait postinstall skipifsilent
+
+            [Code]
+            function NeedsAddPath(Param: string): boolean;
+            var
+              OrigPath: string;
+            begin
+              if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', OrigPath) then
+              begin
+                Result := True;
+                exit;
+              end;
+              Result := Pos(';' + Param + ';', ';' + OrigPath + ';') = 0;
+            end;
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          ISS_VER="${VER#v}"
+          PKG_NAME="cdin-${VER}-windows-x86_64"
+          # Paths inside the .iss are consumed by ISCC.exe (native Windows),
+          # so use Windows-style backslashes even though we're in a bash step.
+          SRC_DIR=$(cygpath -w "${PWD}/dist/${PKG_NAME}")
+          OUT_DIR=$(cygpath -w "${PWD}/dist")
+
+          # ISS_TEMPLATE comes in as a YAML block scalar (env:), which keeps
+          # a clean, unindented literal value — no heredoc indentation issue.
+          # Placeholders are substituted with bash's ${var//search/replace}
+          # rather than sed: OUT_DIR/SRC_DIR are Windows paths from cygpath
+          # containing literal backslashes, which sed's replacement text
+          # would reinterpret as escapes; bash parameter expansion treats
+          # the replacement as a literal string, so backslashes pass through
+          # untouched. The template's own {#MyAppName}-style Inno Setup
+          # syntax is left alone either way since it isn't a placeholder.
+          content="$ISS_TEMPLATE"
+          content="${content//__ISS_VER__/$ISS_VER}"
+          content="${content//__OUT_DIR__/$OUT_DIR}"
+          content="${content//__SRC_DIR__/$SRC_DIR}"
+          content="${content//__MyAppName__/\{#MyAppName\}}"
+
+          printf '%s\n' "$content" > dist/cdin-installer.iss
+
+          echo "Wrote dist/cdin-installer.iss"
+          cat dist/cdin-installer.iss
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = Get-ChildItem "${env:ProgramFiles(x86)}", "${env:ProgramFiles}" `
+            -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $iscc) {
+            throw "ISCC.exe not found after installing Inno Setup"
+          }
+          Write-Host "Using compiler: $iscc"
+          & $iscc "dist\cdin-installer.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "ISCC.exe exited with code $LASTEXITCODE"
+          }
+          Get-ChildItem dist\*setup*.exe | Format-Table Name, Length
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cdin-windows-x86_64
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*setup*.exe
           if-no-files-found: error
           retention-days: 14

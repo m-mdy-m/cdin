@@ -60,7 +60,7 @@ jobs:
         run: |
           mkdir -p release
           if [[ -d artifacts ]]; then
-            find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.dmg' \) \
+            find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.dmg' -o -name '*.deb' -o -name '*setup*.exe' \) \
               -exec cp {} release/ \;
           fi
           echo "Release assets:"
@@ -120,6 +120,17 @@ jobs:
 
           ### Linux (x86_64)
 
+          **.deb (Debian/Ubuntu) — native package:**
+
+          ```bash
+          sudo apt install ./cdin_VERSION_amd64.deb
+          ```
+
+          SDL3 is bundled inside the package, so no extra runtime install is needed.
+          Uninstall with `sudo apt remove cdin`.
+
+          **Tarball (any distro):**
+
           ```bash
           tar xzf cdin-vVERSION-linux-x86_64.tar.gz
           cd cdin-vVERSION-linux-x86_64
@@ -138,6 +149,15 @@ jobs:
           > - Other distros: see [SDL3 releases](https://github.com/libsdl-org/SDL/releases)
 
           ### Windows (x86_64)
+
+          **Installer — native, recommended:**
+
+          1. Download `cdin-VERSION-windows-setup.exe` and run it.
+          2. Follow the wizard (Next › Next › Install). Optionally adds a desktop
+             shortcut and adds `cdin` to your PATH.
+          3. Uninstall anytime from *Settings › Apps* or the Start Menu shortcut.
+
+          **Zip (portable, no install):**
 
           1. Download `cdin-vVERSION-windows-x86_64.zip` and extract it.
           2. Open **PowerShell** or **Command Prompt** inside the extracted folder and run:

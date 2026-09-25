@@ -166,10 +166,84 @@ jobs:
           tar -C dist -czf "dist/${PKG_NAME}.tar.gz" "${PKG_NAME}"
           echo "Tarball: $(du -sh dist/${PKG_NAME}.tar.gz | cut -f1)"
 
+      - name: Install fpm & patchelf
+        run: |
+          sudo apt-get install -y --no-install-recommends ruby ruby-dev build-essential patchelf
+          sudo gem install --no-document fpm
+
+      - name: Stage install root (DESTDIR)
+        run: |
+          make install PREFIX=/usr DESTDIR="${PWD}/dist/deb-root"
+
+          # Bundle the SDL3 shared lib we built, point the binary at it via
+          # RPATH ($ORIGIN — same directory, per `make install`'s layout:
+          # the real binary lives at PREFIX/lib/cdin/cdin), so no system
+          # libsdl3 is required.
+          cp -a /opt/sdl3/lib/libSDL3.so* "dist/deb-root/usr/lib/cdin/"
+          patchelf --set-rpath '$ORIGIN' "dist/deb-root/usr/lib/cdin/cdin"
+          echo "RPATH set:"
+          patchelf --print-rpath "dist/deb-root/usr/lib/cdin/cdin"
+
+          install -Dm644 scripts/icons/cdin-256.png \
+            "dist/deb-root/usr/share/icons/hicolor/256x256/apps/cdin.png"
+          install -Dm644 scripts/icons/cdin-128.png \
+            "dist/deb-root/usr/share/icons/hicolor/128x128/apps/cdin.png"
+          install -Dm644 scripts/icons/cdin-48.png \
+            "dist/deb-root/usr/share/icons/hicolor/48x48/apps/cdin.png"
+
+          mkdir -p "dist/deb-root/usr/share/applications"
+          # Written via printf (not a heredoc) so the file has no leading
+          # whitespace, which the freedesktop .desktop spec requires.
+          printf '%s\n' \
+            '[Desktop Entry]' \
+            'Type=Application' \
+            'Name=cdin' \
+            'Comment=A small, fast, keyboard-driven text editor' \
+            'Exec=cdin %F' \
+            'Icon=cdin' \
+            'Terminal=false' \
+            'Categories=Development;TextEditor;Utility;' \
+            'MimeType=text/plain;' \
+            > "dist/deb-root/usr/share/applications/cdin.desktop"
+
+      - name: Build .deb package
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          DEB_VER="${VER#v}"
+
+          fpm -s dir -t deb \
+            -C "dist/deb-root" \
+            -n cdin \
+            -v "${DEB_VER}" \
+            --architecture amd64 \
+            --license MIT \
+            --category editors \
+            --maintainer "m-mdy-m" \
+            --url "https://github.com/m-mdy-m/cdin" \
+            --description "A small, fast, keyboard-driven text editor. Vim-style modal editing is on by default. The core is C; everything else is Lua you can read and change." \
+            --depends "liblua5.4-0 | liblua5.3-0" \
+            --depends "libwayland-client0 | libx11-6" \
+            --deb-no-default-config-files \
+            --package "dist/cdin_${DEB_VER}_amd64.deb"
+
+          echo "Package: $(du -sh dist/cdin_${DEB_VER}_amd64.deb | cut -f1)"
+          dpkg-deb --info "dist/cdin_${DEB_VER}_amd64.deb"
+
+      - name: Verify .deb installs cleanly
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          DEB_VER="${VER#v}"
+          sudo apt-get install -y "./dist/cdin_${DEB_VER}_amd64.deb"
+          command -v cdin
+          dpkg -L cdin | head -20
+          sudo apt-get remove -y cdin
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cdin-linux-x86_64
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
           if-no-files-found: error
           retention-days: 14
