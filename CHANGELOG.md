@@ -572,7 +572,15 @@ New keybindings (only active when the corresponding optional plugin is enabled):
 - The whole test suite (1587 asserts) is green on the release commit.
 - Beta cycle continues; APIs may still change before the first stable release.
 
-## [0.1.0-beta.8] - 2026-09-25 - [Unreleased]
+## [0.1.0] — 2026-09-25
+
+First stable release. The beta cycle (`0.1.0-beta.1` through `0.1.0-beta.7`) is over — no functional changes since `0.1.0-beta.7` beyond what's listed below, but the API and on-disk config are now considered stable within the `0.1.x` line.
+
+### Packaging
+
+- **Linux `.deb`:** Native Debian/Ubuntu package, built with `fpm` from the same `make install` layout. SDL3 is bundled alongside the binary (rewritten `RPATH` via `patchelf`), so no separate SDL3 install is needed. Installs a `.desktop` entry and hicolor icons. `sudo apt install ./cdin_0.1.0_amd64.deb`.
+- **Windows installer:** Native Inno Setup installer (`cdin-0.1.0-setup.exe`) built alongside the existing portable zip. Standard wizard, optional desktop shortcut, optional PATH registration, Start Menu entry, clean uninstall via *Settings › Apps*.
+- Both are built and attached automatically in CI on every tagged release, next to the existing tarball (Linux), zip (Windows), and DMG (macOS).
 
 ### Features
 
