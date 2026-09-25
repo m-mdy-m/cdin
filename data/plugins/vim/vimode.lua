@@ -120,7 +120,7 @@ local function handle_key(k)
   end
   local view = core.active_docview()
 
-  if not view and k == "m" then
+  if not view and k == "m" and not shift then
     command.perform("vim-fmenu:open")
     return true
   end
@@ -330,7 +330,7 @@ local function handle_key(k)
     return true
   end
 
-  if k == "m" then
+  if k == "m" and not shift then
     command.perform("vim-fmenu:open")
     return true
   end
@@ -338,7 +338,7 @@ local function handle_key(k)
     command.perform("root:switch-to-next-tab")
     return true
   end
-  if #k == 1 then return true end
+  if #k == 1 and not shift then return true end
 
   return false
 end

@@ -48,6 +48,15 @@ config.line_number_relative = false
 -- config.treeview_git_enabled = false
 -- config.treeview_git_update_rate = 2 -- seconds between polls
 
+-- ── plugin manager ──
+-- Press Shift+m to open the plugin manager menu.
+-- It lists all plugins with their status:
+--   [x] plugin_name  = active/enabled
+--   [-] plugin_name  = installed but disabled
+--   [ ] plugin_name  = not installed
+-- Use the menu to install, uninstall, and toggle plugins on/off.
+-- User-installed plugins go to data/plugins/local/
+
 keymap.add {
   ["ctrl+shift+h"] = "treeview:toggle-hidden",
 }

@@ -41,4 +41,13 @@ config.optional_plugins = {
   theme_switcher = true,
 }
 
+-- ── essential plugins (non-removable) ────────────────────
+config.essential_plugins = { "core", "vim", "treeview" }
+
+-- ── plugin system ───────────────────────────────────────
+config.plugin_install_path = EXEDIR .. "/data/plugins/local"
+config.plugin_paths = {}
+config.plugins = {}
+config.plugins_enabled_by_default = true
+
 return config
