@@ -1,7 +1,8 @@
-local core    = require "core"
-local config  = require "core.config"
-local command = require "core.input.command"
-local common  = require "core.utils.common"
+local core              = require "core"
+local config            = require "core.config"
+local command           = require "core.input.command"
+local common            = require "core.utils.common"
+local session_bootstrap = require "core.session_bootstrap"
 
 if config.session_max_recent  == nil then config.session_max_recent  = 10  end
 if config.session_restore      == nil then config.session_restore      = false end
@@ -9,40 +10,11 @@ if config.session_save_on_quit == nil then config.session_save_on_quit = true en
 if config.session_restore_dir  == nil then config.session_restore_dir  = true end
 if config.session_restore_theme == nil then config.session_restore_theme = true end
 
-local IS_WIN = PATHSEP == "\\"
-
-local function session_path()
-  local base
-  if IS_WIN then
-    base = os.getenv("APPDATA") or os.getenv("USERPROFILE") or "."
-    return base .. "\\cdin\\session.lua"
-  else
-    base = os.getenv("XDG_DATA_HOME") or (os.getenv("HOME") .. "/.local/share")
-    return base .. "/cdin/session.lua"
-  end
-end
-
-local ensure_dir = common.ensure_dir
-
-local function empty_session()
-  return { recent_files = {}, recent_dirs = {}, last_dir = nil, theme = nil }
-end
+local session_path = session_bootstrap.session_path
+local ensure_dir   = common.ensure_dir
 
 local function load_session()
-  local path = session_path()
-  local ok, chunk = pcall(loadfile, path)
-  if not ok or not chunk then return empty_session() end
-  local ok2, data = pcall(chunk)
-  if not ok2 or type(data) ~= "table" then return empty_session() end
-  if data.recent and not data.recent_files then
-    data.recent_files = data.recent
-    data.recent = nil
-  end
-  data.recent_files = data.recent_files or {}
-  data.recent_dirs  = data.recent_dirs  or {}
-  data.last_dir     = data.last_dir  -- may be nil, that's fine
-  data.theme        = data.theme     -- may be nil, that's fine
-  return data
+  return core._boot_session or session_bootstrap.read()
 end
 
 local function save_session(data)
@@ -155,40 +127,26 @@ table.insert(Doc._after_save, function(doc)
   if doc.filename then push_recent_file(doc.filename) end
 end)
 
+-- Directory and theme are already restored synchronously by core.init()
+-- before the first frame — see data/core/init.lua. All that's left here is
+-- optionally reopening the last file, which does need to wait a beat for
+-- the views to exist. core.root_view is already set up by the time plugins
+-- load, so this no longer needs coroutine.yield() to wait for anything;
+-- it's a plain core.add_thread call purely so a bad restore can't block
+-- startup (core.try already guards it either way).
 local _restored = false
 core.add_thread(function()
-  coroutine.yield(0.05)
-  if not _restored then
-    _restored = true
+  if _restored then return end
+  _restored = true
 
-    if config.session_restore_dir and _session.last_dir and dir_exists(_session.last_dir) then
-      local ok, err = pcall(system.chdir, _session.last_dir)
-      if ok then
-        core.project_dir = system.absolute_path(".") or _session.last_dir
-        core.log("session: restored directory %s", _session.last_dir)
-        core.try(function() require("core.input.command").perform("treeview:refresh") end)
-      else
-        core.error("session: failed to restore directory: %s", tostring(err))
-      end
-    end
-
-    if config.session_restore_theme and _session.theme then
-      local style = require "core.style"
-      if style.set_theme(_session.theme) then
-        config.theme = _session.theme
-        core.log("session: restored theme %s", _session.theme)
-      end
-    end
-
-    if config.session_restore then
-      local recent = _session.recent_files
-      local first = recent and recent[1]
-      if first and file_exists(first) then
-        core.try(function()
-          core.root_view:open_doc(core.open_doc(first))
-        end)
-        core.log("session: restored %s", first)
-      end
+  if config.session_restore then
+    local recent = _session.recent_files
+    local first = recent and recent[1]
+    if first and file_exists(first) then
+      core.try(function()
+        core.root_view:open_doc(core.open_doc(first))
+      end)
+      core.log("session: restored %s", first)
     end
   end
 end)

@@ -2,7 +2,16 @@ require "core.runtime.strict"
 local temp = require "core.runtime.temp"
 
 local config = require "core.config"
-local style  = require "core.style"
+
+local session_bootstrap = require "core.session_bootstrap"
+if config.session_restore_theme == nil then config.session_restore_theme = true end
+if config.session_restore_dir  == nil then config.session_restore_dir  = true  end
+local _boot_session = session_bootstrap.read()
+if config.session_restore_theme and _boot_session.theme then
+  config.theme = _boot_session.theme
+end
+
+local style = require "core.style"
 
 local core = {}
 require("core.logging").install(core)
@@ -10,8 +19,14 @@ core.temp_filename = temp.filename
 
 core.project_dir = nil
 
+core._quitting = false
+
 function core.quit(force)
+  core.log("core.quit called with force=%s, already_quitting=%s", tostring(force), tostring(core._quitting))
+  if core._quitting then return end
   if force then
+    core._quitting = true
+    core.log("core.quit: force path, deleting temp files and exiting")
     temp.delete_all()
     os.exit()
   end
@@ -45,17 +60,27 @@ function core.init()
   local Doc         = require "core.doc"
 
   local project_dir = EXEDIR
+  local explicit_dir = false
   local files = {}
   for i = 2, #ARGS do
     local abs  = system.absolute_path(ARGS[i]) or ARGS[i]
     local info = system.get_file_info(abs) or {}
     if     info.type == "file" then table.insert(files, abs)
-    elseif info.type == "dir"  then project_dir = abs
+    elseif info.type == "dir"  then project_dir = abs; explicit_dir = true
+    end
+  end
+
+  if not explicit_dir and config.session_restore_dir and _boot_session.last_dir then
+    local info = system.get_file_info(_boot_session.last_dir)
+    if info and info.type == "dir" then
+      project_dir = _boot_session.last_dir
     end
   end
 
   system.chdir(project_dir)
   core.project_dir = system.absolute_path(".") or project_dir
+
+  core._boot_session = _boot_session
 
   state.setup_state(core)
 

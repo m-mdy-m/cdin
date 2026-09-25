@@ -1,4 +1,3 @@
-
 local function setup_state(core)
   core.frame_start     = 0
   core.clip_rect_stack = {{ 0, 0, 0, 0 }}
