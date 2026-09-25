@@ -592,6 +592,7 @@ First stable release. The beta cycle (`0.1.0-beta.1` through `0.1.0-beta.7`) is 
 
 * Fix `qa` and `qa!` behavior for closing tabs and quitting cdin.
 * Fix session and theme persistence issues.
+* Fix stray `git` stderr (e.g. `fatal: not a git repository`) leaking to the console/log on Linux and WSL when opening a file or folder outside a Git repo. `core.git.exec`'s `popen` helper was stripping the `2>/dev/null` (`2>NUL` on the Windows fallback path) redirect from commands before running them, since `system.popen` applies no redirection itself — so every periodic Git status check (`git rev-parse --show-toplevel`, `git status --porcelain`, etc.) printed its error output unfiltered. The redirect is no longer stripped.
 
 ### Improvements
 
