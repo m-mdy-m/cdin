@@ -166,14 +166,18 @@ jobs:
           tar -C dist -czf "dist/${PKG_NAME}.tar.gz" "${PKG_NAME}"
           echo "Tarball: $(du -sh dist/${PKG_NAME}.tar.gz | cut -f1)"
 
+      # ── Native package: .deb ─────────────────────────────────────────────
       - name: Install fpm & patchelf
         run: |
           sudo apt-get install -y --no-install-recommends ruby ruby-dev build-essential patchelf
           sudo gem install --no-document fpm
 
       - name: Stage install root (DESTDIR)
+        env:
+          PKG_CONFIG_PATH: /opt/sdl3/lib/pkgconfig
         run: |
-          make install PREFIX=/usr DESTDIR="${PWD}/dist/deb-root"
+          make install BUILD=release PLATFORM=linux SDL_VERSION=3 \
+            PREFIX=/usr DESTDIR="${PWD}/dist/deb-root"
 
           # Bundle the SDL3 shared lib we built, point the binary at it via
           # RPATH ($ORIGIN — same directory, per `make install`'s layout:
