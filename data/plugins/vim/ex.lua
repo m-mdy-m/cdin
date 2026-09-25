@@ -81,7 +81,69 @@ local function force_close_active_view()
   core.last_active_view = nil
 end
 
--- Open a file in the editor. Creates it if `create` is true.
+local function force_close_all_tabs_and_views(discard_unsaved)
+  local EmptyView = require "core.rootview.empty_view"
+
+  local ok_tabs, tabM = pcall(require, "plugins.tab.manager")
+  if ok_tabs and tabM and tabM.get_count and tabM.get_count() > 0 then
+    for _, id in ipairs({ table.unpack(tabM.tab_order) }) do
+      if id ~= tabM.active_id then
+        tabM.close(id, true)
+      end
+    end
+  end
+
+  local root = core.root_view.root_node
+  local function count_unlocked_views()
+    local total = 0
+    local function walk(n)
+      if n.type == "leaf" then
+        if not n.locked then total = total + #n.views end
+      else
+        walk(n.a); walk(n.b)
+      end
+    end
+    walk(root)
+    return total
+  end
+
+  local function first_unlocked_leaf(n)
+    if n.type == "leaf" then return (not n.locked) and n or nil end
+    return first_unlocked_leaf(n.a) or first_unlocked_leaf(n.b)
+  end
+
+  if core.root_view:get_active_node().locked then
+    local leaf = first_unlocked_leaf(root)
+    if leaf then leaf:set_active_view(leaf.active_view) end
+  end
+
+  local guard = 0
+  while count_unlocked_views() > 1 and guard < 1000 do
+    guard = guard + 1
+    local node = core.root_view:get_active_node()
+    if node.locked then
+      break
+    end
+    force_close_active_view()
+  end
+
+  local node = core.root_view:get_active_node()
+  if node and not node.locked then
+    node.views = {}
+    node:add_view(EmptyView())
+  end
+
+  for i = #core.docs, 1, -1 do
+    local doc = core.docs[i]
+    if #core.get_views_referencing_doc(doc) == 0 then
+      table.remove(core.docs, i)
+    end
+  end
+
+  core.last_active_view = nil
+  core.redraw = true
+end
+
 local function open_file(path, create)
   if not fs.exists(path) then
     if create then
@@ -128,8 +190,8 @@ local HELP_TEXT = [[
 --    :wa             save all open files
 --    :q              close current view (fails if unsaved)
 --    :q!             force-close without saving
---    :qa / :qall     quit (fails if unsaved files)
---    :qa! / :qall!   force quit
+--    :qa / :qall     close ALL tabs/views 
+--    :qa! / :qall!   quit cdin entirely 
 --    :wq / :x        save then close
 --    :wqa / :xa      save all then quit
 --
@@ -226,9 +288,23 @@ function M.submit(raw)
     force_close_active_view()
 
   elseif cmd == "qa" or cmd == "qall" then
-    core.quit(false)
+    local dirty_count, dirty_name = 0, nil
+    for _, doc in ipairs(core.docs) do
+      if doc:is_dirty() then
+        dirty_count = dirty_count + 1
+        dirty_name  = doc:get_name()
+      end
+    end
+    if dirty_count > 0 then
+      local text = dirty_count == 1
+        and string.format('"%s" has unsaved changes. Close all without saving?', dirty_name)
+        or  string.format("%d docs have unsaved changes. Close all without saving?", dirty_count)
+      if not system.show_confirm_dialog("Unsaved Changes", text) then return end
+    end
+    force_close_all_tabs_and_views(true)
 
   elseif cmd == "qa!" or cmd == "qall!" then
+    -- Force-quit cdin entirely (discarding unsaved changes).
     core.quit(true)
 
   elseif cmd == "wq" or cmd == "x" then
