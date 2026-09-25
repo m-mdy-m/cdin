@@ -1,4 +1,3 @@
-import { useContributors } from "@/hooks/useContributors";
 import {
   Tooltip,
   TooltipContent,
@@ -7,14 +6,16 @@ import {
 import { GitCommit } from "lucide-react";
 import { Button } from "../ui/button";
 import { useState } from "react";
+import { useRepoStore } from "@/store/repo-store";
 
 const COLLAPSED_COUNT = 8;
 
 export default function Contributors() {
-  const contributors = useContributors();
+  const contributors = useRepoStore((state) => state.contributors);
   const [collapsed, setCollapsed] = useState(true);
 
   const maxContributions = Math.max(
+    1,
     ...contributors.map((c) => c.contributions),
   );
 
