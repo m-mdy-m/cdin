@@ -24,6 +24,7 @@ local function install(core, keymap)
         end
       end
     elseif type == "quit" then
+      core.log("core.events: received SDL 'quit' event")
       core.quit()
     end
     return did_keymap

@@ -43,7 +43,9 @@ end
 
 function TitleBar:on_mouse_pressed(button, x, y, clicks)
   local target = self:button_at(x, y)
-  if     target == "close"    then core.quit()
+  if     target == "close"    then
+    core.log("titlebar: close button clicked, calling core.quit()")
+    core.quit()
   elseif target == "minimize" then system.window_minimize()
   elseif target == "maximize" then system.window_toggle_maximize()
   elseif button == "left" and clicks == 2 then system.window_toggle_maximize()

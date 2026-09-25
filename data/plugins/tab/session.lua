@@ -144,6 +144,7 @@ end
 
 local _orig_quit = core.quit
 function core.quit(force)
+  core.log("plugins.tab.session: quit wrapper called, force=%s", tostring(force))
   save()
   _orig_quit(force)
 end

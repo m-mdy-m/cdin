@@ -196,6 +196,7 @@ end)
 local _orig_quit = core.quit
 
 function core.quit(force)
+  core.log("plugins.core.session: quit wrapper called, force=%s", tostring(force))
   if config.session_save_on_quit then
     for _, doc in ipairs(core.docs) do
       if doc.filename then push_recent_file(doc.filename) end
@@ -203,6 +204,7 @@ function core.quit(force)
     if core.project_dir then set_last_dir(core.project_dir) end
     if config.theme then _session.theme = config.theme end
     save_session(_session)
+    core.log("plugins.core.session: session saved on quit")
   end
   _orig_quit(force)
 end
