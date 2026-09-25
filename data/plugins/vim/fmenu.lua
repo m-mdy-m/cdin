@@ -153,8 +153,42 @@ end
 local function basename(p)
   return p:match("[^\\/]+$") or p
 end
+local function path_is_within(path, dir)
+  if not path or not dir then return false end
+
+  local apath = system.absolute_path(path)
+  local adir  = system.absolute_path(dir)
+  if not apath or not adir then return false end
+
+  apath = apath:gsub("[\\/]$", "")
+  adir  = adir:gsub("[\\/]$", "")
+
+  if PATHSEP == "\\" then
+    apath = apath:lower()
+    adir  = adir:lower()
+  end
+
+  return apath == adir or apath:sub(1, #adir + 1) == adir .. PATHSEP
+end
+-- True when both paths resolve to the same existing directory.
+local function same_dir(a, b)
+  if not a or not b then return false end
+  local aa, bb = system.absolute_path(a), system.absolute_path(b)
+  if not aa or not bb then return false end
+  aa = aa:gsub("[\\/]$", "")
+  bb = bb:gsub("[\\/]$", "")
+  if PATHSEP == "\\" then
+    aa, bb = aa:lower(), bb:lower()
+  end
+  return aa == bb
+end
 
 local function context_path()
+ local cwd = fs.pwd()
+  -- The tree cursor belongs to the tree rooted at core.project_dir. After a
+  -- :cd the tree may still show the previous root for a frame or two, so a
+  -- cursor item from the old tree must never be used as the context.
+  local root_ok = same_dir(core.project_dir, cwd)
   local function walk(node)
     if not node then return nil end
     for _, view in ipairs(node.views or {}) do
@@ -166,14 +200,16 @@ local function context_path()
   end
 
   local tv = core.root_view and walk(core.root_view.root_node)
-  if tv and tv.cursor_item then
+  if root_ok and tv and tv.cursor_item then
     local item  = tv.cursor_item
-    local path  = item.abs_filename or item.filename or "."
+    local path = item.abs_filename or item.filename
     local is_d  = (item.type == "dir")
-    if is_d then
-      return path, nil, true
-    else
-      return dirname(path), path, false
+   if path and path_is_within(path, cwd) then
+     if is_d then
+       return path, nil, true
+     else
+       return dirname(path), path, false
+     end
     end
   end
 
@@ -182,12 +218,12 @@ local function context_path()
   local av = core.active_view
   if av and av:is(DocView) and not av:is(CommandView) then
     local doc = av.doc
-    if doc and doc.filename then
+    if doc and doc.filename and path_is_within(doc.filename, cwd) then
       return dirname(doc.filename), doc.filename, false
     end
   end
 
-  return fs.pwd(), nil, true
+  return cwd, nil, true
 end
 
 local function with_path(prompt, path, start_dir, fn)

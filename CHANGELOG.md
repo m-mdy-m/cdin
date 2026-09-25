@@ -612,3 +612,13 @@ Patch release focused on fixing an issue with mode transitions.
 - **Treeview auto-refresh:** Automatically rescan the project after saving a newly-created file so new files appear in the project tree without a manual refresh.
 - **File manager menu on Home:** Fixed `m` in Normal mode so the file manager menu can be opened when no document is currently active, including from the Home/empty view.
 - **Vim Visual mode indicator:** Hardened the `[VISUAL]` status indicator to read the Vim mode from the same active document view used by Vim mode itself, keeping the displayed mode synchronized with the actual Vim state.
+
+## [0.1.3] — 2026-09-25
+
+### Bug Fixes
+
+* **File manager menu — stale TreeView paths after `:cd`:** Fixed an issue where the file manager menu could continue using a stale TreeView item from the previous working directory after changing directories with `:cd`. Creating a new file or directory from `m` could therefore place it in the old directory instead of the current working directory.
+
+* **Context path validation:** TreeView and active document paths are now validated against the current working directory before being used as the context for file manager operations. If a stale or unrelated path is detected, the current working directory is used as the authoritative fallback.
+
+* **Windows path handling:** Path containment checks now normalize case on Windows, preventing incorrectly rejected or accepted paths when directory names differ only by letter casing.
