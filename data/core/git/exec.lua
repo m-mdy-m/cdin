@@ -8,7 +8,7 @@ local function find_git_win()
   if _git_exe ~= nil then return _git_exe end
 
   local function popen_raw(c)
-    if system.popen then return system.popen(c) end
+    if system.popen then return system.popen(c:gsub("%s*2>[^%s\"]*", "")) end
     local ok, fp = pcall(io.popen, c)
     if not ok or not fp then return nil end
     local o = fp:read("*a"); fp:close(); return o
@@ -66,7 +66,7 @@ end
 
 function M.popen(cmd)
   if system.popen then
-    return system.popen(cmd)
+    return system.popen(cmd:gsub("%s*2>[^%s\"]*", ""))
   end
   local full_cmd
   if IS_WIN then
