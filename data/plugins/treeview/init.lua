@@ -9,6 +9,8 @@ local View    = require "core.views.view"
 local Cache = require "plugins.treeview.cache"
 local Git   = require "plugins.treeview.git"
 local Nav   = require "plugins.treeview.nav"
+local Doc     = require "core.doc"
+local project = require "core.project"
 
 config.treeview_size            = 200 * SCALE
 config.show_hidden_files        = true
@@ -330,6 +332,12 @@ local function refresh_tree()
   core.redraw = true
 end
 
+local function request_project_rescan()
+  project.request_rescan(core)
+end
+
+Doc._after_save[#Doc._after_save + 1] = request_project_rescan
+
 local function context_dir()
   local items = selected_items()
   local item  = items[1]
@@ -357,7 +365,6 @@ command.add(nil, {
 
   ["treeview:refresh"] = function()
     refresh_tree()
-    local project = require "core.project"
     project.request_rescan(core)
     if config.treeview_git_enabled then core.try(Git.refresh) end
   end,
@@ -379,6 +386,7 @@ command.add(nil, {
       if not fp then core.error('treeview: could not create "%s"', path); return end
       fp:close()
       refresh_tree()
+      request_project_rescan()
       core.try(function() core.root_view:open_doc(core.open_doc(path)) end)
     end, function(text)
       return common.path_suggest(dir ~= "." and dir..PATHSEP..text or text)
@@ -395,6 +403,7 @@ command.add(nil, {
         or  ('mkdir -p "' .. path .. '"'))
       if not ok then core.error('treeview: could not create directory "%s"', path); return end
       refresh_tree()
+      request_project_rescan()
     end, function(text)
       return common.path_suggest(dir ~= "." and dir..PATHSEP..text or text)
     end)
@@ -416,6 +425,7 @@ command.add(nil, {
         end
       end
       refresh_tree()
+      request_project_rescan()
     end, function() return {} end)
     core.command_view:set_text(item.name, true)
   end,
@@ -441,6 +451,7 @@ command.add(nil, {
     end
     view.selected = {}
     refresh_tree()
+    request_project_rescan()
   end,
 })
 

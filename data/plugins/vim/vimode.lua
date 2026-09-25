@@ -120,6 +120,11 @@ local function handle_key(k)
   end
   local view = core.active_docview()
 
+  if not view and k == "m" then
+    command.perform("vim-fmenu:open")
+    return true
+  end
+
   if k == "escape" then
     if view then
       local mode = get_mode(view)
@@ -354,8 +359,8 @@ end
 
 function core.get_vim_mode_label()
   if not config.vim_mode_enabled then return nil end
-  local v = core.active_view
-  if v and v:is(DocView) and not v:is(CommandView) then
+  local v = core.active_docview()
+  if v then
     local mode = get_mode(v)
     if     mode == MODE_INSERT then return "[INSERT]"
     elseif mode == MODE_VISUAL then return "[VISUAL]"

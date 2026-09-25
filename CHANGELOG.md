@@ -604,3 +604,11 @@ Patch release focused on fixing an issue with mode transitions.
 ### Bug Fixes
 
 * Fix an issue where pressing `Esc` after entering insert mode would leave the bottom status bar visible instead of properly returning to normal mode.
+
+## [0.1.2] — 2026-09-25
+
+### Bug Fixes
+
+- **Treeview auto-refresh:** Automatically rescan the project after saving a newly-created file so new files appear in the project tree without a manual refresh.
+- **File manager menu on Home:** Fixed `m` in Normal mode so the file manager menu can be opened when no document is currently active, including from the Home/empty view.
+- **Vim Visual mode indicator:** Hardened the `[VISUAL]` status indicator to read the Vim mode from the same active document view used by Vim mode itself, keeping the displayed mode synchronized with the actual Vim state.
