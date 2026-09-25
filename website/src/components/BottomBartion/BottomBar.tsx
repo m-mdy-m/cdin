@@ -1,7 +1,16 @@
+import { useEffect } from "react";
 import { footerLinks } from "@/consts/footerLinks";
+import { useRepoStore } from "@/store/repo-store";
 import { Button } from "../ui/button";
 
 export default function BottomBar() {
+  const stars = useRepoStore((state) => state.stars);
+  const fetchRepo = useRepoStore((state) => state.fetchRepo);
+
+  useEffect(() => {
+    void fetchRepo();
+  }, [fetchRepo]);
+
   return (
     <footer className="">
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 border-y">
@@ -14,7 +23,7 @@ export default function BottomBar() {
           >
             {link.label}{" "}
             <span className="text-muted-foreground opacity-80">
-              {link.label === "GitHub" ? "[22]" : null}
+              {link.label === "GitHub" && stars !== null ? `[${stars}]` : null}
             </span>
           </a>
         ))}
