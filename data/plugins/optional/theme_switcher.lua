@@ -19,6 +19,10 @@ command.add(nil, {
       if not name then return end
       if style.set_theme(name) then
         config.theme = name
+        local ok_session, session = pcall(require, "plugins.core.session")
+        if ok_session and session and session.set_theme then
+          session.set_theme(name)
+        end
         core.log("Theme: %s", name)
         core.redraw = true
       else

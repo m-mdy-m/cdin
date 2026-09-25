@@ -6,6 +6,8 @@ local common  = require "core.utils.common"
 if config.session_max_recent  == nil then config.session_max_recent  = 10  end
 if config.session_restore      == nil then config.session_restore      = false end
 if config.session_save_on_quit == nil then config.session_save_on_quit = true end
+if config.session_restore_dir  == nil then config.session_restore_dir  = true end
+if config.session_restore_theme == nil then config.session_restore_theme = true end
 
 local IS_WIN = PATHSEP == "\\"
 
@@ -22,18 +24,24 @@ end
 
 local ensure_dir = common.ensure_dir
 
+local function empty_session()
+  return { recent_files = {}, recent_dirs = {}, last_dir = nil, theme = nil }
+end
+
 local function load_session()
   local path = session_path()
   local ok, chunk = pcall(loadfile, path)
-  if not ok or not chunk then return { recent_files = {}, recent_dirs = {} } end
+  if not ok or not chunk then return empty_session() end
   local ok2, data = pcall(chunk)
-  if not ok2 or type(data) ~= "table" then return { recent_files = {}, recent_dirs = {} } end
+  if not ok2 or type(data) ~= "table" then return empty_session() end
   if data.recent and not data.recent_files then
     data.recent_files = data.recent
     data.recent = nil
   end
   data.recent_files = data.recent_files or {}
   data.recent_dirs  = data.recent_dirs  or {}
+  data.last_dir     = data.last_dir  -- may be nil, that's fine
+  data.theme        = data.theme     -- may be nil, that's fine
   return data
 end
 
@@ -58,6 +66,18 @@ local function save_session(data)
     lines[#lines+1] = '    "' .. safe .. '",'
   end
   lines[#lines+1] = "  },"
+
+  -- last_dir
+  if data.last_dir then
+    local safe_dir = data.last_dir:gsub("\\", "\\\\"):gsub('"', '\\"')
+    lines[#lines+1] = '  last_dir = "' .. safe_dir .. '",'
+  end
+
+  -- theme
+  if data.theme then
+    local safe_theme = data.theme:gsub("\\", "\\\\"):gsub('"', '\\"')
+    lines[#lines+1] = '  theme = "' .. safe_theme .. '",'
+  end
 
   lines[#lines+1] = "}"
 
@@ -92,6 +112,12 @@ local function push_recent_dir(dirpath)
   while #_session.recent_dirs > config.session_max_recent do
     table.remove(_session.recent_dirs)
   end
+end
+
+local function set_last_dir(dirpath)
+  if not dirpath then return end
+  local abs = system.absolute_path(dirpath) or dirpath
+  _session.last_dir = abs
 end
 
 local function push_recent_file(filename)
@@ -134,6 +160,26 @@ core.add_thread(function()
   coroutine.yield(0.05)
   if not _restored then
     _restored = true
+
+    if config.session_restore_dir and _session.last_dir and dir_exists(_session.last_dir) then
+      local ok, err = pcall(system.chdir, _session.last_dir)
+      if ok then
+        core.project_dir = system.absolute_path(".") or _session.last_dir
+        core.log("session: restored directory %s", _session.last_dir)
+        core.try(function() require("core.input.command").perform("treeview:refresh") end)
+      else
+        core.error("session: failed to restore directory: %s", tostring(err))
+      end
+    end
+
+    if config.session_restore_theme and _session.theme then
+      local style = require "core.style"
+      if style.set_theme(_session.theme) then
+        config.theme = _session.theme
+        core.log("session: restored theme %s", _session.theme)
+      end
+    end
+
     if config.session_restore then
       local recent = _session.recent_files
       local first = recent and recent[1]
@@ -154,6 +200,8 @@ function core.quit(force)
     for _, doc in ipairs(core.docs) do
       if doc.filename then push_recent_file(doc.filename) end
     end
+    if core.project_dir then set_last_dir(core.project_dir) end
+    if config.theme then _session.theme = config.theme end
     save_session(_session)
   end
   _orig_quit(force)
@@ -228,6 +276,9 @@ local function open_recent_dirs_picker()
     if item and item.path then
       local ok, err = pcall(system.chdir, item.path)
       if ok then
+        core.project_dir = system.absolute_path(".") or item.path
+        push_recent_dir(item.path)
+        set_last_dir(item.path)
         core.log("session: changed to %s", item.path)
         pcall(function() command.perform("treeview:refresh") end)
       else
@@ -263,6 +314,8 @@ command.add(nil, {
   ["session:clear"] = function()
     _session.recent_files = {}
     _session.recent_dirs  = {}
+    _session.last_dir     = nil
+    _session.theme        = nil
     save_session(_session)
     core.log("session: cleared")
   end,
@@ -302,10 +355,18 @@ function M.open(path)
   end)
 end
 
+function M.set_theme(name)
+  if not name then return end
+  _session.theme = name
+  save_session(_session)
+end
+
 function M.open_dir(path)
   local ok, err = pcall(system.chdir, path)
   if ok then
+    core.project_dir = system.absolute_path(".") or path
     push_recent_dir(path)
+    set_last_dir(path)
     pcall(function() command.perform("treeview:refresh") end)
   end
   return ok, err
