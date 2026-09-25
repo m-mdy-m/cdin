@@ -114,7 +114,7 @@ local function handle_key(k)
 
   local shift = keymap.modkeys.shift
 
-  if shift and k == ";" or k == "escape" then
+  if shift and k == ";" then
     open_ex_commandline()
     return true
   end

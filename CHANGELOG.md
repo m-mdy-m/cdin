@@ -596,3 +596,11 @@ First stable release. The beta cycle (`0.1.0-beta.1` through `0.1.0-beta.7`) is 
 ### Improvements
 
 * Add logging for debugging and troubleshooting.
+
+## [0.1.1] — 2026-09-25
+
+Patch release focused on fixing an issue with mode transitions.
+
+### Bug Fixes
+
+* Fix an issue where pressing `Esc` after entering insert mode would leave the bottom status bar visible instead of properly returning to normal mode.
