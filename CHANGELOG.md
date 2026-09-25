@@ -571,3 +571,20 @@ New keybindings (only active when the corresponding optional plugin is enabled):
 - The RTL path degrades safely: if `core.text` fails to load, lines render as plain LTR tokens; if `direction = "ltr"` or a line has no RTL characters, the original per-token drawing path is used unchanged.
 - The whole test suite (1587 asserts) is green on the release commit.
 - Beta cycle continues; APIs may still change before the first stable release.
+
+## [0.1.0-beta.8] - 2026-09-25 - [Unreleased]
+
+### Features
+
+* Load the previous session before starting cdin.
+* Restore the last session state across application restarts.
+* Persist the selected theme across restarts.
+
+### Bug Fixes
+
+* Fix `qa` and `qa!` behavior for closing tabs and quitting cdin.
+* Fix session and theme persistence issues.
+
+### Improvements
+
+* Add logging for debugging and troubleshooting.
