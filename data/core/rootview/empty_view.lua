@@ -8,7 +8,7 @@ local logo    = require "core.rootview.logo"
 local EmptyView = View:extend()
 
 local function get_session()
-  local ok, m = pcall(require, "plugins.core.session")
+  local ok, m = pcall(require, "X.core.session")
   if ok and m then return m end
   return nil
 end

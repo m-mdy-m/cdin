@@ -3,7 +3,7 @@ local config  = require "core.config"
 local git     = require "core.git"
 
 local function flush_treeview_cache()
-  local ok, Cache = pcall(require, "plugins.treeview.cache")
+  local ok, Cache = pcall(require, "X.core.treeview.cache")
   if ok and Cache and Cache.flush then Cache.flush() end
 end
 

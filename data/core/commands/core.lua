@@ -96,7 +96,8 @@ command.add(nil, {
   end,
 
   ["core:open-user-module"] = function()
-    core.root_view:open_doc(core.open_doc(EXEDIR .. "/data/user/init.lua"))
+    local config = require "core.config"
+    core.root_view:open_doc(core.open_doc(config.user_dir .. "/init.lua"))
   end,
 
   ["core:open-project-module"] = function()

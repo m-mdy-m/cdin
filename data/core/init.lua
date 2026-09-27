@@ -107,15 +107,30 @@ function core.init()
   core.add_thread(function() project.thread(core) end)
 
   command.add_defaults()
-  local got_plugin_error  = not core.load_plugins()
-  local got_user_error    = not core.try(require, "user")
+
+  local x_ok, x_err = pcall(function()
+    local x = require "core.x"
+    x.bootstrap()
+  end)
+  if not x_ok then
+    core.log("cdin-x not available: %s", tostring(x_err))
+  end
+
+  -- Load user configuration from ~/.config/cdin/user/init.lua
+  local user_path = config.user_dir .. "/init.lua"
+  local got_user_error = not core.try(function()
+    if system.get_file_info(user_path) then
+      dofile(user_path)
+    end
+  end)
+
   local got_project_error = not core.load_project_module()
 
   for _, filename in ipairs(files) do
     core.root_view:open_doc(core.open_doc(filename))
   end
 
-  if got_plugin_error or got_user_error or got_project_error then
+  if not x_ok then
     command.perform("core:open-log")
   end
 end

@@ -10,10 +10,12 @@ style.tab_width = common.round(170 * SCALE)
 style.titlebar_height = common.round(34 * SCALE)
 style.titlebar_button_width = common.round(46 * SCALE)
 
-style.font = renderer.font.load(EXEDIR .. "/data/fonts/font.ttf", 14 * SCALE)
-style.big_font = renderer.font.load(EXEDIR .. "/data/fonts/font.ttf", 34 * SCALE)
-style.icon_font = renderer.font.load(EXEDIR .. "/data/fonts/icons.ttf", 14 * SCALE)
-style.code_font = renderer.font.load(EXEDIR .. "/data/fonts/monospace.ttf", 13.5 * SCALE)
+local config = require "core.config"
+
+style.font = renderer.font.load(config.fonts_dir .. "/font.ttf", 14 * SCALE)
+style.big_font = renderer.font.load(config.fonts_dir .. "/font.ttf", 34 * SCALE)
+style.icon_font = renderer.font.load(config.fonts_dir .. "/icons.ttf", 14 * SCALE)
+style.code_font = renderer.font.load(config.fonts_dir .. "/monospace.ttf", 13.5 * SCALE)
 
 do
   style._fallback_fonts = style._fallback_fonts or {}
@@ -32,8 +34,8 @@ do
     return font
   end
 
-  add_fallback_if_present(EXEDIR .. "/data/fonts/fallback.ttf", 14 * SCALE)
-  add_fallback_if_present(EXEDIR .. "/data/fonts/emoji.ttf", 14 * SCALE)
+  add_fallback_if_present(config.fonts_dir .. "/fallback.ttf", 14 * SCALE)
+  add_fallback_if_present(config.fonts_dir .. "/emoji.ttf", 14 * SCALE)
 end
 
 local function fallback(key, hex)

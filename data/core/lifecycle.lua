@@ -1,44 +1,22 @@
 -- Startup (init), shutdown (quit), plugin loader, project-module loader and the fatal-error handler (on_error).
 
 local function install(core)
+  -- CDIN-X extension ecosystem bootstrap.
+  -- All plugins, themes, and language support are now managed through
+  -- cdin-x. The built-in extensions (vim, treeview, tab, window, etc.)
+  -- are loaded automatically by the cdin-x manager.
+  -- Optional extensions are installed per-user via the cdin-x manager.
   function core.load_plugins()
-    local no_errors = true
-    local function load_dir(dir, prefix)
-      local entries = system.list_dir(dir) or {}
-      table.sort(entries) -- deterministic order across platforms
-      for _, filename in ipairs(entries) do
-        if type(filename) ~= "string" or filename == "" then goto continue end
-        local full = dir .. "/" .. filename
-        local info = system.get_file_info(full)
-        if info and info.type == "dir" then
-          -- Skip disabled optional plugins: data/plugins/optional/<name>
-          -- requires config.optional_plugins.<name> ~= false.
-          local skip = false
-          if prefix == "plugins." and dir:match("plugins$") and filename == "optional" then
-            -- still descend; filtering happens one level down
-          elseif prefix == "plugins.optional." then
-            local ok_cfg, cfg = pcall(require, "core.config")
-            local key = filename:gsub("%.lua$", "")
-            if ok_cfg and cfg and cfg.optional_plugins
-              and cfg.optional_plugins[key] == false then
-              skip = true
-            end
-          end
-          if not skip then load_dir(full, prefix .. filename .. ".") end
-        elseif filename:match("%.lua$") then
-          local modname = prefix .. filename:gsub("%.lua$", "")
-          local ok = core.try(require, modname)
-          if ok then
-            core.log_quiet("Loaded plugin %q", modname)
-          else
-            no_errors = false
-          end
-        end
-        ::continue::
-      end
+    local ok, err = pcall(function()
+      local x = require "core.x"
+      return x.bootstrap()
+    end)
+    if not ok then
+      core.log("cdin-x bootstrap failed: %s", tostring(err))
+      return false
     end
-    load_dir(EXEDIR .. "/data/plugins", "plugins.")
-    return no_errors
+    core.log("cdin-x: all extensions loaded via cdin-x manager")
+    return true
   end
 
   function core.load_project_module()

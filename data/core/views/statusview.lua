@@ -97,7 +97,7 @@ end
 
 -- ── tab indicator ─────────────────────────────────────────────────────────────
 local function tab_items(sep)
-  local ok, tabM = pcall(require, "plugins.tab.manager")
+  local ok, tabM = pcall(require, "X.core.tab.manager")
   if not ok then return nil end
   local n = tabM.get_count and tabM.get_count() or 0
   if n < 2 then return nil end

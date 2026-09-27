@@ -1,19 +1,30 @@
--- Theme registry: name -> module. Add a file here and it appears
--- in `core:change-theme` automatically.
+-- Theme registry: name -> module.
+-- Themes are simplified: each theme is just a theme.lua file.
+-- Built-in themes live in cdin-x/X/themes/<name>/theme.lua
+-- and are installed into data/X/themes/<name>/ during setup (see
+-- cdin-x/scripts/install.sh).
+-- themes.lua auto-discovers all available themes by scanning the catalog.
+
 local themes = {}
 
-themes.list = {
-  "default",
-  "dracula",
-  "nord",
-  "solarized-dark",
-  "solarized-light",
-  "monokai",
-  "github-light",
-  "gruvbox-dark",
-  "tokyo-night",
-  "catppuccin-mocha",
-}
+function themes.discover()
+  local found = {}
+  local catalog_dir = (EXEDIR or "") .. "/data/X/themes"
+  if not system.get_file_info(catalog_dir) then return found end
+
+  for _, entry in ipairs(system.list_dir(catalog_dir) or {}) do
+    if entry.type == "dir" and entry.name ~= ".git" then
+      local theme_file = catalog_dir .. "/" .. entry.name .. "/theme.lua"
+      if system.get_file_info(theme_file) then
+        found[#found + 1] = entry.name
+      end
+    end
+  end
+  table.sort(found)
+  return found
+end
+
+themes.list = themes.discover()
 
 function themes.names()
   local out = {}
@@ -23,8 +34,12 @@ end
 
 function themes.apply(style, name)
   local common = require "core.utils.common"
-  local ok, t = pcall(require, "themes." .. tostring(name))
+
+  -- Load theme from cdin-x catalog
+  local theme_path = (EXEDIR or "") .. "/data/X/themes/" .. tostring(name) .. "/theme.lua"
+  local ok, t = pcall(dofile, theme_path)
   if not ok or type(t) ~= "table" then return false end
+
   local function col(v, fallback)
     if type(v) == "string" then return { common.color(v) } end
     if type(v) == "table" then return v end
@@ -43,6 +58,11 @@ function themes.apply(style, name)
   end
   style.theme_name = t.name or name
   return true
+end
+
+function style.set_theme(name)
+  local themes = require "core.themes"
+  return themes.apply(style, name)
 end
 
 return themes
