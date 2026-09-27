@@ -1,5 +1,6 @@
-.PHONY: build clean distclean info help run debug debug-san _check_deps
-.PHONY: test check bench size tiny
+.PHONY: build clean distclean info help run debug debug-san _check_deps _check_cdin_x cdin-x-setup cdin-x-update cdin-x-validate cdin-x-build cdin-x-clean cdin-x
+.PHONY: test check bench size tiny install uninstall
+.PHONY: cdin-x-fetch cdin-x-dev-setup cdin-x-dev-update
 
 ICON_INL := src/icon.inl
 
@@ -11,7 +12,7 @@ $(ICON_INL): scripts/gen_icon.py scripts/icon.svg
 gen-icons: scripts/gen_icon.py scripts/icon.svg
 	python3 scripts/gen_icon.py  scripts/icon.svg --no-inl --out-dir scripts/icons
 
-build: $(OUT)
+build: _check_cdin_x $(OUT)
 	@if [ -d data ] && [ ! -e $(OUT_DIR)/data ]; then \
 		ln -s "$(abspath data)" $(OUT_DIR)/data; \
 	fi
@@ -41,6 +42,60 @@ _check_deps:
 		echo '  apt: sudo apt install liblua5.4-dev'; \
 		echo '  pacman: sudo pacman -S lua'; \
 		exit 1; }
+
+CDIN_X_REPO_SLUG ?=
+CDIN_X_REF ?=
+CDIN_X_RAW_BASE ?=
+
+_check_cdin_x:
+	@if [ ! -e "$(CURDIR)/data/core/x/manager.lua" ]; then \
+		echo "✗ cdin-x runtime not found in data/core/x. Run: make cdin-x-setup"; \
+		exit 1; \
+	fi
+
+cdin-x-setup:
+	@CDIN_X_REPO_SLUG="$(CDIN_X_REPO_SLUG)" CDIN_X_REF="$(CDIN_X_REF)" CDIN_X_RAW_BASE="$(CDIN_X_RAW_BASE)" \
+		sh scripts/fetch-cdin-x.sh "$(CURDIR)"
+
+cdin-x-update: cdin-x-setup
+
+cdin-x-clean:
+	@rm -rf data/core/x data/X
+	@echo "removed data/core/x and data/X — run 'make cdin-x-setup' to reinstall"
+
+cdin-x: cdin-x-setup
+
+# --- Contributor path: full local cdin-x checkout, symlinked in -----------
+CDIN_X_DIR ?= $(shell dirname $(CURDIR))/cdin-x
+CDIN_X_REPO ?= https://github.com/m-mdy-m/cdin-x.git
+
+cdin-x-dev-setup:
+	@if [ -d "$(CDIN_X_DIR)" ]; then \
+		echo "cdin-x already exists at $(CDIN_X_DIR)"; \
+	else \
+		echo "Cloning cdin-x into $(CDIN_X_DIR)..."; \
+		git clone "$(CDIN_X_REPO)" "$(CDIN_X_DIR)"; \
+	fi
+	@cd "$(CDIN_X_DIR)" && sh scripts/install.sh "$(CURDIR)" --symlink
+	@echo "cdin-x dev checkout linked — symlinks: data/core/x -> cdin-x/core, data/X -> cdin-x/X, data/fonts -> cdin-x/fonts"
+
+cdin-x-dev-update:
+	@if [ -d "$(CDIN_X_DIR)/.git" ]; then \
+		cd "$(CDIN_X_DIR)" && git pull --ff-only; \
+	else \
+		echo "cdin-x dev checkout not found. Run 'make cdin-x-dev-setup' first."; \
+		exit 1; \
+	fi
+	@cd "$(CDIN_X_DIR)" && sh scripts/install.sh "$(CURDIR)" --symlink
+	@echo "cdin-x dev checkout updated and re-linked."
+
+cdin-x-validate:
+	@cd "$(CDIN_X_DIR)" && lua scripts/validate.lua
+	@echo "cdin-x validation passed"
+
+cdin-x-build: cdin-x-validate
+	@cd "$(CDIN_X_DIR)" && lua scripts/generate-manifest.lua
+	@echo "cdin-x manifest generated"
 
 run: build
 	@$(OUT)
@@ -81,6 +136,13 @@ info:
 
 help:
 	@echo 'Targets: build (default), run, debug, clean, distclean, install, uninstall, info, help'
+	@echo '  cdin-x-setup      Fetch essential cdin-x runtime + plugins + default theme (no clone, no git needed)'
+	@echo '  cdin-x-update     Same as cdin-x-setup, re-fetches the essential set'
+	@echo '  cdin-x-clean      Remove data/core/x and data/X'
+	@echo '  cdin-x-dev-setup  [cdin-x contributors] clone cdin-x as a sibling checkout and symlink it in'
+	@echo '  cdin-x-dev-update [cdin-x contributors] git pull the sibling checkout and re-link'
+	@echo '  cdin-x-validate   [cdin-x contributors] validate cdin-x structure (needs sibling checkout)'
+	@echo '  cdin-x-build   Validate + generate manifest'
 	@echo 'Options: SDL3_PREFIX=/path BUILD=release|debug PREFIX=/usr/local LUA_VERSION=auto|5.4'
 	@echo 'Quality: test, check, bench, size, tiny (BUILD=tiny, -Os + gc-sections)'
 
