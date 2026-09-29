@@ -3,9 +3,9 @@
 install: build
 	@install -dm755 $(DESTDIR)$(LIBDIR)
 	@install -m755 $(OUT) $(DESTDIR)$(LIBDIR)/cdin
-	@if [ -d data ]; then \
+	@if [ -d "$(OUT_DIR)/data" ]; then \
 		install -dm755 $(DESTDIR)$(DATADIR); \
-		cp -r data/. $(DESTDIR)$(DATADIR)/; \
+		cp -rL "$(OUT_DIR)/data/." $(DESTDIR)$(DATADIR)/; \
 	fi
 	@install -dm755 $(DESTDIR)$(BINDIR)
 	@ln -sf $(LIBDIR)/cdin $(DESTDIR)$(BINDIR)/cdin
