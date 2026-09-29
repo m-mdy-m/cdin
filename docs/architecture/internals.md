@@ -25,9 +25,13 @@ From step 8 onward the Lua side owns the process. When the Lua main loop
 returns, `main()` tears down SDL and exits.
 
 `data/core/init.lua` does the rest of startup: parses `ARGS`, creates the
-initial view tree, starts background threads (project scanner, etc.), loads
-every plugin under `data/plugins/`, loads `data/user/init.lua`, loads the
+initial view tree, starts background threads (project scanner, etc.),
+loads user configuration from `~/.config/cdin/user/init.lua`, loads the
+extensions (the mandatory bundled set, then the site set), loads the
 per-project `.lite_project.lua` if it exists, and enters the frame loop.
+
+Extensions load after the user module, so a keymap or command the user set in
+`init.lua` is what a plugin has to override — not the other way round.
 
 ---
 
@@ -211,11 +215,40 @@ reading a few files) this is plenty.
 
 ---
 
-## Plugin loading
+## Extension loading
 
-Plugins load in `data/core/init.lua`, after the core modules and before the
-user config. The loader `require`s every `.lua` file under `data/plugins/`
-recursively, in directory order.
+Extensions load in `data/core/init.lua`, after the core modules and after the
+user's `init.lua`, via `data/core/plugins.lua`. That module walks two roots:
+`EXEDIR/data/plugins` — the mandatory set a build bundled from cdin-x — and
+`config.site_dir/plugins`, the site set. For each entry it `dofile`s the entry
+point (`init.lua` for a directory plugin, the file itself for a single-file
+one) and calls `init(core, config)` on the returned table. Every step is
+wrapped in `pcall`.
+
+The two roots have different rules, and the difference is the whole design:
+
+- The **bundled** set loads unconditionally, whatever `config.plugins` says and
+  whatever `--no-plugins` says. It is what a build produced, and a build
+  without it is not an editor that starts. A failure here is logged at error
+  level with the words "mandatory plugin" and names the plugin, then startup
+  continues.
+- The **site** set is selected by `config.plugins`: `nil` for all of them,
+  `false` for none, a table as a whitelist. A failure is logged and skipped.
+
+A bundled plugin wins over a site plugin of the same name, on disk and at
+runtime. `plugins.list()` reports which is which, as `source`.
+
+Before either root is walked, the site directory is **appended** to
+`package.path` (`<site>/?.lua` and `<site>/?/init.lua`) when it exists, so an
+extension's modules are `require`-able by their path. Appended, not prepended:
+a site may extend the editor but may not shadow `core.*` or the bundled
+`X.core.vim.*`, which is what stops a plugin from replacing the runtime it is
+extending.
+
+If the site directory does not exist, nothing is appended and the walk finds
+nothing — which is why the editor is fully usable with no extensions
+installed, and why `Ctrl+P` is unbound rather than bound to a command nobody
+registered.
 
 Plugins are not sandboxed. They run in the same Lua state as the core, with
 access to all the same tables. A plugin can modify anything. This is
@@ -224,8 +257,8 @@ intentional — it's what makes the wrap-and-call extension pattern possible.
 If a plugin errors during load, the error is caught, logged, and startup
 continues. The intent is that one broken plugin doesn't take down the editor.
 
-Load order: core → plugins (alphabetical within each directory) →
-`data/user/init.lua` → `.lite_project.lua`. Later always wins, which is why
+Load order: core → built-in extensions → installed optional extensions →
+user config → `.lite_project.lua`. Later always wins, which is why
 user config can override anything.
 
 ---

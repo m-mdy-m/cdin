@@ -91,9 +91,10 @@ as a keybinding reference. The complete list is in
 
 ## Configuring
 
-Your personal configuration lives in `data/user/init.lua`. It's plain Lua,
-loaded after the core and all plugins, so anything you set there wins. Open
-it with `core:open-user-module` from the command palette.
+Your personal configuration lives in `~/.config/cdin/user/init.lua`.
+It's plain Lua, loaded after the core and all extensions, so anything
+you set there wins. Open it with `core:open-user-module` from the
+command palette.
 
 ```lua
 local config = require "core.config"
@@ -109,13 +110,20 @@ See the [Configuration Guide](configuration.md) for every option.
 ## Where things live
 
 ```
-cdin              the binary
-data/core/        the Lua editor core (documents, views, commands, keymap)
-data/plugins/     plugins, loaded automatically at startup
-data/user/        your configuration and color themes
-data/fonts/       bundled fonts
-cdin.log          runtime log, written next to the binary
+cdin                  the binary
+data/core/            the Lua editor core (documents, views, commands, keymap)
+data/plugins/         the mandatory set a build bundled from cdin-x (vim)
+data/themes/          the mandatory theme a build bundled from cdin-x
+data/fonts/           the fonts a build bundled from cdin-x
+data/X/               cdin-x's plugin modules, when a build bundled them
+~/.config/cdin/       user configuration and user themes
+<data_home>/cdin/site your installed extensions (cdin-x)
+cdin.log              runtime log, written next to the binary
 ```
+
+Everything except `data/core/` is **build output**, not source: it is
+assembled into `build/<platform>-<build>/data/` from a cdin-x checkout. The
+source tree has no `data/plugins/`, `data/themes/` or `data/fonts/`.
 
 The `data/` directory is resolved relative to the executable, so a build
 tree and an installed copy behave the same way.

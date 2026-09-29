@@ -111,10 +111,19 @@ cdin logs plugin errors but continues loading. You'll see something like:
 ```
 
 The editor starts anyway. To diagnose: open the log view with `core:open-log`
-from the command palette (`Ctrl+Shift+P`). The full error is there.
+from the command palette (`Ctrl+Shift+P`) — or, with no palette installed, from
+vim's `:openlog`, or by clicking the status bar. The full error is there.
 
-If the broken plugin is in `data/plugins/`, you can rename it to
-`my_plugin.lua.disabled` to skip it without deleting it.
+A failing **site** plugin is skipped: move it out of
+`<site>/plugins/` and restart, or take it out of `config.plugins`.
+
+A failing **bundled** plugin is reported at error level and prefixed
+`mandatory plugin` — that one is part of the build, and a build missing part of
+itself is worth investigating rather than working around. Check that
+`CDINX_DIR` pointed at a cdin-x checkout with the plugin in it, and rebuild.
+
+There is no enable/disable state and no manager in cdin itself; what is on
+disk is what loads.
 
 ### The window is tiny / huge
 

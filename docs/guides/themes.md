@@ -5,30 +5,44 @@ Everything — background color, text color, font, line height, caret width —
 is a field in that table. A theme is just a Lua file that sets some of those
 fields.
 
-Themes live in `data/user/colors/`. Three are bundled:
+One theme ships in every build: `default`. It comes from
+[cdin-x](https://github.com/m-mdy-m/cdin-x) and is copied into
+`build/<platform>-<build>/data/themes/default/theme.lua` at build time. cdin-x
+has more; install it and they appear through its theme switcher.
 
-| Require | Description |
-|---------|-------------|
-| (none) | Default: near-black background, muted grays, single purple accent |
-| `require "user.colors.fall"` | Warm dark theme — browns and ambers |
-| `require "user.colors.summer"` | Light theme — off-white background |
+Themes are plain Lua files. No package manager, no registry.
 
-To switch, add one line to `data/user/init.lua`:
+Themes are looked up in three places, in order — user first, then the build's
+own bundled set, then any root an extension registered:
 
-```lua
-require "user.colors.fall"
 ```
+~/.config/cdin/user/themes/<name>/theme.lua           yours
+<site>/X/themes/<name>/theme.lua                      cdin-x's, once installed
+build/<platform>-<build>/data/themes/<name>/theme.lua  the mandatory default
+```
+
+Because the user directory is searched first, dropping a `dracula/theme.lua`
+into `~/.config/cdin/user/themes/` makes `config.theme = "dracula"` work
+without touching anything else.
+
+An extension registers its own root with `core.themes.add_root(dir)`, which
+also rescans. That matters because the theme list used to be a snapshot taken
+at require time: a theme that appeared later was loadable by name but never
+listed, and a `config.theme` naming it fell back to the default for the first
+frame. The list is now rescanned when a root is added, and `config.theme` is
+re-applied at startup once the extensions have registered theirs.
+
+To switch themes, set `config.theme = "mytheme"` in your
+`~/.config/cdin/user/init.lua`.
 
 ---
 
 ## Writing a theme
 
-Create a file in `data/user/colors/`. The name is yours; the `require` path
-will match it.
+Create `~/.config/cdin/user/themes/mytheme/theme.lua`:
 
 ```lua
--- data/user/colors/mytheme.lua
-local style  = require "core.style"
+-- ~/.config/cdin/user/themes/mytheme/theme.lua
 local common = require "core.utils.common"
 
 -- helper that converts a hex string to an RGBA table
@@ -36,26 +50,31 @@ local function color(hex)
   return { common.color(hex) }
 end
 
-style.background        = color "#1e1e2e"
-style.background2       = color "#181825"
-style.background3       = color "#313244"
-style.text              = color "#cdd6f4"
-style.dim               = color "#6c7086"
-style.caret             = color "#f5c2e7"
-style.selection         = color "#45475a"
-style.line_highlight    = color "#1e1e2e"
-style.line_number       = color "#6c7086"
-style.line_number2      = color "#cdd6f4"
-style.accent            = color "#89b4fa"
-style.scrollbar         = color "#45475a"
-style.scrollbar_track   = color "#181825"
+return {
+  name            = "mytheme",
+  background      = color "#1e1e2e",
+  background2     = color "#181825",
+  background3     = color "#313244",
+  text            = color "#cdd6f4",
+  dim             = color "#6c7086",
+  caret           = color "#f5c2e7",
+  selection       = color "#45475a",
+  line_highlight  = color "#1e1e2e",
+  line_number     = color "#6c7086",
+  line_number2    = color "#cdd6f4",
+  accent          = color "#89b4fa",
+  scrollbar       = color "#45475a",
+  scrollbar_track = color "#181825",
+}
 ```
 
-Then load it in `data/user/init.lua`:
+A theme **returns** a table — it does not mutate `style` directly. Any field
+you leave out keeps the default from `data/core/style.lua`. A nested
+`syntax = { ... }` table, if present, overrides the syntax colors in the same
+way; see the bundled `default/theme.lua` for a complete example.
 
-```lua
-require "user.colors.mytheme"
-```
+To use it, set `config.theme = "mytheme"` in your
+`~/.config/cdin/user/init.lua`.
 
 ---
 
@@ -132,7 +151,7 @@ Fonts are set on the `style.font` and `style.code_font` fields. They take a
 `renderer.font` value, loaded with `renderer.font.load`:
 
 ```lua
-local font_path = EXEFILE .. "/../data/fonts/monospace.ttf"
+local font_path = EXEFILE .. "/../data/fonts/monospace.ttf"   # the bundled copy
 style.code_font = renderer.font.load(font_path, 14 * SCALE)
 ```
 
@@ -140,7 +159,16 @@ style.code_font = renderer.font.load(font_path, 14 * SCALE)
 (1.0 on a normal display, 2.0 on HiDPI). Multiply font sizes by `SCALE` so
 things look right on both.
 
-The bundled fonts are in `data/fonts/`:
+The bundled fonts are in `build/<platform>-<build>/data/fonts/`, next to the
+binary:
+
+| File | Default use |
+|------|------------|
+| `font.ttf` | UI text (menus, status bar, tree) and `style.big_font` |
+| `monospace.ttf` | Editor (code) text |
+| `icons.ttf` | Icons (used internally by the UI) |
+
+To use a system font or your own, provide the full path.
 
 | File | Default use |
 |------|------------|
@@ -174,6 +202,7 @@ font.
 
 `style.lua` already does this automatically for `style.font`, `big_font`
 and `code_font` if `data/fonts/fallback.ttf` and/or `data/fonts/emoji.ttf`
+exist next to the binary
 exist — drop suitable files there and no extra config is needed:
 
 - **`fallback.ttf`** — broad-coverage text font, e.g. Noto Sans Arabic or

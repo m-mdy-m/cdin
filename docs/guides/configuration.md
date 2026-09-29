@@ -1,8 +1,8 @@
 # Configuration
 
-cdin is configured through a single Lua file: `data/user/init.lua`. It loads
-last, after the core and all plugins, so anything you set there overrides the
-defaults.
+cdin is configured through your personal config file:
+`~/.config/cdin/user/init.lua`. It loads last, after the core and
+all extensions, so anything you set there overrides the defaults.
 
 To open it from inside the editor, run `core:open-user-module` from the
 command palette (`Ctrl+Shift+P`).
@@ -19,6 +19,39 @@ local config = require "core.config"
 config.indent_size = 4
 config.tab_type = "hard"
 ```
+
+### Extensions
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `config.plugins` | `nil` | Which **site** plugins load. `nil` = all, `false` = none, a table = a whitelist. Does not affect the mandatory bundled set. |
+| `config.site_dir` | `<data_home>/cdin/site` | Where installed extensions live. Appended to `package.path` at startup. |
+
+`config.site_dir` is `$XDG_DATA_HOME`/`cdin/site` or `~/.local/share/cdin/site`
+on Linux and macOS; on Windows `%LOCALAPPDATA%`, then `%APPDATA%`, then
+`%USERPROFILE%\AppData\Local`, each plus `\cdin\site`.
+
+```lua
+-- ~/.config/cdin/user/init.lua
+
+-- Load nothing from the site. The bundled set — vim, the default theme,
+-- the fonts — is part of the build and is unaffected.
+config.plugins = false
+```
+
+```lua
+-- Load only these two from the site.
+config.plugins = { "palette", "finder" }
+```
+
+`--no-plugins` is the command-line spelling of `config.plugins = false`. It does
+**not** disable the bundled set: `--no-plugins` cannot turn vim off in an editor
+that has no other modal editing.
+
+The user `init.lua` runs **before** extensions load, so a key binding set here
+is one a plugin has to override, not the other way round. `require`-ing an
+extension's module works (the site roots are already on `package.path`), but
+its `init()` side effects are not there yet.
 
 ### Editor
 

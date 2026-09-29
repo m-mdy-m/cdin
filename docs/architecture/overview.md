@@ -96,30 +96,32 @@ replacing a function and calling the original. For example, the vim plugin
 wraps `keymap.on_key_pressed` to intercept keys, and trimwhitespace wraps
 `Doc.save`.
 
-## Plugins
+## Extensions
 
-Plugins are not sandboxed and not special — they are `require`d at startup
-(every `.lua` under `data/plugins/`, recursively) and patch the same tables
-the core uses. A broken plugin logs the error and startup continues.
+Extensions are not sandboxed and not special — they are Lua files, loaded by
+`data/core/plugins.lua` at startup. There is no package manager, no registry
+and no network access. A broken plugin logs the error and startup continues.
 
-The bundled plugins:
+cdin knows nothing about any specific extension. Its `data/` contains only
+`core/`, and the two things a build needs that are not the runtime — the vim
+plugin, the default theme, the fonts — are copied in at build time from
+[cdin-x](https://github.com/m-mdy-m/cdin-x), through a single input,
+`CDINX_DIR`. See [the extension contract](extension-contract.md).
 
-- `plugins/core/` — autocomplete, autoreload, project search, session
-  (recent files/dirs, session restore), trimwhitespace
-- `plugins/languages/` — syntax definitions for C, JavaScript, TypeScript,
-  Lua, Markdown, Python
-- `plugins/tab/` — multi-tab management with tab bar indicator, reordering,
-  and jump-to-tab shortcuts
-- `plugins/treeview/` — file tree panel with git status markers
-- `plugins/vim/` — the modal layer: `vimode.lua` (modes and normal-mode
-  keys), `ex.lua` (the `:` command line), `fmenu.lua` (the `m` action
-  menu), `shell.lua` (shell commands into scratch buffers)
-- `plugins/window/` — window split, focus, and resize commands (a richer
-  replacement for the core root split commands)
+There are two roots, and they have different rules:
 
-Load order: core → plugins (directory order) → `user/init.lua` →
+| root | loaded | selected by |
+|------|--------|-------------|
+| `EXEDIR/data/plugins` — bundled, the mandatory set | always, first | nothing; `--no-plugins` does not skip it |
+| `config.site_dir/plugins` — what the user installed | second | `config.plugins` |
+
+A failing bundled plugin is reported at error level and named, because a build
+missing part of itself is worth knowing about; either way startup continues.
+
+Load order: core → user `init.lua` → bundled plugins → site plugins →
 `.lite_project.lua`. Later wins, which is why the user module can override
-anything.
+anything — and why the runtime's own keymap never names a command a plugin
+might not register.
 
 ## The frame loop
 
