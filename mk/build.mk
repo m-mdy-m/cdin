@@ -1,6 +1,5 @@
-.PHONY: build clean distclean info help run debug debug-san _check_deps _check_cdin_x cdin-x-setup cdin-x-update cdin-x-validate cdin-x-build cdin-x-clean cdin-x
-.PHONY: test check bench size tiny install uninstall
-.PHONY: cdin-x-fetch cdin-x-dev-setup cdin-x-dev-update
+.PHONY: build clean distclean info help run debug debug-san _check_deps
+.PHONY: test check bench size tiny install uninstall test-plugins
 
 ICON_INL := src/icon.inl
 
@@ -12,11 +11,10 @@ $(ICON_INL): scripts/gen_icon.py scripts/icon.svg
 gen-icons: scripts/gen_icon.py scripts/icon.svg
 	python3 scripts/gen_icon.py  scripts/icon.svg --no-inl --out-dir scripts/icons
 
-build: _check_cdin_x $(OUT)
-	@if [ -d data ] && [ ! -e $(OUT_DIR)/data ]; then \
-		ln -s "$(abspath data)" $(OUT_DIR)/data; \
-	fi
-	@printf '\n✓ Built %s\n\n' '$(OUT)'
+# The `build` target (binary + assembled data/) lives in mk/bundle.mk, which
+# is where the one build input naming an external checkout, CDINX_DIR, is
+# read. This file owns compilation only; `bin` there is the compile half of
+# `make`.
 
 $(OUT): _check_deps $(OBJS)
 	@mkdir -p $(dir $@)
@@ -42,60 +40,6 @@ _check_deps:
 		echo '  apt: sudo apt install liblua5.4-dev'; \
 		echo '  pacman: sudo pacman -S lua'; \
 		exit 1; }
-
-CDIN_X_REPO_SLUG ?=
-CDIN_X_REF ?=
-CDIN_X_RAW_BASE ?=
-
-_check_cdin_x:
-	@if [ ! -e "$(CURDIR)/data/core/x/manager.lua" ]; then \
-		echo "✗ cdin-x runtime not found in data/core/x. Run: make cdin-x-setup"; \
-		exit 1; \
-	fi
-
-cdin-x-setup:
-	@CDIN_X_REPO_SLUG="$(CDIN_X_REPO_SLUG)" CDIN_X_REF="$(CDIN_X_REF)" CDIN_X_RAW_BASE="$(CDIN_X_RAW_BASE)" \
-		sh scripts/fetch-cdin-x.sh "$(CURDIR)"
-
-cdin-x-update: cdin-x-setup
-
-cdin-x-clean:
-	@rm -rf data/core/x data/X
-	@echo "removed data/core/x and data/X — run 'make cdin-x-setup' to reinstall"
-
-cdin-x: cdin-x-setup
-
-# --- Contributor path: full local cdin-x checkout, symlinked in -----------
-CDIN_X_DIR ?= $(shell dirname $(CURDIR))/cdin-x
-CDIN_X_REPO ?= https://github.com/m-mdy-m/cdin-x.git
-
-cdin-x-dev-setup:
-	@if [ -d "$(CDIN_X_DIR)" ]; then \
-		echo "cdin-x already exists at $(CDIN_X_DIR)"; \
-	else \
-		echo "Cloning cdin-x into $(CDIN_X_DIR)..."; \
-		git clone "$(CDIN_X_REPO)" "$(CDIN_X_DIR)"; \
-	fi
-	@cd "$(CDIN_X_DIR)" && sh scripts/install.sh "$(CURDIR)" --symlink
-	@echo "cdin-x dev checkout linked — symlinks: data/core/x -> cdin-x/core, data/X -> cdin-x/X, data/fonts -> cdin-x/fonts"
-
-cdin-x-dev-update:
-	@if [ -d "$(CDIN_X_DIR)/.git" ]; then \
-		cd "$(CDIN_X_DIR)" && git pull --ff-only; \
-	else \
-		echo "cdin-x dev checkout not found. Run 'make cdin-x-dev-setup' first."; \
-		exit 1; \
-	fi
-	@cd "$(CDIN_X_DIR)" && sh scripts/install.sh "$(CURDIR)" --symlink
-	@echo "cdin-x dev checkout updated and re-linked."
-
-cdin-x-validate:
-	@cd "$(CDIN_X_DIR)" && lua scripts/validate.lua
-	@echo "cdin-x validation passed"
-
-cdin-x-build: cdin-x-validate
-	@cd "$(CDIN_X_DIR)" && lua scripts/generate-manifest.lua
-	@echo "cdin-x manifest generated"
 
 run: build
 	@$(OUT)
@@ -136,18 +80,57 @@ info:
 
 help:
 	@echo 'Targets: build (default), run, debug, clean, distclean, install, uninstall, info, help'
-	@echo '  cdin-x-setup      Fetch essential cdin-x runtime + plugins + default theme (no clone, no git needed)'
-	@echo '  cdin-x-update     Same as cdin-x-setup, re-fetches the essential set'
-	@echo '  cdin-x-clean      Remove data/core/x and data/X'
-	@echo '  cdin-x-dev-setup  [cdin-x contributors] clone cdin-x as a sibling checkout and symlink it in'
-	@echo '  cdin-x-dev-update [cdin-x contributors] git pull the sibling checkout and re-link'
-	@echo '  cdin-x-validate   [cdin-x contributors] validate cdin-x structure (needs sibling checkout)'
-	@echo '  cdin-x-build   Validate + generate manifest'
+	@echo ''
+	@echo 'A plain "make" is all you need — plugins and themes ship inside data/,'
+	@echo 'so there is nothing to fetch, clone or install first.'
+	@echo ''
 	@echo 'Options: SDL3_PREFIX=/path BUILD=release|debug PREFIX=/usr/local LUA_VERSION=auto|5.4'
 	@echo 'Quality: test, check, bench, size, tiny (BUILD=tiny, -Os + gc-sections)'
+	@echo '          test-plugins — plugin loader smoke test (needs lua)'
 
 check:
 	python scripts/check.py
+
+# Lua data-layer tests: run with plain lua, no build, no editor, and no
+# checkout of anything. Everything they exercise is built from
+# scripts/fixtures/, so a test can never be satisfied by whatever happens to
+# be on disk.
+#
+#   1. scripts/test_commands.lua  keymap integrity with 0 plugins: every
+#                                 command the keymap names must exist, the
+#                                 palette must hand :enter() a working submit
+#                                 and suggest, and the runtime must own
+#                                 exactly the bindings it is supposed to own.
+#                                 This is the "ctrl+o opens a menu that does
+#                                 nothing" check.
+#   2. scripts/test_lua.lua       the loader and the theme registry, over
+#                                 scripts/fixtures/:
+#                                   - site full/empty  x config.plugins
+#                                     nil / false / {demo} / {raiser}
+#
+# Separate processes on purpose: each run needs a fresh EXEDIR and a fresh
+# config.plugins, and sharing one process makes them fight over package.loaded.
+#
+# Override CDIN_DIR to point the tests at a prebuilt tree instead of the
+# fixture one. LUA=... to pick an interpreter.
+test-plugins:
+	@command -v $(LUA) >/dev/null 2>&1 || command -v lua >/dev/null 2>&1 || { \
+		echo '✗ lua not found (apt: sudo apt install lua5.4)'; exit 1; }
+	@echo '── keymap integrity, 0 plugins ──'
+	@CDIN_SRC="$(CURDIR)" CDIN_DIR="$(TEST_CDIN_DIR)" $(LUA_RUNNER) scripts/test_commands.lua
+	@for site in full empty; do \
+		for sel in nil false demo raiser; do \
+			case "$$sel" in \
+				nil)     v='' ;; \
+				false)   v=false ;; \
+				*)       v=$$sel ;; \
+			esac; \
+			echo ''; \
+			echo "── loader: site=$$site config.plugins=$$sel ──"; \
+			CDIN_SRC="$(CURDIR)" CDIN_DIR="$(TEST_CDIN_DIR)" CDIN_SITE=$$site CDIN_PLUGINS="$$v" \
+				$(LUA_RUNNER) scripts/test_lua.lua || exit 1; \
+		done; \
+	done
 
 size:
 	@echo '-- binary / data sizes --'

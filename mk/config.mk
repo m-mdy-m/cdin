@@ -6,6 +6,18 @@ DATADIR := $(LIBDIR)/data
 BUILD ?= release
 SDL_VERSION ?= auto
 LUA_VERSION ?= auto
+# Interpreter for the Lua data-layer tests, and the tree they resolve
+# EXEDIR/data against. TEST_CDIN_DIR empty means "build a tree from
+# scripts/fixtures/", which is the default and the only mode that needs
+# nothing from the developer's disk.
+LUA ?= $(shell command -v lua 2>/dev/null)
+ifeq ($(LUA),)
+  LUA_RUNNER := lua
+else
+  LUA_RUNNER := $(LUA)
+endif
+TEST_CDIN_DIR ?=
+CDIN_DIR ?= $(CURDIR)
 PKG_CONFIG := $(shell command -v pkg-config 2>/dev/null)
 
 ifeq ($(BUILD),debug)
