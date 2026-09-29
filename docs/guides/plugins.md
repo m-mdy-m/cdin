@@ -2,168 +2,233 @@
 
 ## Overview
 
-Plugins in cdin are Lua files in `data/plugins/`. They're loaded
-automatically at startup, after the core but before `data/user/init.lua`.
-A broken plugin logs the error and startup continues — one bad plugin won't
-crash the editor.
+cdin has no package manager, no plugin registry, and no network access at
+runtime. It also knows nothing about any specific plugin.
 
-Plugins are organized into subdirectories and the loader scans recursively.
-There's no package manager. To install a third-party plugin, copy its file
-(or directory) into `data/plugins/`.
+Plugins live in one of two places, and the difference decides how they load:
 
----
+| root | what it is | who puts it there |
+|------|------------|-------------------|
+| `EXEDIR/data/plugins` | **bundled** — the mandatory set | a build, from [cdin-x](https://github.com/m-mdy-m/cdin-x) |
+| `config.site_dir/plugins` | **site** — what you installed | `make install` in a cdin-x checkout, or you |
 
-## Bundled plugins
+`data/core/plugins.lua` loads the bundled set first, unconditionally, and then
+the site set as `config.plugins` selects it.
 
-### treeview (`data/plugins/treeview/`)
+**The bundled set is not optional.** A build without the vim plugin, a default
+theme and the fonts is not an editor that starts, so those are bundled and
+always load — including under `--no-plugins`. This is the one thing cdin
+delegates to cdin-x, and it happens at build time through a single variable,
+`CDINX_DIR`.
 
-A file tree panel showing the project directory. Optionally shows git status
-markers next to changed files.
+Everything else is optional and lives in the site directory. With none of it,
+cdin is a plain text editor with vim keys.
 
-**Config options:**
+## The site directory
 
-```lua
-config.treeview_size = 200 * SCALE   -- panel width
-config.show_hidden_files = true       -- show dot files
-config.treeview_git_enabled = true    -- show git status markers
-config.treeview_git_update_rate = 2   -- seconds between git polls
+`config.site_dir`, default `<data_home>/cdin/site`:
+
+| platform | `data_home` |
+|----------|-------------|
+| Linux / macOS | `$XDG_DATA_HOME`, or `~/.local/share` |
+| Windows | `%LOCALAPPDATA%`, then `%APPDATA%`, then `%USERPROFILE%\AppData\Local` |
+
+To install extensions into it:
+
+```sh
+git clone https://github.com/m-mdy-m/cdin-x.git
+cd cdin-x
+make link      # symlink, for development — edits take effect on restart
+make install   # copy
 ```
 
-Git markers: `A` added, `M` modified, `D` deleted, `?` untracked.
+## Layout
 
-**Keybindings:** `Ctrl+\` or `F2` toggle the panel. `Ctrl+Shift+E` or `F3`
-focus it. When focused, arrow keys navigate, `Return` opens the selected
-item, `Delete` deletes it, `Ctrl+R` renames it, `Ctrl+Shift+N` creates a
-new file, `Ctrl+Shift+Alt+N` creates a new directory.
+A plugin is either a directory containing `init.lua`, or a single `.lua` file.
+Both are loaded the same way.
 
-### tab (`data/plugins/tab/`)
+```text
+<site>/
+  plugins/
+    cdin-x/init.lua       -- the extension manager's entry point
+    my-plugin/init.lua     -- a directory plugin
+    my-thing.lua           -- a single-file plugin
+  cdinx/                   -- the extension manager
+  X/                       -- the extension catalog
+```
 
-Manages tabs with a status bar indicator showing the current position
-(`[2/5]`), jump-to-tab shortcuts, and tab reordering.
+Modules inside a plugin are required by their path from the site root, because
+the loader puts `<site>/?.lua` and `<site>/?/init.lua` on `package.path`:
 
-**Keybindings:**
+```lua
+require "cdinx"                      -- <site>/cdinx/init.lua
+require "X.core.treeview.api"        -- <site>/X/core/treeview/api.lua
+```
 
-| Binding | Action |
+Those roots are **appended**, never prepended. A site can add extensions to the
+editor; it cannot shadow `core.*` or the bundled `X.core.vim.*`, which is what
+stops a plugin from replacing the runtime it is extending.
+
+## Choosing what loads
+
+`config.plugins` selects the **site** set only. It does not affect the bundled
+set.
+
+| Value | Site plugins that load |
+|-------|------------------------|
+| `nil` (default) | all of them |
+| `false` | none — the mandatory bundle still loads |
+| `{ "palette", "finder" }` | exactly these |
+
+```lua
+-- ~/.config/cdin/user/init.lua
+
+-- Load nothing from the site. The bundled set is unaffected.
+config.plugins = false
+```
+
+A plugin you leave out is not gone — it is still on disk and can be loaded
+later with `core:load-plugin`. A name that isn't there is logged and skipped,
+so a config written on another machine still gets an editor.
+
+### From the command line
+
+```sh
+cdin --no-plugins          # same as config.plugins = false
+cdin -u NONE               # the Vim spelling of the same thing
+```
+
+The flag wins over `config.plugins`. It sets the *site* set to nothing; the
+mandatory bundle still loads, because `--no-plugins` cannot turn vim off in an
+editor that has no other modal editing.
+
+### Loading a plugin after startup
+
+| Command | Effect |
 |---------|--------|
-| `Ctrl+T` | New tab |
-| `Ctrl+Shift+W` | Close current tab |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
-| `Ctrl+1` – `Ctrl+9` | Jump to tab by number |
-| `Ctrl+Shift+PageUp/PageDown` | Move tab left/right |
+| `core:load-plugin <name>` | load a site plugin that wasn't autoloaded; accepts a comma-separated list |
+| `core:unload-plugin <name>` | run its `unload()` and forget it |
+| `core:list-plugins` | what is on disk, where it came from, and what of it is loaded |
 
-The tab indicator in the status bar is only shown when more than one tab
-is open.
+These are the only way to change the set at runtime, and nothing about it
+persists — after a restart you are back to whatever `config.plugins` says.
 
-### window (`data/plugins/window/`)
+## What core owns, and what a plugin owns
 
-Richer split management than the core root commands. Handles focus movement,
-pane resizing, and shortcuts for common layouts.
+A keymap binding that names a command nobody registered is the worst kind of
+bug: the key press is consumed, nothing runs, and nothing errors. So core
+draws a hard line, and `make test-plugins` enforces it.
 
-**Keybindings:**
+**Everything in the core keymap is a core command.** All of them resolve with
+zero plugins loaded.
 
-| Binding | Action |
-|---------|--------|
-| `Ctrl+\` | Vertical split (side by side) |
-| `Ctrl+Shift+\` | Horizontal split (stacked) |
-| `Alt+H/J/K/L` | Focus left/down/up/right |
-| `Alt+W` / `Alt+P` | Cycle focus forward/backward |
-| `Alt+C` | Close the focused pane |
-| `Alt+O` | Close all other panes |
-| `Alt+Arrow` | Resize the focused pane |
-| `Alt+=` | Equalize pane sizes |
+The line is drawn at: *could this work with no input from the user?*
 
-### autocomplete (`data/plugins/core/autocomplete.lua`)
+- `Ctrl+N` — new document. No input needed, so it is core, and it works in a
+  bare editor.
+- `Ctrl+P` — find file. Prompts, so it is a plugin.
+- `Ctrl+Shift+P` — command palette. Prompts, so it is a plugin.
+- `Ctrl+O` — open file. Prompts, so it is a plugin.
 
-Suggests completions as you type, pulled from words in all open documents.
+`Ctrl+C` / `Ctrl+A` in the log view are core.
 
-```lua
-config.autocomplete_max_suggestions = 6
-```
+A plugin that wants a key must bind it itself, in its own `init()`. Nothing in
+`data/core/keymaps/default.lua` may name a plugin command, which is what keeps
+the bare editor free of bindings that go nowhere.
 
-`Tab` accepts the highlighted suggestion when the popup is open.
+The reverse also holds: core never requires a plugin. If a feature needs one,
+it goes through a hook the plugin fills in — `core.register_help_shortcuts` for
+the empty view's shortcut list, `core.register_status_pill` for status-bar
+badges, `core.register_vcs_provider` for git status,
+`core.register_recent_provider` for recents. With no plugin loaded, the hook is
+simply unset and core renders nothing there.
 
-### projectsearch (`data/plugins/core/projectsearch.lua`)
+### What moved to cdin-x, and what did not
 
-Searches for a string across all files in the project. Results open in a
-dedicated view showing file names, line numbers, and matches.
+These were runtime commands and are now optional plugins in cdin-x:
 
-**Keybindings:** `Ctrl+Shift+F` opens the search. `F5` re-runs the last
-search. In the results view, `Up`/`Down` navigate and `Return` opens the
-selected file at the matching line.
+| was | is now | key |
+|-----|--------|-----|
+| `core:find-command` | `X/core/palette` | `Ctrl+Shift+P` |
+| `core:find-file` | `X/core/finder` | `Ctrl+P` |
+| `core:open-file` | `X/core/finder` | `Ctrl+O` |
+| `core:open-folder` | `X/core/finder` | `Ctrl+Shift+O` |
+| `core:reload-module` | `X/core/modules` | — |
+| `core:open-user-module` | `X/core/modules` | — |
+| `core:open-project-module` | `X/core/modules` | — |
 
-### session (`data/plugins/core/session.lua`)
+What stayed in the runtime, because vim, shell, search, treeview, tab, window,
+menu and the theme switcher are all written against it:
 
-Tracks recently opened files and directories, and optionally restores the
-last session on startup.
+- `core.command_view` and CommandView
+- the command registry (`command.add`, `command.remove`) and the keymap
+  registry
+- Doc, DocView, RootView, and the `doc:*` / `root:*` commands
+- `core:set_project_dir(path)` — the project-directory transition
 
-```lua
-config.session_restore = false      -- reopen last session on startup
-config.session_save_on_quit = true  -- save session automatically on quit
-config.session_max_recent = 10      -- how many recent files/dirs to remember
-```
-
-**Keybindings:** `Ctrl+Shift+R` opens recent files, `Ctrl+Shift+D` opens
-recent directories, `Ctrl+Alt+S` saves the session manually.
-
-### autoreload (`data/plugins/core/autoreload.lua`)
-
-Polls open documents for external changes and offers to reload them when
-a file is modified by another process. No configuration needed.
-
-### trimwhitespace (`data/plugins/core/trimwhitespace.lua`)
-
-Strips trailing whitespace from every line whenever a document is saved.
-Runs automatically — no configuration or keybinding needed.
-
-### Vim mode (`data/plugins/vim/`)
-
-The vim mode is a plugin. See [Vim Keybindings](vim-keybindings.md) for
-full documentation.
-
----
-
-## Language support
-
-Syntax highlighting lives in `data/plugins/languages/`:
-
-| File | Language |
-|------|----------|
-| `c.lua` | C |
-| `js.lua` | JavaScript |
-| `lua.lua` | Lua |
-| `md.lua` | Markdown |
-| `python.lua` | Python |
-| `ts.lua` | TypeScript |
-
-Language plugins register a syntax definition via `syntax.add()`. They match
-files by extension pattern and define token types and patterns for the
-tokenizer.
-
----
+`core.command_view` is a **runtime service**, not an optional workflow. Do not
+move it.
 
 ## Writing a plugin
 
-A minimal plugin:
+Minimal single-file plugin:
 
 ```lua
--- data/plugins/my_plugin.lua
-local core    = require "core"
-local command = require "core.input.command"
-local keymap  = require "core.input.keymap"
+-- <site>/plugins/my-plugin.lua
+return {
+  name = "my-plugin",
 
-command.add(nil, {
-  ["my-plugin:hello"] = function()
-    core.log("Hello from my plugin!")
+  init = function(core, config)
+    local command = require "core.input.command"
+    local keymap  = require "core.input.keymap"
+
+    command.add(nil, {
+      ["my-plugin:hello"] = function()
+        core.log("Hello from my plugin!")
+      end,
+    })
+    keymap.add { ["ctrl+shift+h"] = "my-plugin:hello" }
   end,
-})
 
-keymap.add {
-  ["ctrl+shift+h"] = "my-plugin:hello",
+  unload = function()
+    require("core.input.keymap").remove { ["ctrl+shift+h"] = "my-plugin:hello" }
+    require("core.input.command").remove { "my-plugin:hello" }
+  end,
 }
 ```
 
-Drop this in `data/plugins/` and restart. The command appears in the command
-palette and the keybinding works immediately.
+Drop it in `<site>/plugins/` and restart.
+
+`unload()` has to undo everything `init()` registered. A plugin that binds a
+key and never removes it will fight the next thing to bind that key, and one
+that is reloaded will accumulate a copy of its registrations per load. For
+help entries, keep the handle `core.register_help_shortcuts` returns and hand it
+back to `core.unregister_help_shortcuts`.
+
+`init()` must be safe to call twice — guard it, as above.
+
+A plugin with several files uses a directory:
+
+```text
+<site>/plugins/my-plugin/
+  init.lua        -- returns the table above
+  commands.lua
+  keymap.lua
+```
+
+`init.lua` is the only entry point the loader looks at, and it is `dofile`d
+rather than `require`d, so its body re-runs on every load while sibling modules
+stay cached. Keep `require` calls for your own modules *inside* `init()`.
+
+### Required and optional fields
+
+Only `init` and `unload` are read by the loader. `name` is used as the display
+name; without it the filename is used.
+
+A failure inside `init()` is caught and logged — the plugin is skipped and the
+editor carries on. A plugin that raises an error cannot take the editor down
+with it. A failing *bundled* plugin is reported at error level and named
+explicitly, because you will want to know a build is missing part of itself.
 
 ### command.add(predicate, commands)
 
@@ -191,11 +256,17 @@ Registers a coroutine for background work. Yield a number to sleep:
 ```lua
 core.add_thread(function()
   while true do
-    -- do something periodically
     coroutine.yield(10)  -- sleep 10 seconds
   end
 end)
 ```
+
+### core.set_project_dir(path)
+
+Switches project directory. The working directory *is* the project, so this
+validates the path, chdirs, resets the project file list and bumps the
+revision. Returns `true`, or `false` plus a reason. cdin-x's folder workflow
+calls this rather than chdir-ing itself.
 
 ### Accessing the active document
 
@@ -246,5 +317,31 @@ function Doc:save(...)
 end
 ```
 
-This is how trimwhitespace hooks into saves, and how the vim plugin
-intercepts keystrokes.
+## Running with no extensions
+
+The site directory can be empty. cdin still starts, still edits, and still has
+vim keys, because the mandatory bundle is part of the build rather than part of
+the site.
+
+```sh
+cdin --no-plugins      # load nothing from the site
+mv "$SITE" /tmp/site-backup && cdin    # or take the whole site away
+```
+
+You keep: file open/save/undo, editing, window and pane navigation, the log
+view, the default theme, and the bundled vim plugin.
+
+You lose: the command palette, find file, the open-file and open-folder
+prompts, the project tree, tabs, split management, search, and the other
+themes.
+
+Nothing keystrokes into a wall. `Ctrl+P` with no `finder` installed is not bound
+to anything, rather than bound to a command that does not exist.
+
+`make test-plugins` checks the runtime half of all of this, with no cdin-x
+present and nothing read from disk.
+
+## The contract
+
+What cdin guarantees an extension, and what cdin-x may rely on, is written
+down in [the extension contract](../architecture/extension-contract.md).

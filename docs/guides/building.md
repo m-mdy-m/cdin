@@ -22,11 +22,26 @@ it needs are `cairosvg` and `Pillow` (`pip install cairosvg Pillow`).
 ## Building
 
 ```sh
-make          # release build (default)
-make debug    # debug build — no optimization, debug symbols, sanitizers available
-make run      # build then immediately launch the result
-make info     # print what was detected (SDL version, Lua version, flags, output path)
+make                # release build (default)
+make debug          # debug build — no optimization, debug symbols, sanitizers available
+make run            # build then immediately launch the result
+make info           # print what was detected (SDL version, Lua version, flags, output path)
 ```
+
+There is no network access at any point, and nothing is fetched. But a fresh
+clone does need a [cdin-x](https://github.com/m-mdy-m/cdin-x) checkout next to
+it, because the mandatory set — the vim plugin, the default theme and the
+fonts — lives there and is copied into the build output at build time:
+
+```sh
+git clone https://github.com/m-mdy-m/cdin-x.git
+make                    # CDINX_DIR defaults to ../cdin-x
+```
+
+`make bin` compiles the binary alone and needs no cdin-x, if you are only
+working on C. `make bundle` assembles the data and does need one. With no
+cdin-x reachable, `make` says so and stops rather than producing an editor that
+cannot start.
 
 The output lands in `build/<platform>-release/cdin` (or `cdin.exe` on
 Windows). A symlink to the `data/` directory is placed there automatically so
@@ -38,6 +53,23 @@ To clean up:
 make clean       # remove this platform's build directory
 make distclean   # remove all build directories and the generated icon.inl
 ```
+
+### Build targets reference
+
+| Target | Description |
+|--------|-------------|
+| `make` | Release binary + assembled `data/` (needs `CDINX_DIR`) |
+| `make bin` | Release binary only — no cdin-x, no data assembly |
+| `make bundle` | Assemble `build/<platform>-<build>/data` only (needs `CDINX_DIR`) |
+| `make run` | Build and launch |
+| `make debug` | Debug build |
+| `make install` | Install binary + assembled data to PREFIX |
+| `make uninstall` | Remove what install put there |
+| `make info` | Print build configuration |
+| `make help` | Show all targets |
+| `make clean` | Remove build directory |
+| `make distclean` | Remove build + generated icon.inl |
+| `make test-plugins` | Data-layer tests (needs `lua` only; no cdin-x) |
 
 ## Options
 
@@ -67,7 +99,10 @@ make uninstall          # removes what install put there
 ```
 
 The binary goes to `$PREFIX/bin/cdin` as a symlink to the real binary in
-`$PREFIX/lib/cdin/`. The `data/` directory is copied to `$PREFIX/lib/cdin/data/`.
+`$PREFIX/lib/cdin/`. The **assembled** `data/` — the runtime `core/` plus the
+bundled vim plugin, default theme and fonts — is copied from
+`build/<platform>-<build>/data` to `$PREFIX/lib/cdin/data/`, following the
+`core` symlink so the result is a real directory.
 
 ## Python script
 
