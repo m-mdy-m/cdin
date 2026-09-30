@@ -26,18 +26,8 @@ PYTHON ?= python3
 
 .PHONY: bin bundle
 
-# The compile. Same rule as $(OUT) in build.mk; bin is the name to type when
-# you want the binary without the data assembly.
 bin: $(OUT)
 
-# data/ next to the binary. Recreated on every build, not only when missing:
-# the source core/ changes constantly, and a link that is created once and
-# then assumed correct is exactly the stale-data bug the old symlink
-# dance in build.mk was working around.
-#
-# assemble_data.py owns the rules here — what a symlink is, what happens to
-# an old symlink left by a previous build, and what the error is when
-# cdin-x is not where CDINX_DIR says. The Makefile only says what to run.
 bundle:
 	@command -v $(PYTHON) >/dev/null 2>&1 || { \
 		echo '✗ $(PYTHON) not found (needed to assemble data/)'; exit 1; }
