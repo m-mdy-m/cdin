@@ -9,22 +9,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [0.2.0-alpha.2] — 2026-09-30
+
+15 commits, 114 files changed, +4,464 / −6,883. **Zero C changes** — every line
+is Lua, Python, Make or Markdown.
+
+The headline is a repository boundary. cdin is now the editor **runtime**, and
+the extension set a build ships is assembled from a sibling
+[cdin-x](https://github.com/m-mdy-m/cdin-x) checkout at build time. Everything
+else in this release — the loader rewrite, the new extension points, four test
+targets that can only be written once the boundary is enforced — exists to make
+that boundary hold and to keep it from drifting back.
+
 ### ⚠️ BREAKING CHANGES
 
-#### The editor is now a runtime; extensions come from cdin-x
-
-cdin is the editor runtime and nothing else. Its `data/` contains only
-`core/`. The mandatory set a working editor needs — the vim plugin, the
-default theme and the fonts — lives in
-[cdin-x](https://github.com/m-mdy-m/cdin-x) and is copied into the build
-output at build time. The user-facing workflows (command palette, find file,
-open file, open folder, the module pickers) are optional plugins there too.
-
-This reverses the "fully self-contained" entry below, and the difference is
-where the code lives rather than whether it ships. A build still bundles vim,
-a theme and fonts, and an editor still starts and runs. What changed is the
-ownership, so that a change to an extension is an extension change and not an
-editor change.
+#### cdin is the runtime; the extension set is built from cdin-x
 
 - **`data/` contains only `core/`.** `data/plugins/`, `data/themes/` and
   `data/fonts/` are gone from the source tree.
@@ -109,65 +110,440 @@ editor change.
 - **The contract is written down** in
   [`docs/architecture/extension-contract.md`](docs/architecture/extension-contract.md).
 
-No C changes: `src/lua/api.c` already puts `EXEDIR/data/?.lua` and
-`EXEDIR/data/?/init.lua` on `package.path`, and that is still enough.
+#### A self-contained layout was tried on this branch, and reverted
 
-#### The editor is now fully self-contained
+Between `beead74` and `aa08b96` this branch moved the extension set back into
+`data/plugins/`, restored `data/themes/` and `data/fonts/`, added the
+`plugin-manager` plugin and the first `make test-plugins`, deleted the
+extension manager, and made a fresh clone build with `make` alone — no
+cdin-x, no network, no sibling checkout. That state was real, it worked, and
+it was tested; it is simply not what shipped, because `f46b1b3` onward puts
+the split back and takes the bundle at build time instead. None of it is in
+the tree today and this entry describes the shipped state only. The
+keybinding-integrity work (`make test-plugins`, `scripts/test_commands.lua`,
+the three dead-binding causes under **Fixed**) came out of it and is kept.
 
-The split of `0.2.0-alpha.1` — which moved plugins, themes and language definitions into a separate `cdin-x` repository and made the build depend on fetching them — is reverted. This repository again builds and runs on its own.
+### Removed from the runtime
 
-- **A fresh clone builds with `make`.** No clone, fetch, `curl`, or network access at any point. The `_check_cdin_x` build gate is gone, along with every `cdin-x-*` make target, the fetch script, and the sibling-checkout steps in the release workflows and Dockerfile.
-- **`data/plugins/`** — plugins now live in the repository and are loaded by the new `data/core/plugins.lua`. Bundled plugins are: `menu`, `session`, `tab`, `treeview`, `vim`, `window`, `autoreload`, `trimwhitespace`, plus language definitions for C, JavaScript, TypeScript, Lua, Markdown and Python.
-- **`data/themes/default/theme.lua`** — the default theme ships in the repository. User themes are discovered from `~/.config/cdin/user/themes/<name>/theme.lua`, searched before the bundled ones so a user theme of the same name wins.
-- **The extension manager is removed entirely**: `data/core/x/` (catalog, registry, git sync, panel, commands) is deleted, along with its `require "core.x"` call sites. The editor no longer contacts any remote host at runtime.
-- **`essential` is gone.** It only ever meant "a manager must not disable this", and there is no manager. Every plugin — bundled or user-supplied — loads by the same rule: it is on disk, so it loads.
-- **The editor requires no plugins.** An empty `data/plugins/` is a supported, tested state; everything in `data/core/` works without any plugin present. A plugin that raises an error is logged and skipped rather than taking startup down.
-- **Cross-plugin `require` is rooted at `plugins`** (`require "plugins.tab.impl"`) and resolves through `data/?.lua`, so it no longer depends on the loader injecting paths. `src/lua/api.c` drops the four `data/core/x` and `data/X` entries from `package.path`.
+`data/core/` used to contain things that are workflows, not mechanics:
 
-#### Removed
+| Deleted | Lines | Where it is now |
+|---------|-------|-----------------|
+| `data/plugins/` — 44 entries: `core/*`, `languages/*`, `optional/*`, `tab/`, `treeview/`, `vim/`, `window/` | 5,788 | built output only, assembled from cdin-x |
+| `data/themes/*.lua` — `default`, `dracula`, `nord`, `solarized-dark`, `solarized-light`, `monokai`, `github-light`, `gruvbox-dark`, `tokyo-night`, `catppuccin-mocha` | 240 | `cdin-x/X/themes/<name>/theme.lua`; one is bundled: `default` |
+| `data/fonts/` — `font.ttf`, `monospace.ttf`, `icons.ttf`, `fallback.ttf`, `emoji.ttf` + 2 licences | 4,480 KB | `cdin-x/fonts/`, copied to `data/fonts` next to the binary |
+| `data/user/init.lua` — the 67-line default user config | 67 | not bundled; `config.user_dir/init.lua` is read if present |
+| `data/core/git/` — `init`, `exec`, `status`, `commands` | 356 | a git plugin in cdin-x, registered through `core.register_vcs_provider` |
+| `data/core/commands/findreplace.lua` | 207 | a `find-replace` plugin in cdin-x; it prepends `find-replace:select-next` onto `ctrl+d` at load time |
+| `data/core/search.lua` | 80 | cdin-x, or the C `search` API directly |
+| `data/core/session_bootstrap.lua` | 41 | `data/core/preboot.lua` (39 lines, rewritten — same job, no session-plugin dependency) |
+| `core.load_plugins()` from `data/core/lifecycle.lua` | 43 | `core.plugins.load_all()` in the new `data/core/plugins.lua` |
+| `config.optional_plugins` | — | gone with the loader that read it |
 
-- `autoupdate` — it fetched and self-replaced the editor over the network. Updating cdin is the user's job, as it is for every other editor.
+`autoupdate` is gone for good rather than moved: it fetched and self-replaced
+the editor over the network. Updating cdin is the user's job, as it is for
+every other editor.
 
-##### Choosing what loads — `config.plugins`
+`core.git.*` is now a **hook, not a require**. `core/project.lua` and
+`core/views/statusview.lua` read `core.vcs_provider`; with no git plugin
+loaded, tree ignored-files and the status-bar branch render nothing and the
+editor is otherwise unaffected.
 
-cdin can now start with any subset of its plugins, including none. `config.plugins` in `~/.config/cdin/user/init.lua`:
+#### `config.plugins` — choosing what loads
+
+cdin can start with any subset of its **site** plugins, including none:
 
 | Value | Loads |
 |-------|-------|
-| `nil` (default) | every plugin in `data/plugins/` |
-| `false` | nothing — the bare editor |
-| `{ "vim" }` | exactly these, in this order |
+| `nil` (default) | every plugin in the *site* directory |
+| `false` | nothing — bare runtime plus the mandatory bundle |
+| `{ "palette" }` | exactly these |
 
-This is Vim's `pack/*/start/*` vs `pack/*/opt/*` split collapsed into one list, with the same reasoning: what loads by default and what you opt into are different questions, so they are answered in different places.
+This is Vim's `pack/*/start/*` vs `pack/*/opt/*` split collapsed into one list,
+with the same reasoning: what loads by default and what you opt into are
+different questions, so they are answered in different places.
 
-- **`--no-plugins` / `-u NONE`** — command-line equivalent of `config.plugins = false`. Parsed before anything reads config, so it overrides the list. A flag is not a path and is never mistaken for a file to open.
-- **User config now runs before plugins.** `config.plugins` is user-owned, so `~/.config/cdin/user/init.lua` has to be read first. A consequence: a plugin's commands and keymaps are registered *after* user config, so a plugin can overwrite a keymap set in `init.lua` but not the reverse. `require`-ing a plugin's module from `init.lua` still works — module names resolve absolutely and are order-independent — but its `init()` side effects are not there yet.
-- **`core:load-plugin <name>`** — load a plugin that wasn't autoloaded; accepts a comma-separated list. With **`core:unload-plugin`** and **`core:list-plugins`**, these are the only way to change the set at runtime, and nothing persists across a restart. There is no state file to drift out of sync with the disk.
+- **`--no-plugins`** — command-line equivalent of `config.plugins = false`.
+  Parsed from `ARGS` before anything reads config and applied *after*
+  `~/.config/cdin/user/init.lua` has run, so the flag overrides the list. It is
+  a flag, not a path, and is kept out of the file/directory scan below it —
+  `-u NONE` is accepted as a spelling and its argument swallowed.
+- **User config runs before plugins.** `config.plugins` is user-owned, so
+  `config.user_dir/init.lua` has to be read first. A consequence: a plugin's
+  commands and keymaps are registered *after* user config, so a plugin can
+  overwrite a keymap set in `init.lua` but not the reverse. `require`-ing a
+  plugin's module from `init.lua` works — the site roots are already on
+  `package.path` — but its `init()` side effects are not there yet.
+- **`core:load-plugin` / `core:unload-plugin` / `core:list-plugins`** are the
+  only way to change the set at runtime, and nothing persists across a restart.
+  There is no state file to drift out of sync with the disk.
 
-A plugin left out of the list is not gone — it stays on disk and loads on demand. Naming a plugin that isn't there is logged and skipped, so a config written against another build still gets an editor.
+A plugin left out of the list is not gone — it stays on disk and loads on
+demand. Naming a plugin that is not there is logged and skipped, so a config
+written against another build still gets an editor.
 
-`vim` is fully self-contained: it requires only `plugins.vim.*` and `core.*`, and reaches the other features (tabs, splits, tree) through its own registry and `command.perform`, so it runs correctly with every other plugin absent.
+### Added
 
-#### Added
+#### The loader, with two roots and different rules for each
 
-- `make test-plugins` — Lua data-layer test. Needs only `lua`: no build, no editor. Runs the checks three times, with `config.plugins` set to `nil`, `false` and `{ "vim" }`, covering the full set, the bare editor, and vim-alone. Also covers on-demand load/unload, an unknown plugin name, a deliberately broken plugin, and theme discovery/apply.
+`data/core/plugins.lua` is new (208 lines):
 
-#### Fixed
+- `EXEDIR/data/plugins` is **bundled**: part of the build output, **mandatory**.
+  Every entry loads, always, whatever `config.plugins` or `--no-plugins` say.
+  This is what makes a build a runnable editor.
+- `config.site_dir/plugins` is **site**: what the user installed, selected by
+  `config.plugins`.
+- A plugin is a **directory with an `init.lua`, or a single `.lua` file**. The
+  entry point is read with `dofile()` — so it may return a manifest table —
+  and never `require`d: a top-level `require` would run the whole subtree's
+  side effects just to look the plugin up. `init(core, config)` is called if
+  present, and it is where every `require` belongs.
+- **A bundled plugin wins over a site plugin of the same name**, on disk and at
+  runtime alike; `plugins.list()` reports which is which via
+  `source = "bundled" | "site"`.
+- **Load order is deterministic**: sorted by name inside each root, bundled root
+  first.
+- **`package.path` gains the site directory, APPENDED** — never prepended, so a
+  site can extend the editor but cannot shadow `core.*` or the bundled
+  `X.core.vim.*`. (`package.config`'s *second* line is the path-list separator;
+  its first is the path separator, and joining new entries with the wrong one
+  fuses them into the last existing entry instead of adding one.)
+- **A plugin that raises is contained.** A failing *bundled* plugin is logged at
+  error level and startup continues — an editor without vim is degraded, not
+  unusable; a failing *site* plugin is logged and skipped. Either way the editor
+  starts.
+- `config.plugins` is read through `config.site_path()` at the point of use and
+  never cached into a table field, because user config runs after
+  `core.config` is required and must be able to change `config.site_dirname`.
 
-- **Dead core keybindings.** Three separate causes, all invisible at runtime — the key press was consumed, nothing ran, and nothing errored:
-  - `command.add_defaults()` skipped `data/core/commands/command.lua`, on the reasoning that a file sharing the module's own name must be a duplicate. It is not: that file holds the `command:*` commands the palette itself needs, so `Return`, `Tab`, `Escape`, `Up` and `Down` were bound to commands that were never registered. It is now loaded like every other command module, and the exclusion (and its wrong reasoning) is gone from the comment.
-  - `empty_view.lua` and `logview.lua` register their commands at require time but were only required lazily, by whoever opened the view. Both are named by the core keymap, so `Ctrl+O` / `Ctrl+Shift+O` on the empty view and `Ctrl+C` / `Ctrl+A` in the log were bound to commands that did not exist yet. `add_defaults()` now requires both views up front.
-  - `core:open-folder` was called by `empty-view:open-folder` but never defined anywhere, so `Ctrl+Shift+O` on the empty view did nothing at all. It is now implemented: a directory picker that chdirs into the chosen folder and resets the project file list.
+#### Extension points — the API cdin-x may rely on
 
-  All 89 core keymap bindings now resolve with zero plugins loaded, and `make test-plugins` asserts it.
+Written down in
+[`docs/architecture/extension-contract.md`](docs/architecture/extension-contract.md).
+If it is not in that document it is not a contract, and a change to it is a
+breaking change.
 
-- **Themes now actually apply.** `data/core/themes.lua` defined `style.set_theme` against an undeclared global `style`, so requiring the module raised an error that the caller swallowed in a `pcall` — leaving `style` permanently on its built-in fallbacks. The duplicate method (already on `core.style`) is gone, and theme lookup spans both bundled and user directories.
+| API | What it is for |
+|-----|----------------|
+| `core.register_help_shortcuts(list) → handle` | contribute rows to the empty view's Quick Reference, and **keep the handle** |
+| `core.unregister_help_shortcuts(handle)` | hand it back in `unload()` |
+| `core.register_status_pill(key, provider)` | a colored badge at the left edge of the status bar; `provider()` returns `nil`, or `text, bg_style_key, fg_style_key` |
+| `core.register_recent_provider(provider)` | supplies `open_recent_picker` / `open_recent_dirs_picker` to the empty view |
+| `core.register_vcs_provider(provider)` | `status.branch`, `status.is_ignored`, `refresh_ignored_now` |
+| `core.set_project_dir(path) → ok, reason` | the project-directory transition |
+| `core.themes.add_root(dir)`, `core.themes.rescan()` | register a themes root, so an extension's themes become listable |
+| `core.style.set_fallback(key, hex)` | register a style fallback instead of having core hardcode one plugin's colors |
+| `command.add(predicate, map, overwrite)` | third argument lets a plugin re-register a name it already owns |
+| `command.remove(names)` | drop exactly the commands a plugin registered, and nobody else's |
+| `command.names_of(map)` | the names a registration map owns, sorted |
+| `keymap.remove(map)` | detach named commands from a stroke, leaving other owners bound |
 
-- **Lua edits stopped reaching the editor on Windows.** `build/<platform>/data` was created with a bare `ln -s`, which MSYS silently turns into a *copy* unless winsymlinks are enabled — and the `[ ! -e ... ]` guard then made that copy permanent, so it was written once and never refreshed. Every later edit under `data/` was ignored by the built editor, which is the worst kind of bug: the code on disk is correct and the running binary disagrees. The build now prefers a verified symlink and mirrors the tree whenever it cannot make one, so `data/` is always current.
+- `core.register_help_shortcuts` returns an **opaque handle** rather than
+  taking a name, so a plugin cannot remove another plugin's rows by registering
+  the same list twice. The registry lives in the new `data/core/help.lua`, not
+  in `empty_view.lua`, because a plugin calls it from its own `init()` and must
+  not depend on which views happened to be constructed before it loaded. The
+  empty view's built-in list now contains only what the runtime owns, so an
+  editor with no extensions installed prints no keystroke that does nothing.
+- `core.set_project_dir` is a runtime API because the state it touches *is* the
+  runtime's: cdin is single-project, the working directory *is* the project, and
+  `core.project_dir`, `core.project_files` and the revision counter the views
+  watch are read synchronously. An extension that chdir'd on its own left the
+  revision stale and the tree showing the previous project until something else
+  forced a rescan. It validates the path, normalises it (`\` → `/`, strips
+  trailing separators), chdirs under a `pcall` because `system.chdir` raises
+  rather than returning false, updates the three fields, and drops the cached
+  scan so a same-named file in the new project is actually visited. It returns
+  `false` plus a reason and does not report it itself, so the same call works
+  from a command, a keymap or the palette.
+- `core.themes` is no longer a hardcoded list of ten names. It discovers
+  `<root>/<name>/theme.lua` across `config.user_dir/themes`,
+  `EXEDIR/data/themes` and any root an extension added, sorted, with earlier
+  roots winning. The list used to be a snapshot taken at require time, so a
+  theme that appeared later — an extension's, registered during its own init —
+  was loadable by name but never listed. `core/init.lua` now re-applies
+  `config.theme` after the plugins have registered their roots, which is what
+  makes a persisted extension theme actually apply at startup.
+- `keymap.remove` exists because `keymap.add` **prepends**: a second owner of a
+  stroke is queued behind the first, not replaced. Without removal a plugin's
+  `unload()` could not detach its own keys, and reloading it left live
+  duplicates. It clears `reverse_map` only for commands no remaining stroke
+  binds.
+- The five `vim_pill_*` fallbacks left `core/style.lua`. The status bar knows
+  how to lay out a colored badge, not what any badge means, and the mode
+  vocabulary and colors belong to the plugin that registers the pill.
 
-- **Core no longer depends on an extension.** The extension manager's registry sync did `require "X.core.git.exec"` — a module belonging to the git extension, in a directory `data/core/` has no business knowing about. The editor therefore died at startup with `module 'X.core.git.exec' not found` before it drew a frame, and the same line broke `cdin-x`, where it pointed at a `core/git/` that never existed. The manager now only *locates* a registry that is already on disk; fetching it is delegated to a syncer the git extension registers, mirroring the existing `core.register_vcs_provider` contract. With no extensions loaded, `refresh` reports that it is unavailable rather than failing to boot.
+#### Runtime commands
 
-- **Startup no longer requires a manager that is not there.** `data/core/plugins.lua` and `data/core/init.lua` were left over from the abandoned CDIN-X split and still did `require "core.x"`, so a tree with no manager — which is the state a fresh clone is in — died with `module 'core.x' not found` before the first frame. `data/core/plugins.lua` is now a self-contained loader over `data/plugins/`: it discovers a plugin directory or a single `.lua` file, honours `config.plugins`, isolates a plugin that raises so one bad plugin cannot cost the user their editor, and answers `:packadd`-style `core:load-plugin` regardless of what autoload was configured to do. A missing or empty `data/plugins/` is a supported state, and core boots identically either way.
+`core:load-plugin <name>`, `core:unload-plugin <name>` (both accept a
+comma-separated list) and `core:list-plugins` are new, in
+`data/core/commands/plugin.lua`, registered with **no predicate** so they stay
+reachable from the palette on a bare editor where nothing else has registered
+anything. `core:load-plugin` is the `:packadd` case and is deliberately *not*
+gated on the site set being enabled — that is how a bare editor stays useful
+rather than merely empty.
+
+#### Build: bundling the mandatory set
+
+- **`mk/bundle.mk`** is new and holds the entire cdin → cdin-x coupling: one
+  variable, `CDINX_DIR`, read nowhere in this repository except
+  `mk/bundle.mk`, `scripts/assemble_data.py` and `scripts/_cdin/*.py`. Nothing
+  under `src/` or `data/` names cdin-x, nothing is fetched, and there is no
+  submodule or sibling lookup at runtime — a build takes a directory and reads
+  files out of it. The `build:` recipe moved here from `mk/build.mk`, which now
+  owns compilation only.
+- **`scripts/assemble_data.py`** is new (177 lines; stdlib only, Python 3.8+, no
+  network) and produces the build output's `data/`:
+  - `data/core` — a symlink to the source tree, **recreated on every run**,
+    falling back to a copy on a platform that gives no symlink. Not
+    created-if-missing: a link made once and then assumed correct is exactly how
+    a stale copy becomes the editor you are running.
+  - everything else — `python3 <CDINX_DIR>/scripts/bundle.py --out <data>`, with
+    the same interpreter so a venv cannot end up bundling with a different
+    Python. The mandatory set arrives as `X/core/<n>/**`, one-line
+    `plugins/<n>.lua` shims, `themes/<t>/theme.lua`, `fonts/**` and a
+    `BUNDLE.lua` index.
+  - A symlink left at the output path by an older build is **unlinked, never
+    traversed** — `shutil.rmtree` on a link deletes the *target's* contents, and
+    a build script that can destroy the source tree is not something anyone
+    should have to debug. On Windows any reparse point counts as a link,
+    because `os.path.islink` is false for a junction and a junction redirects
+    writes just as well.
+  - With no cdin-x reachable it fails with a message saying exactly that,
+    instead of producing an editor that cannot start.
+
+#### Tests — four new make targets, split by what each one may read
+
+`scripts/` had no test file at all before this release.
+
+| Target | Reads | Runs |
+|--------|-------|------|
+| `make test-plugins` | nothing on disk — `scripts/fixtures/` only | `scripts/test_commands.lua`, `scripts/test_lua.lua` |
+| `make test-lua` | nothing on disk — the fixture tree | `tests/lua/run.lua`, the pre-existing suite, finally given a target |
+| `make test-workflows` | **cdin-x**, via `CDINX_DIR` | `scripts/test_workflows.lua` |
+| `make test-site-dir` | **cdin-x**, via `CDINX_DIR` | `scripts/test_site_dir.lua` |
+
+- `scripts/_stub_env.lua` (427 lines) is the pure-Lua stand-in for the C `fs` /
+  `path` / `system` modules, which is what lets the data layer run under a plain
+  `lua` with no build and no editor.
+- `scripts/test_lua.lua` runs the loader and the theme registry eight times —
+  site-present × site-absent against `config.plugins` = `nil` / `false` /
+  `{demo}` / `{raiser}` — each in its own process, because each needs a fresh
+  `EXEDIR` and a fresh `config.plugins` and they would otherwise fight over
+  `package.loaded`.
+- `scripts/test_workflows.lua` is the only test that reads the other
+  repository, because it is testing the other repository's half of the
+  contract, and there is nothing for it to do without a checkout to read.
+  `scripts/test_site_dir.lua` guards the one thing that cannot be checked from
+  either repository alone: cdin owns the *name* of the site directory, cdin-x's
+  installer copies it, and a mismatch installs where the loader does not look.
+- Both fixtures are built by the test scripts from `scripts/fixtures/`, so a
+  test can never be satisfied by whatever happens to be on disk.
+- The `tests/lua/` suite (`text_utf8`, `text_bidi`, `text_shaper`, `themes`,
+  `text_pipeline`, `doc_edit`, `config_style_theme`) had no target and was run by
+  hand, which is how two of its files came to require a `data/themes/` this
+  change moved to cdin-x and failed at `module 'fs' not found`. Both are fixed
+  rather than deleted — the registry and the style fallbacks are still the
+  runtime's, and the theme files are fixtures under `data/themes/<name>/theme.lua`
+  — and `make test-lua` reuses the tree `scripts/test_lua.lua` already builds
+  rather than growing a second copy of the fixture-copying code.
+
+#### Documentation
+
+- **`docs/architecture/extension-contract.md`** is the whole of what cdin
+  guarantees an extension and the whole of what cdin-x may assume: the mandatory
+  set and how it is bundled, the runtime contract (site resolution, `package.path`
+  order, loader roots), the line between what the runtime owns and what an
+  extension owns, the plugin lifecycle, the optional workflows, and the one known
+  limitation.
+- `docs/architecture/overview.md` and `docs/architecture/internals.md`
+  rewritten for the split; `docs/guides/plugins.md` (323 lines changed),
+  `themes.md`, `configuration.md`, `commands.md`, `building.md`,
+  `getting-started.md` and `troubleshooting.md` updated; `README.md`,
+  `CONTRIBUTING.md` and `AGENTS.md` updated.
+
+### Changed
+
+- **Boot order.** `core.init()` now: parse flags → build views →
+  `command.add_defaults()` → **read `config.user_dir/init.lua`** → apply
+  `--no-plugins` → `core.plugins.load_all()` → re-apply the persisted theme →
+  load the project module → open the files named on the command line. User
+  config runs *before* the plugins because `config.plugins` is user-owned. A
+  plugin-loading failure no longer force-opens the log view; it logs and
+  continues.
+- **The runtime keymap went from 152 bindings to 84.** Every group a plugin used
+  to own is gone from `data/core/keymaps/default.lua` — treeview, tab, window,
+  autocomplete, session, project-search and find-replace — along with the
+  empty-view `ctrl+o` / `ctrl+shift+o` entries. `ctrl+d` keeps `doc:select-word`;
+  the find-replace plugin prepends `find-replace:select-next` onto it at load
+  time. `ctrl+f`, `shift+r` and `ctrl+shift+h` are gone from the runtime and are
+  the plugin's to bind.
+- **`ctrl+tab` / `ctrl+shift+tab` are no longer bound by the runtime.** Cycling
+  within the active pane is still there under its new names; whole-layout tab
+  switching is the tab plugin's.
+- **`root:*-tab*` renamed to `root:*-pane-view*`, old names kept as aliases:**
+  `root:switch-to-{next,previous}-pane-view`, `root:move-pane-view-{left,right}`,
+  `root:switch-to-pane-view-1…9`. These operate on `node.views` — the open
+  buffers within the *currently active split pane* — which is a different,
+  lower-level thing than the tab plugin's whole-layout freeze/restore concept.
+  Both used the word "tab" for their own unrelated notion of it, which made it
+  impossible to tell from a command name alone which system a given `tab`
+  command belonged to. The old names remain as aliases so an existing keymap or
+  script keeps working.
+- **The status bar's vim-mode pill is now a generic pill registry.**
+  `core.register_status_pill(key, provider)`; multiple pills draw left-to-right
+  in registration order. There is intentionally no built-in tab indicator — the
+  tab plugin wraps `StatusView:get_items()` itself and appends its own, because
+  core has no business knowing the tab plugin's data shape.
+- **`command.add_defaults()` discovers `data/core/commands/*.lua` from disk**
+  instead of hand-listing five names, so adding a command module — splitting
+  `doc.lua` into `doc.lua` + `selection.lua`, say — needs no edit there. It also
+  requires `core.rootview.node` and `core.views.logview` up front, because both
+  register their commands at require time and both are named by the keymap.
+- **`config.site_dirname`** is the single knob for the site directory's *name*
+  (default `"site"` — what vim and neovim call exactly this thing, third-party
+  content as opposed to the editor's own), and it lives in cdin because cdin is
+  what resolves the directory. `config.site_dir` overrides it with a full path.
+  `config.data_home` and `config.sep` are exported so `config.site_path()` can
+  rebuild the path at the point of use; cdin-x reads `config.site_path()` rather
+  than computing a path of its own, so renaming the directory renames it for
+  both halves at once.
+- **`core/style.lua` reads its fonts from `config.fonts_dir`** instead of
+  hardcoding `EXEDIR .. "/data/fonts"`, and exposes `style.set_fallback` so an
+  extension can register a fallback instead of having core hardcode its colors.
+- **`data/core/preboot.lua`** replaces `session_bootstrap.lua`: same job — read
+  the persisted `session.lua` before the editor starts and apply the saved
+  theme — with no dependency on a session plugin, and a `recent` →
+  `recent_files` migration for older state files.
+
+### Fixed
+
+- **Dead core keybindings, three separate causes, all invisible at runtime** — the
+  key press was consumed, nothing ran, and nothing errored:
+  - `command.add_defaults()` skipped `data/core/commands/command.lua`, on the
+    reasoning that a file sharing the module's own name must be a duplicate. It
+    is not: that file holds the `command:*` commands the palette itself needs to
+    function, so `Return`, `Tab`, `Escape`, `Up` and `Down` were bound to
+    commands that were never registered. It is loaded like every other command
+    module now, and the exclusion — and its wrong reasoning — is gone from the
+    comment.
+  - `empty_view.lua` and `logview.lua` register their commands at require time
+    but were only required lazily, by whoever opened the view. Both are named by
+    the core keymap, so `ctrl+o` / `ctrl+shift+o` on the empty view and
+    `ctrl+c` / `ctrl+a` in the log were bound to commands that did not exist
+    yet.
+  - `core:open-folder` was called by `empty-view:open-folder` but never defined
+    anywhere, so `ctrl+shift+o` on the empty view did nothing at all.
+
+  `make test-plugins` now asserts that every command the keymap names exists
+  with zero plugins loaded — the "ctrl+o opens a menu that does nothing" check.
+
+- **Themes now actually apply.** `data/core/themes.lua` defined
+  `style.set_theme` against an undeclared global `style`, so requiring the
+  module raised an error that the caller swallowed in a `pcall` — leaving
+  `style` permanently on its built-in fallbacks. The duplicate method (already
+  on `core.style`) is gone, and lookup spans the user, bundled and extension
+  roots.
+
+- **Lua edits reached the editor on Windows again.** `build/<platform>/data`
+  used to be created with a bare `ln -s`, which MSYS silently turns into a
+  *copy* unless winsymlinks are enabled — and the `[ ! -e ... ]` guard then
+  made that copy permanent, so it was written once and never refreshed. Every
+  later edit under `data/` was ignored by the built editor, which is the worst
+  kind of bug: the code on disk is correct and the running binary disagrees.
+  `assemble_data.py` recreates the link (or the copy) on every build, and the
+  Windows-only `_sync_data_windows` hack in `scripts/_cdin/build.py` is deleted
+  rather than kept as a second mechanism for the same job.
+
+- **Core no longer depends on an extension at startup.** The extension manager's
+  registry sync did `require "X.core.git.exec"` — a module belonging to the git
+  extension, in a directory `data/core/` had no business knowing about. The
+  editor died at startup with `module 'X.core.git.exec' not found` before it
+  drew a frame, and the same line broke cdin-x, where it pointed at a
+  `core/git/` that never existed. Git is now a provider registered at load time,
+  and with nothing registered the treeview renders no ignored-file markers and
+  the status bar renders no branch, rather than either failing.
+
+- **The install and update scripts install a runnable editor.**
+  `scripts/_cdin/utils.py`'s `find_data_dir()` used to prefer the source
+  `data/`, which now holds only `core` — that install has no fonts and no
+  theme and fails at *startup* rather than at install time, which is the worst
+  place to find out. It now recognises an assembled tree by its `BUNDLE.lua`
+  index and prefers `build/*/data`. `scripts/_cdin/update.py` copies the
+  assembled `build/…/data` next to the new binary and fails loudly if the build
+  produced none, instead of silently installing a source tree.
+  `scripts/cdin.py build` now passes the flags the Makefile actually reads
+  (`BUILD=`, not the `BUILD_TYPE=` that nothing read) plus `CDINX_DIR=`.
+
+### Build, packaging & CI
+
+- `make` = `bin` + `bundle`; `make bin` = binary only, no cdin-x;
+  `make bundle` = assemble `data/`; `make CDINX_DIR=/path` points the bundle at
+  another checkout. `make help` still says "a plain `make` is all you need —
+  plugins and themes ship inside `data/`", which is no longer true; the line is
+  corrected below in the known issues rather than silently left to mislead.
+- The three release workflows and `docker.yml` check cdin-x out as a **sibling**
+  so the default `CDINX_DIR` resolves, and package the **assembled**
+  `build/…/data` — the tree sitting next to the binary they just built —
+  instead of the source `data/`. A release without the bundle cannot start, so
+  shipping the source tree was always wrong; it just did not matter while the
+  source tree *was* the whole editor.
+- `Dockerfile` copies `cdin-x/` into `/src/cdin-x` — checked out by `docker.yml`
+  into the build context — so `CDINX_DIR=../cdin-x` resolves with no extra
+  configuration, and copies the assembled `data/` into the image. No `CDINX_DIR`
+  is baked into the image: the bundle is resolved at image build time.
+- Trailing-newline fixes in the three release workflows and the Dockerfile.
+
+### Migration
+
+From `0.2.0-alpha.1`, or from a build of the short-lived self-contained layout:
+
+| You had | Do this |
+|---------|---------|
+| `data/plugins/<name>` in this repository | the plugin is in cdin-x; a build bundles the mandatory set, and `config.plugins` selects what is installed in your site directory |
+| `data/themes/<name>.lua` | `<name>/theme.lua` in a themes root; user themes go in `<config_home>/cdin/user/themes/<name>/theme.lua` and win over bundled ones by name |
+| `data/fonts/*.ttf` | cdin-x; the build copies them into `data/fonts` next to the binary |
+| `config.optional_plugins.<name> = false` | gone — it selected plugins from a directory that no longer exists |
+| a keymap naming `find-replace:*`, `tab:*`, `window:*`, `treeview:*`, `session:*`, `project-search:*`, `autocomplete:*`, `core:find-command`, `core:find-file`, `core:open-file`, `core:open-folder`, `core:reload-module`, `core:open-*-module` | bind it only if the matching cdin-x plugin is installed — `core:load-plugin` it, or add it to `config.plugins` |
+| `core.git.*` | `core.vcs_provider.status.*`, via `core.register_vcs_provider` |
+| `require "plugins.<name>"` across extensions | `require "X.core.<name>"`; the runtime appends the site directory to `package.path`, it does not rewrite names |
+| `config.site_dir = "<path>"` | still works; `config.site_dirname` is the new knob if you only want to rename the directory under the data home |
+
+### Known issues and limitations
+
+- **The mandatory bundle must be self-contained.** Every `require "X.…"` inside
+  an essential plugin has to resolve inside its own subtree, because the bundle
+  contains that plugin and nothing else. cdin-x's `make validate` checks this,
+  and it can only be checked there — the failure would otherwise appear in a
+  built cdin.
+- **`make`, `make bundle`, `make test-workflows` and `make test-site-dir` all
+  need a cdin-x checkout.** `make bin`, `make test-plugins` and `make test-lua`
+  do not. There is deliberately no target that fetches cdin-x.
+- **`empty-view:open-folder` is a silent no-op unless a plugin registers
+  `core:open-folder`.** The runtime keeps the command as a delegation point —
+  per the contract, `finder` owns it — and does not implement it itself.
+- **Bundled vim and site-installed integrations can come from different cdin-x
+  versions**, and there is no version negotiation. `X.core.vim.registry` is the
+  compatibility surface: an integration that uses its documented extension
+  points works across the gap; one that reaches into a vim module's internals
+  does not.
+- **`make check` and `make size` are still broken** — both call scripts that do
+  not exist (`scripts/check.py`, `scripts/bench.py`) — and `test` / `bench` are
+  still listed in `.PHONY` and in `make help`, which also still claims plugins
+  and themes ship inside `data/`. Carried over from `0.1.0-beta.7`; unchanged
+  here.
+- **C-level test tiers (unit / integration / e2e) still do not exist.** Everything
+  tested in this release is the Lua data layer, under a plain `lua`.
+
+### Stability
+
+- **Zero C changes.** 114 files, all Lua, Python, Make or Markdown. `src/` is
+  untouched: `src/lua/api.c` already puts `EXEDIR/data/?.lua` and
+  `EXEDIR/data/?/init.lua` on `package.path`, and that is still enough.
+- The alpha cycle continues. The loader, `config.plugins`, `config.site_dirname`
+  and the extension points above are written down in
+  `docs/architecture/extension-contract.md`, and a change to any of them will be
+  a breaking change.
 
 
 ## [0.2.0-alpha.1] — 2026-09-26
