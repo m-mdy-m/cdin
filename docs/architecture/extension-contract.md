@@ -53,11 +53,21 @@ substitute would be worse than not shipping.
 
 ## 2. The runtime contract
 
-SITE = `config.site_dir`, default `<data_home>/cdin/site` (`$XDG_DATA_HOME`
-or `~/.local/share`; Windows `%LOCALAPPDATA%`, then `%APPDATA%`, then
-`%USERPROFILE%\AppData\Local`).
+SITE = `config.site_path()` — the host's own resolver. It is `config.site_dir`
+if set, and otherwise `<data_home>/cdin/<config.site_dirname>`, which defaults
+to `<data_home>/cdin/site`.
 
-1. `config.site_dir`.
+`data_home` is `$XDG_DATA_HOME` or `~/.local/share` on POSIX; `%LOCALAPPDATA%`,
+then `%APPDATA%`, then `%USERPROFILE%\AppData\Local` on Windows.
+
+**`config.site_dirname` is the single knob, and it lives in cdin** because cdin
+is what resolves the directory: the loader is what appends it to
+`package.path` and what walks it. cdin-x reads the host's `config.site_path()`
+rather than computing a path of its own, so a user who renames the directory
+renames it for both halves at once. `make test-site-dir` in cdin asserts the
+two halves still agree.
+
+1. `config.site_path()` — the site directory.
 2. `package.path` gets `SITE/?.lua` and `SITE/?/init.lua` APPENDED (never
    prepended, so site can't shadow `core.*` or the bundled `X.core.vim.*`)
    when SITE exists. So `require "cdinx"` -> `SITE/cdinx/init.lua`, `require

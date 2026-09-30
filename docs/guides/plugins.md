@@ -26,14 +26,27 @@ cdin is a plain text editor with vim keys.
 
 ## The site directory
 
-`config.site_dir`, default `<data_home>/cdin/site`:
+cdin resolves it, because cdin is what walks it: `config.site_path()`, which is
+`config.site_dir` if you set it and otherwise
+`<data_home>/cdin/<config.site_dirname>`. `data_home` is `$XDG_DATA_HOME` or
+`~/.local/share` on Linux and macOS; on Windows `%LOCALAPPDATA%`, then
+`%APPDATA%`, then `%USERPROFILE%\AppData\Local`, each plus `\cdin`.
 
-| platform | `data_home` |
-|----------|-------------|
-| Linux / macOS | `$XDG_DATA_HOME`, or `~/.local/share` |
-| Windows | `%LOCALAPPDATA%`, then `%APPDATA%`, then `%USERPROFILE%\AppData\Local` |
+`config.site_dirname` is the one knob. Change it and the loader, the theme
+registry and cdin-x all move together:
 
-To install extensions into it:
+```lua
+-- ~/.config/cdin/user/init.lua
+config.site_dirname = "extensions"     -- ~/.local/share/cdin/extensions
+```
+
+"site" is the word vim and neovim use for exactly this directory
+(`:h site-dir`): third-party content, as opposed to the editor's own. It is
+also what `make install` in cdin-x writes to by default. If you would rather
+it said `extensions`, change that one line — and the installer's
+`SITE_DIRNAME`, which `make test-site-dir` checks still agrees.
+
+To install extensions into an installed cdin:
 
 ```sh
 git clone https://github.com/m-mdy-m/cdin-x.git
@@ -338,8 +351,24 @@ themes.
 Nothing keystrokes into a wall. `Ctrl+P` with no `finder` installed is not bound
 to anything, rather than bound to a command that does not exist.
 
-`make test-plugins` checks the runtime half of all of this, with no cdin-x
-present and nothing read from disk.
+Both halves of that are tested, because they fail differently:
+
+```sh
+make test-plugins     # the runtime half: no cdin-x, nothing read from disk
+make test-workflows   # the cdin-x half: needs CDINX_DIR
+make test-lua         # the unit + integration suite in tests/lua
+```
+
+`test_commands.lua` pins what the runtime owns. `test_workflows.lua` boots the
+real loader against a cdin-x checkout and pins what it owns, that each of
+`Ctrl+P` / `Ctrl+Shift+P` / `Ctrl+O` / `Ctrl+Shift+O` has exactly one command
+bound to it, and that unloading `palette`, `finder` and `modules` takes the
+commands and the keystrokes with them.
+
+The single-owner assertion is the one worth having. `keymap.add` prepends, so a
+second plugin binding a stroke it does not own is queued behind the first
+rather than replacing it — nothing errors, and the shadowed binding only shows
+up if you go looking.
 
 ## The contract
 
