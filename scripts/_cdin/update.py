@@ -167,9 +167,24 @@ def _update_from_source(asset: Path, tmp: Path, cdin_bin: Path) -> None:
 
     install_binary(new_bin, cdin_bin)
 
-    data_src = src_root / "data"
-    if data_src.is_dir():
-        data_dst = cdin_bin.parent / "data"
-        data_dst.mkdir(exist_ok=True)
-        copytree_force(data_src, data_dst)
-        ok("Updated data files")
+    # The build output's data/, not the source data/. The source holds only
+    # the runtime core; the mandatory set (vim, the default theme, the
+    # fonts) is assembled into build/ from cdin-x, and that is the tree
+    # that has to land next to the binary. A source-tree copy installs an
+    # editor that cannot start, because it has no fonts.
+    data_src = _assembled_data_dir(src_root)
+    if data_src is None:
+        die("Build succeeded but no assembled data/ found under build/.")
+    data_dst = cdin_bin.parent / "data"
+    data_dst.mkdir(exist_ok=True)
+    copytree_force(data_src, data_dst)
+    ok("Updated data files")
+
+
+def _assembled_data_dir(src_root: Path) -> Optional[Path]:
+    """The build output's data/ under a source root, or None."""
+    for pattern in ("build/*/data", "build/*-*/data"):
+        for candidate in sorted(src_root.glob(pattern)):
+            if (candidate / "BUNDLE.lua").is_file() or (candidate / "core").is_dir():
+                return candidate
+    return None

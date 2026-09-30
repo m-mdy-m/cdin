@@ -80,9 +80,28 @@ def version_gt(a: str, b: str) -> bool:
 
 
 def find_data_dir() -> Optional[Path]:
-    for candidate in (ROOT_DIR / "data", ROOT_DIR / "bin" / "data"):
-        if candidate.is_dir():
+    """The ASSEMBLED data/ to install next to a binary.
+
+    Never the source tree. The source data/ holds only the runtime core; the
+    fonts, the default theme and the mandatory plugins arrive from cdin-x at
+    build time and live in build/<platform>-<build>/data. Copying the source
+    would install an editor with no fonts and no theme, which fails at
+    startup rather than at install time — the worst place to find out.
+    """
+    for candidate in (ROOT_DIR / "bin" / "data", ROOT_DIR / "data"):
+        if not candidate.is_dir():
+            continue
+        # A build output is recognisable by its bundle index. The source tree
+        # has core/ and nothing else, so this is also what stops the two
+        # being confused.
+        if (candidate / "BUNDLE.lua").is_file():
             return candidate
+    # No bundle index: fall back to a build output that exists, then to
+    # whatever looks most like a usable data directory.
+    for pattern in ("build/*/data", "build/*-*/data"):
+        for candidate in sorted(ROOT_DIR.glob(pattern)):
+            if (candidate / "core").is_dir():
+                return candidate
     return None
 
 

@@ -13,7 +13,7 @@ cdin_code_backup/*
 *icon.inl*
 results
 scripts/icons
-fixtures
+/fixtures
 *.rar
 __pycache__
 # Node dependencies

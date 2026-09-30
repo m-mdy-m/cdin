@@ -1,5 +1,15 @@
 package.path = "tests/lua/?.lua;data/?.lua;data/?/init.lua;" .. package.path
 
+-- `fs` and `path` are C modules the host registers as preloads (src/api). This
+-- runner is a plain lua, so it needs stand-ins or anything reaching core.fs
+-- fails at require time. Reused from scripts/_stub_env.lua rather than written
+-- again: same ports of src/fs/ops.c and src/fs/path.c, one place to keep right.
+-- Only the two modules are taken; the globals below are set explicitly, since
+-- each test stubs its own.
+local _stub = dofile("scripts/_stub_env.lua")
+package.preload["fs"]   = function() return _stub.fs end
+package.preload["path"] = function() return _stub.path end
+
 rawset(_G, "SCALE", 1)
 rawset(_G, "VERSION", "0.0.0-test")
 rawset(_G, "PLATFORM", "test")
