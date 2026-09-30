@@ -105,16 +105,19 @@ data/core/input/   command registry and keymap
 data/core/syntax/  syntax system and incremental highlighter
 data/core/utils/   Object (class system), common utilities
 data/core/git/     git integration (status parsing, command wrappers)
+data/core/plugins.lua  the extension loader
 
-data/plugins/      optional features — loaded automatically at startup
-data/plugins/vim/  the modal editing layer
-data/plugins/treeview/   file tree with git markers
-data/plugins/tab/        tab management
-data/plugins/window/     split pane management
-data/plugins/core/       autocomplete, autoreload, session, project search, …
-data/plugins/languages/  syntax definitions for C, Lua, Python, JS, TS, MD
+build/<platform>-<build>/data/   BUILD OUTPUT, not source:
+  core/       a symlink to data/core (a copy where symlinks are unavailable)
+  plugins/    the mandatory set a build bundled from cdin-x
+  X/          cdin-x's plugin modules for that bundle
+  themes/     the mandatory theme a build bundled from cdin-x
+  fonts/      the fonts a build bundled from cdin-x
+  BUNDLE.lua  what the bundle contains
 
-data/user/         user config (init.lua) and color themes
+~/.config/cdin/    user configuration (init.lua) and user themes
+<data_home>/cdin/site/   installed extensions (cdin-x)
+
 mk/                Makefile fragments — platform, version, flags, rules
 scripts/           Python wrappers around the build system
 docs/              documentation (you're here)
@@ -244,8 +247,7 @@ Follow the style of `data/core/`:
   undeclared globals — lean on it
 
 Wrap existing behavior rather than patching tables when possible. See how
-`trimwhitespace` hooks into `Doc.save` in
-`data/plugins/core/trimwhitespace.lua` for the pattern.
+`trimwhitespace` (a cdin-x plugin) hooks into `Doc.save` for the pattern.
 
 ### Commit messages
 
@@ -324,9 +326,7 @@ keymap.add {
 }
 ```
 
-Drop it in `data/plugins/` and restart. The command is immediately available
-in the palette and the binding works. See [docs/guides/plugins.md](docs/guides/plugins.md)
-for more, including how to add syntax definitions and read the active document.
+Drop it in `<site>/plugins/` and restart. See [docs/guides/plugins.md](docs/guides/plugins.md) for more.
 
 ---
 

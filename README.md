@@ -36,9 +36,9 @@ There are no clever abstractions that require you to know the whole project
 before touching any of it.
 
 Features belong in plugins. The core does the minimum that every editor needs.
-Anything optional is in `data/plugins/` where it can be read, copied, modified,
-or replaced without touching the core. This is how lite-xl approaches things
-too, and it works.
+Anything optional is an extension, read and written in its own repository
+([cdin-x](https://github.com/m-mdy-m/cdin-x)) and installed into your own
+site directory, so none of it needs the core to change.
 
 Startup time and memory use matter. The renderer only redraws what actually
 changed. Background tasks are coroutines, not threads. An idle cdin draws
@@ -46,18 +46,31 @@ almost nothing and uses almost no CPU.
 
 ## Features
 
+A build is not feature-equivalent to a full install. This is what ships in the
+mandatory bundle, and it is enough to be a usable editor:
+
 - Modal editing (Normal / Insert / Visual) built on the vim model
-- Ex command line (`:w`, `:q`, `:e`, `:!cmd`, and more)
-- Project tree with optional git status markers (A / M / D / ?)
+- Ex command line (`:w`, `:q`, `:e`, `:new`, `:cd`, `:!cmd`, and more)
+- Syntax highlighting
+- A default theme
+- File creation and editing
+
+These come from [cdin-x](https://github.com/m-mdy-m/cdin-x) and are optional:
+
+- Project tree with git status markers
 - Multi-tab management and split panes
-- Project-wide search
-- Fuzzy file finder (`Ctrl+P`)
-- Session restore
-- Syntax highlighting for C, Lua, Markdown, Python, JavaScript, TypeScript
-- Trailing whitespace trimmed on save
-- Relative or absolute line numbers
-- Three bundled themes; write your own in a single Lua file
-- Configurable through `data/user/init.lua` — plain Lua, no DSL
+- Project-wide search, autocomplete, session restore
+- The command palette (`Ctrl+Shift+P`), fuzzy file finder (`Ctrl+P`) and the
+  open-file / open-folder prompts (`Ctrl+O`, `Ctrl+Shift+O`)
+- Themes beyond the default one
+
+Install them with `make link` in a cdin-x checkout. Without them the editor is
+a plain text editor with vim keys — deliberately usable, not crippled, and no
+keystroke does nothing. The mechanisms those workflows are built on
+(`core.command_view`, the command and keymap registries, the project scanner)
+are part of the runtime and are always there.
+
+Configurable through your own `init.lua` — plain Lua, no DSL.
 
 ## Quick start
 

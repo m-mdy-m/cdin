@@ -24,18 +24,26 @@ keymap.add({ ["ctrl+s"] = "doc:save-as" }, true)
 
 | Command | Binding | Description |
 |---------|---------|-------------|
-| `core:find-command` | `Ctrl+Shift+P` | Command palette |
-| `core:find-file` | `Ctrl+P` | Fuzzy-open a file from the project |
-| `core:open-file` | `Ctrl+O` | Open a file by path |
-| `core:open-folder` | — | Change the project directory |
+| `core:find-command` † | `Ctrl+Shift+P` | Command palette |
+| `core:find-file` † | `Ctrl+P` | Fuzzy-open a file from the project |
+| `core:open-file` † | `Ctrl+O` | Open a file by path |
+| `core:open-folder` † | — | Change the project directory |
 | `core:new-doc` | `Ctrl+N` | New empty document |
 | `core:toggle-fullscreen` | `Alt+Return` | Toggle fullscreen |
 | `core:open-log` | — | Open the editor log view |
-| `core:open-user-module` | — | Open `~/.config/cdin/user/init.lua` |
-| `core:open-project-module` | — | Open or create `.lite_project.lua` |
-| `core:reload-module` | — | Reload a Lua module by name |
+| `core:open-user-module` † | — | Open `~/.config/cdin/user/init.lua` |
+| `core:open-project-module` † | — | Open or create `.lite_project.lua` |
+| `core:reload-module` † | — | Reload a Lua module by name |
 | `core:quit` | — | Quit (prompts if there are unsaved changes) |
 | `core:force-quit` | — | Quit immediately without saving |
+
+† **Provided by [cdin-x](https://github.com/m-mdy-m/cdin-x), not by the
+runtime.** They prompt, so they are optional workflow plugins and the runtime
+binds none of their keystrokes. `core:find-command`, `core:find-file` and
+`core:open-file` come from `X/core/palette` and `X/core/finder`; the three
+module commands come from `X/core/modules`. With no cdin-x installed, the
+keystroke is unbound rather than bound to something that does not exist, and
+the command is simply not in the list.
 
 ---
 

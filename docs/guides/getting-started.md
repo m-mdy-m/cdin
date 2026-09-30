@@ -64,9 +64,9 @@ action menu.
 
 | Key | Action |
 |---|---|
-| `Ctrl+Shift+P` | Command palette — every command in the editor, fuzzy-searchable |
-| `Ctrl+P` | Open a file from the project (fuzzy find) |
-| `Ctrl+O` | Open a file by path |
+| `Ctrl+Shift+P` † | Command palette — every command in the editor, fuzzy-searchable |
+| `Ctrl+P` † | Open a file from the project (fuzzy find) |
+| `Ctrl+O` † | Open a file by path |
 | `Ctrl+N` | New untitled document |
 | `Ctrl+T` | New tab |
 | `Ctrl+W` / `Ctrl+Shift+W` | Close view / close tab |
@@ -77,6 +77,12 @@ action menu.
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
 | `Ctrl+\` | Toggle the tree view |
 | `Alt+Return` | Toggle fullscreen |
+
+† The three prompting keys are the **command palette and the file finders**.
+They are optional [cdin-x](https://github.com/m-mdy-m/cdin-x) plugins, not
+runtime commands, so a build without cdin-x installed leaves them unbound
+rather than binding them to something that does nothing. Install cdin-x and
+they come with it. See [Plugins](plugins.md).
 
 **Tabs:** `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle tabs. `Ctrl+1` through
 `Ctrl+9` jump to a tab by number. `Ctrl+Shift+PageUp/PageDown` reorder tabs.

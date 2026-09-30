@@ -25,15 +25,45 @@ config.tab_type = "hard"
 | Option | Default | Description |
 |--------|---------|-------------|
 | `config.plugins` | `nil` | Which **site** plugins load. `nil` = all, `false` = none, a table = a whitelist. Does not affect the mandatory bundled set. |
-| `config.site_dir` | `<data_home>/cdin/site` | Where installed extensions live. Appended to `package.path` at startup. |
+| `config.site_dirname` | `"site"` | The name of the installed-extensions directory, under `<data_home>/cdin/`. |
+| `config.site_dir` | (unset) | A full path, which overrides `site_dirname` entirely. |
+| `config.site_path()` | — | Resolves the site directory. Call this; do not read a path out of the table. |
 
-`config.site_dir` is `$XDG_DATA_HOME`/`cdin/site` or `~/.local/share/cdin/site`
-on Linux and macOS; on Windows `%LOCALAPPDATA%`, then `%APPDATA%`, then
-`%USERPROFILE%\AppData\Local`, each plus `\cdin\site`.
+#### The site directory
+
+Where cdin-x is installed, and where the loader looks for site plugins:
+`$XDG_DATA_HOME`/`cdin/<name>` or `~/.local/share/cdin/<name>` on Linux and
+macOS; on Windows `%LOCALAPPDATA%`, then `%APPDATA%`, then
+`%USERPROFILE%\AppData\Local`, each plus `\cdin\<name>`.
+
+**`config.site_dirname` is the one knob.** Change it and everything follows —
+the loader, the theme registry, and cdin-x, which reads this table rather than
+computing a path of its own:
 
 ```lua
 -- ~/.config/cdin/user/init.lua
+config.site_dirname = "extensions"     -- ~/.local/share/cdin/extensions
+```
 
+It is resolved lazily by `config.site_path()` rather than once at load,
+precisely so that this works: your `init.lua` runs *after* `core.config` has
+been required, so a value computed at load would already be fixed before you
+had a chance to change it.
+
+"site" is the word vim and neovim use for exactly this directory (`:h
+site-dir`) — third-party content, as opposed to the editor's own. If you have
+no vim background, `extensions` is the more obvious choice and it costs
+nothing to switch.
+
+For a location outside the data home entirely, set the full path instead:
+
+```lua
+config.site_dir = "/opt/whatever/cdin-extensions"
+```
+
+#### What loads
+
+```lua
 -- Load nothing from the site. The bundled set — vim, the default theme,
 -- the fonts — is part of the build and is unaffected.
 config.plugins = false
@@ -44,9 +74,9 @@ config.plugins = false
 config.plugins = { "palette", "finder" }
 ```
 
-`--no-plugins` is the command-line spelling of `config.plugins = false`. It does
-**not** disable the bundled set: `--no-plugins` cannot turn vim off in an editor
-that has no other modal editing.
+`--no-plugins` is the command-line spelling of `config.plugins = false`. It
+does **not** disable the bundled set: `--no-plugins` cannot turn vim off in an
+editor that has no other modal editing.
 
 The user `init.lua` runs **before** extensions load, so a key binding set here
 is one a plugin has to override, not the other way round. `require`-ing an
