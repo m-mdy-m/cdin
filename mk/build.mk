@@ -1,5 +1,5 @@
 .PHONY: build clean distclean info help run debug debug-san _check_deps
-.PHONY: test check bench size tiny install uninstall test-plugins
+.PHONY: test check bench size tiny install uninstall test-plugins test-workflows test-lua test-site-dir
 
 ICON_INL := src/icon.inl
 
@@ -86,7 +86,9 @@ help:
 	@echo ''
 	@echo 'Options: SDL3_PREFIX=/path BUILD=release|debug PREFIX=/usr/local LUA_VERSION=auto|5.4'
 	@echo 'Quality: test, check, bench, size, tiny (BUILD=tiny, -Os + gc-sections)'
-	@echo '          test-plugins — plugin loader smoke test (needs lua)'
+	@echo '          test-plugins  — keymap + loader, runtime only (needs lua)'
+	@echo '          test-workflows — the cdin-x workflows and their strokes (needs lua + CDINX_DIR)'
+	@echo '          test-lua      — unit + integration suite in tests/lua (needs lua)'
 
 check:
 	python scripts/check.py
@@ -131,6 +133,66 @@ test-plugins:
 				$(LUA_RUNNER) scripts/test_lua.lua || exit 1; \
 		done; \
 	done
+
+# The other half of the split: with a cdin-x checkout as the site directory,
+# the workflow plugins must register their commands and own ctrl+p,
+# ctrl+shift+p and ctrl+o — and nothing else may be bound to them.
+#
+# This one needs CDINX_DIR, unlike test-plugins. That is the point: it is the
+# only test that reads the other repository, and it is testing the *other*
+# repository's half of the contract, so there is nothing for it to do without
+# a checkout to read. CDINX_DIR comes from mk/bundle.mk, the same variable the
+# build uses.
+#
+#   site=full   cdin-x installed: the workflows are present and own the strokes
+#   site=empty  nothing installed: the runtime must still own none of them
+#
+# The empty run is not redundant with test-plugins: it is the same assertion
+# made through the real loader against a real absent site, which is the state
+# a user is in before they install anything.
+test-workflows:
+	@command -v $(LUA) >/dev/null 2>&1 || command -v lua >/dev/null 2>&1 || { \
+		echo '✗ lua not found (apt: sudo apt install lua5.4)'; exit 1; }
+	@for site in full empty; do \
+		echo ''; \
+		echo "── workflows: site=$$site ──"; \
+		CDIN_SRC="$(CURDIR)" CDINX_DIR="$(CDINX_DIR)" CDIN_SITE=$$site \
+			$(LUA_RUNNER) scripts/test_workflows.lua || exit 1; \
+	done
+
+# The site directory name. Needs a cdin-x checkout, because the whole
+# point of the test is that the two halves cannot disagree about where
+# extensions live: cdin owns the name, cdin-x's installer copies it, and
+# a mismatch would install where the loader does not look.
+test-site-dir:
+	@command -v $(LUA) >/dev/null 2>&1 || command -v lua >/dev/null 2>&1 || { \
+		echo 'lua not found (apt: sudo apt install lua5.4)'; exit 1; }
+	@test -d "$(CDINX_DIR)" || { \
+		echo 'CDINX_DIR does not exist: $(CDINX_DIR)'; exit 1; }
+	@echo '-- site directory name --'
+	@CDIN_SRC="$(CURDIR)" CDINX_DIR="$(CDINX_DIR)" $(LUA_RUNNER) scripts/test_site_dir.lua
+
+# The unit/integration suite in tests/lua. It predates test-plugins and covers
+# what that one does not: the text pipeline, Doc, and the theme registry's
+# contracts against a real fixture tree.
+#
+# It has no make target of its own in the tree today, so it is run by hand and
+# quietly rots — which is how two of its files came to require a data/themes/
+# that the split moved to cdin-x. It is wired up here so that cannot happen
+# unnoticed again.
+#
+# The theme tests need a tree holding data/themes/<name>/theme.lua, since the
+# bundled theme now lives in cdin-x. Rather than grow a second copy of the
+# fixture-copying code, this asks scripts/test_lua.lua to build the tree it
+# already builds and asserts against, and points these tests at the result.
+# site=empty keeps it to the bundled half.
+test-lua:
+	@command -v $(LUA) >/dev/null 2>&1 || command -v lua >/dev/null 2>&1 || { \
+		echo '✗ lua not found (apt: sudo apt install lua5.4)'; exit 1; }
+	@CDIN_SRC="$(CURDIR)" CDIN_DIR="$(TEST_CDIN_DIR)" CDIN_SITE=empty CDIN_PLUGINS=false \
+		$(LUA_RUNNER) scripts/test_lua.lua >/dev/null
+	@echo '── unit + integration ──'
+	@CDIN_THEME_TREE="$(THEME_TREE)" $(LUA_RUNNER) tests/lua/run.lua
 
 size:
 	@echo '-- binary / data sizes --'

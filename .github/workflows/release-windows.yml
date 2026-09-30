@@ -40,7 +40,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ── Cache: MSYS2 packages ────────────────────────────────────────────
+      # cdin-x is where the mandatory set lives: the vim plugin, the default
+      # theme and the fonts. A cdin build bundles it into build/…/data via
+      # scripts/assemble_data.py -> scripts/bundle.py. It is checked out as
+      # a sibling so the default CDINX_DIR (../cdin-x) resolves; the build
+      # itself never fetches anything.
+      - name: Checkout cdin-x (mandatory bundle source)
+        uses: actions/checkout@v4
+        with:
+          repository: m-mdy-m/cdin-x
+          path: cdin-x
+
       # msys2/setup-msys2 has built-in cache support via cache: true
       - name: Set up MSYS2
         uses: msys2/setup-msys2@v2
@@ -207,7 +217,13 @@ jobs:
           cp "${EXE_PATH}" "${PKG_DIR}/cdin.exe"
           cp "$(dirname "${EXE_PATH}")"/*.dll "${PKG_DIR}/" 2>/dev/null || true
 
-          [[ -d data ]] && cp -r data "${PKG_DIR}/"
+          # The ASSEMBLED data/, next to the binary that was just built — not
+          # the source data/. The source holds only the runtime core; the
+          # mandatory set (vim plugin, default theme, fonts) is bundled from
+          # cdin-x into the build output at build time, and that is what a
+          # release has to ship.
+          BUILD_DIR="$(dirname "$EXE_PATH")"
+          [[ -d "${BUILD_DIR}/data" ]] && cp -r "${BUILD_DIR}/data" "${PKG_DIR}/"
 
           [[ -f scripts/cdin.ico ]] && cp scripts/cdin.ico "${PKG_DIR}/"
 

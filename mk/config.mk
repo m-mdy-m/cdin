@@ -11,6 +11,11 @@ LUA_VERSION ?= auto
 # scripts/fixtures/", which is the default and the only mode that needs
 # nothing from the developer's disk.
 LUA ?= $(shell command -v lua 2>/dev/null)
+
+# The fixture tree `make test-lua` points the tests/lua theme tests at: a
+# directory holding data/themes/<name>/theme.lua, which it becomes EXEDIR for.
+# Same location scripts/test_lua.lua builds, so the two suites read one tree.
+THEME_TREE ?= $(if $(TEMP),$(TEMP),$(if $(TMPDIR),$(TMPDIR),/tmp))/cdin-test-lua
 ifeq ($(LUA),)
   LUA_RUNNER := lua
 else

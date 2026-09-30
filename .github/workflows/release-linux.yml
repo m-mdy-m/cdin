@@ -34,7 +34,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ── Cache: apt packages ──────────────────────────────────────────────
+      # cdin-x is where the mandatory set lives: the vim plugin, the default
+      # theme and the fonts. A cdin build bundles it into build/…/data via
+      # scripts/assemble_data.py -> scripts/bundle.py. It is checked out as
+      # a sibling so the default CDINX_DIR (../cdin-x) resolves; the build
+      # itself never fetches anything.
+      - name: Checkout cdin-x (mandatory bundle source)
+        uses: actions/checkout@v4
+        with:
+          repository: m-mdy-m/cdin-x
+          path: cdin-x
+
       - name: Cache apt packages
         uses: actions/cache@v4
         id: cache-apt
@@ -150,7 +160,13 @@ jobs:
           cp "${BIN_PATH}" "${PKG_DIR}/bin/cdin"
           chmod 755 "${PKG_DIR}/bin/cdin"
 
-          [[ -d data ]] && cp -a data/. "${PKG_DIR}/bin/data/"
+          # The ASSEMBLED data/, next to the binary that was just built —
+          # not the source data/. The source holds only the runtime core; the
+          # mandatory set (vim plugin, default theme, fonts) is bundled from
+          # cdin-x into the build output at build time, and that is what a
+          # release has to ship.
+          BUILD_DIR="$(dirname "${BIN_PATH}")"
+          [[ -d "${BUILD_DIR}/data" ]] && cp -a "${BUILD_DIR}/data/." "${PKG_DIR}/bin/data/"
 
           mkdir -p "${PKG_DIR}/scripts"
           cp -r scripts/icons "${PKG_DIR}/scripts/"
