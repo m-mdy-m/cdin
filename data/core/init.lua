@@ -3,10 +3,10 @@ local temp = require "core.runtime.temp"
 
 local config = require "core.config"
 
-local session_bootstrap = require "core.session_bootstrap"
+local preboot = require "core.preboot"
 if config.session_restore_theme == nil then config.session_restore_theme = true end
 if config.session_restore_dir  == nil then config.session_restore_dir  = true  end
-local _boot_session = session_bootstrap.read()
+local _boot_session = preboot.read()
 if config.session_restore_theme and _boot_session.theme then
   config.theme = _boot_session.theme
 end
@@ -16,6 +16,12 @@ local style = require "core.style"
 local core = {}
 require("core.logging").install(core)
 core.temp_filename = temp.filename
+
+-- Installs core.register_help_shortcuts / core.unregister_help_shortcuts.
+-- Required here, before any view is built, because plugins call it from their
+-- own init() and must not depend on which views happened to be constructed
+-- before them.
+require("core.help").install(core)
 
 core.project_dir = nil
 
@@ -59,11 +65,28 @@ function core.init()
   local TitleBar    = require "core.views.titlebar"
   local Doc         = require "core.doc"
 
+  -- Command-line flags. Parsed first so --no-plugins can veto a
+  -- config.plugins list. Flags are not paths, so they are kept out of the
+  -- file/dir scan below.
+  local no_plugins = false
+  local positional = {}
+  local i = 2
+  while i <= #ARGS do
+    local a = ARGS[i]
+    if a == "--no-plugins" or a == "-u" then
+      no_plugins = true
+      if a == "-u" then i = i + 1 end  -- swallow the "-u NONE" argument
+    else
+      positional[#positional + 1] = a
+    end
+    i = i + 1
+  end
+
   local project_dir = EXEDIR
   local explicit_dir = false
   local files = {}
-  for i = 2, #ARGS do
-    local abs  = system.absolute_path(ARGS[i]) or ARGS[i]
+  for _, arg in ipairs(positional) do
+    local abs  = system.absolute_path(arg) or arg
     local info = system.get_file_info(abs) or {}
     if     info.type == "file" then table.insert(files, abs)
     elseif info.type == "dir"  then project_dir = abs; explicit_dir = true
@@ -106,15 +129,13 @@ function core.init()
   local project = require "core.project"
   core.add_thread(function() project.thread(core) end)
 
-  command.add_defaults()
+  -- Switching project directory is a runtime operation: the working
+  -- directory IS the project, and the file list and revision the views read
+  -- are runtime state. The prompt that asks the user which directory is a
+  -- workflow and lives in an extension, which calls this.
+  core.set_project_dir = function(path) return project.set_project_dir(path) end
 
-  local x_ok, x_err = pcall(function()
-    local x = require "core.x"
-    x.bootstrap()
-  end)
-  if not x_ok then
-    core.log("cdin-x not available: %s", tostring(x_err))
-  end
+  command.add_defaults()
 
   -- Load user configuration from ~/.config/cdin/user/init.lua
   local user_path = config.user_dir .. "/init.lua"
@@ -124,14 +145,31 @@ function core.init()
     end
   end)
 
+  if no_plugins then config.plugins = false end
+
+  local got_plugins_error = not core.try(function()
+    require("core.plugins").load_all()
+  end)
+  if got_plugins_error then
+    core.log("plugin loading failed; continuing with core only")
+  end
+
+  -- A theme named by the persisted session may live in a root that only
+  -- exists once a plugin has registered it (an extension's themes), so the
+  -- one applied at style.lua load time may have fallen back. Now that the
+  -- plugins are in, re-apply it if it resolves to something real.
+  core.try(function()
+    if not config.theme then return end
+    if config.theme == style.theme_name then return end
+    local themes = require "core.themes"
+    if not themes.path(config.theme) then return end
+    themes.apply(style, config.theme)
+  end)
+
   local got_project_error = not core.load_project_module()
 
   for _, filename in ipairs(files) do
     core.root_view:open_doc(core.open_doc(filename))
-  end
-
-  if not x_ok then
-    command.perform("core:open-log")
   end
 end
 

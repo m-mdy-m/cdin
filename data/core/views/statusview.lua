@@ -12,19 +12,30 @@ local StatusView = View:extend()
 -- Vim-like pipe separator
 StatusView.sep = " | "
 
--- ── vim mode pill definitions ──────────────────────────────────────────────────
-local VIM_PILL = {
-  normal  = { bg = "vim_normal_bg",  label = "NORMAL"  },
-  insert  = { bg = "vim_insert_bg",  label = "INSERT"  },
-  visual  = { bg = "vim_visual_bg",  label = "VISUAL"  },
-  replace = { bg = "vim_replace_bg", label = "REPLACE" },
-  command = { bg = "vim_command_bg", label = "COMMAND" },
-}
+-- ── status pill registry ─────────────────────────────────────────────────────
+-- Generic extension point for small colored badges drawn at the left edge
+-- of the status bar (the vim mode indicator is the first consumer, but
+-- this makes no assumption about vim specifically). A plugin registers
+-- itself with core.register_status_pill(key, provider), where provider
+-- is a function returning either nil (nothing to draw right now) or
+-- (text, bg_style_key, fg_style_key). statusview.lua never hardcodes
+-- any plugin's vocabulary of modes/labels/colors — that all lives in
+-- the plugin and its theme entries. Multiple pills may be registered;
+-- they draw left-to-right in registration order.
+core.register_status_pill = core.register_status_pill or function(key, provider)
+  core._status_pills = core._status_pills or {}
+  core._status_pills[key] = provider
+end
 
 -- ── git branch + status ───────────────────────────────────────────────────────
+-- Reads core.vcs_provider (registered by the git extension via
+-- core.register_vcs_provider() — see data/core/project.lua for the hook
+-- definition). statusview never requires the git extension directly; with
+-- no vcs provider loaded this simply renders nothing here.
 local function git_items(sep)
-  local ok, Git = pcall(require, "core.git")
-  if not ok or not Git.status.branch then return nil end
+  local vcs = core.vcs_provider
+  if not vcs or not vcs.status or not vcs.status.branch then return nil end
+  local Git = { status = vcs.status }
 
   local out = {}
 
@@ -95,36 +106,11 @@ local function git_items(sep)
   return out
 end
 
--- ── tab indicator ─────────────────────────────────────────────────────────────
-local function tab_items(sep)
-  local ok, tabM = pcall(require, "X.core.tab.manager")
-  if not ok then return nil end
-  local n = tabM.get_count and tabM.get_count() or 0
-  if n < 2 then return nil end
-  local idx = tabM.get_index and tabM.get_index(tabM.active_id) or 1
-  local out = {}
-  for i, tid in ipairs(tabM.tab_order or {}) do
-    if tabM.tabs[tid] then
-      if i == idx then
-        out[#out+1] = style.accent
-        out[#out+1] = "[" .. i .. "]"
-        out[#out+1] = style.text
-      else
-        out[#out+1] = style.dim
-        out[#out+1] = tostring(i)
-        out[#out+1] = style.text
-      end
-      if i < n then
-        out[#out+1] = style.dim
-        out[#out+1] = " "
-      end
-    end
-  end
-  out[#out+1] = style.dim
-  out[#out+1] = sep
-  out[#out+1] = style.text
-  return out
-end
+-- NOTE: there is intentionally no tab indicator built here. The `tab`
+-- extension (data/plugins/tab/impl.lua) wraps StatusView:get_items() itself and
+-- appends its own indicator to `right` — that is the correct place for it,
+-- since core has no business knowing the tab extension's data shape. Do not
+-- reintroduce a tab_items()-style function here; the two would double up.
 
 function StatusView:new()
   StatusView.super.new(self)
@@ -184,43 +170,45 @@ function StatusView:draw_items(items, right_align, yoffset, xoffset)
   end
 end
 
--- ── vim mode pill ─────────────────────────────────────────────────────────────
--- Returns the total horizontal space consumed (so left items can be shifted).
-function StatusView:draw_vim_pill()
-  if not core.get_vim_mode_label then return 0 end
-  local label = core.get_vim_mode_label()
-  if not label then return 0 end
-
-  -- "[INSERT]" → "INSERT", "insert"
-  local mode_text = label:match("%[(.+)%]") or label
-  local mode_key  = mode_text:lower()
-
-  local info = VIM_PILL[mode_key] or VIM_PILL.normal
-  local bg   = style[info.bg]     or style.vim_normal_bg
-  local fg   = style.vim_pill_fg  or style.text
+-- ── status pills ──────────────────────────────────────────────────────────────
+-- Draws every pill currently registered via core.register_status_pill().
+-- Returns the total horizontal space consumed (so left items can be
+-- shifted). statusview knows nothing about what any given pill means —
+-- it only knows how to lay out a colored badge with text.
+function StatusView:draw_status_pills()
+  local pills = core._status_pills
+  if not pills then return 0 end
 
   local ox, oy = self:get_content_offset()
   local bar_h  = self.size.y
   local font   = style.font
+  local h_pad  = style.padding.x
 
-  -- pill dimensions
-  local h_pad = style.padding.x
-  local tw    = font:get_width(mode_text)
-  local pw    = tw + h_pad * 2
-  local ph    = font:get_height() + math.floor(style.padding.y * 1.2)
-  local pill_y = oy + math.floor((bar_h - ph) / 2)
-  local pill_x = ox + math.floor(style.padding.x * 0.4)
+  local total_w = 0
+  local pill_x  = ox + math.floor(style.padding.x * 0.4)
 
-  -- draw background rect
-  if bg then
-    renderer.draw_rect(pill_x, pill_y, pw, ph, bg)
+  for _, provider in pairs(pills) do
+    local ok, text, bg_key, fg_key = pcall(provider)
+    if ok and text then
+      local bg = bg_key and style[bg_key]
+      local fg = (fg_key and style[fg_key]) or style.text
+
+      local tw = font:get_width(text)
+      local pw = tw + h_pad * 2
+      local ph = font:get_height() + math.floor(style.padding.y * 1.2)
+      local pill_y = oy + math.floor((bar_h - ph) / 2)
+
+      if bg then
+        renderer.draw_rect(pill_x + total_w, pill_y, pw, ph, bg)
+      end
+
+      common.draw_text(font, fg, text, "center", pill_x + total_w, oy, pw, bar_h)
+
+      total_w = total_w + pw + math.floor(style.padding.x * 0.8)
+    end
   end
 
-  -- draw mode text centered in pill
-  common.draw_text(font, fg, mode_text, "center", pill_x, oy, pw, bar_h)
-
-  -- return total space taken (pill + a small gap)
-  return pw + math.floor(style.padding.x * 0.8)
+  return total_w
 end
 
 -- ── item assembly ─────────────────────────────────────────────────────────────
@@ -235,7 +223,6 @@ end
 function StatusView:get_items()
   local sep = self.sep
   local gi  = git_items(sep)
-  local ti  = tab_items(sep)
 
   -- ── editor view ─────────────────────────────────────────────────────────────
   if getmetatable(core.active_view) == DocView then
@@ -257,10 +244,9 @@ function StatusView:get_items()
       push(left, style.git_modified or style.accent, "-", style.text, style.dim, sep, style.text)
     end
 
-    -- RIGHT:  [1] 2 3 | 42:18 | 37% | lf
+    -- RIGHT:  42:18 | 37% | lf   (a tab indicator, if any, is appended by
+    -- the `tab` extension wrapping this method — see the note above)
     local right = {}
-
-    if ti then push_list(right, ti) end
 
     -- cursor position (vim-style line:col)
     push(right, style.dim, tostring(line) .. ":" .. tostring(col), style.text)
@@ -288,7 +274,6 @@ function StatusView:get_items()
   if gi then push_list(left, gi) end
 
   local right = {}
-  if ti then push_list(right, ti) end
   push(right, style.dim, tostring(#core.docs) .. " buf", style.text)
 
   return left, right
@@ -302,7 +287,7 @@ function StatusView:draw()
   local left, right = self:get_items()
 
   -- Draw vim mode pill first; get its width to shift left items
-  local pill_w = self:draw_vim_pill()
+  local pill_w = self:draw_status_pills()
 
   self:draw_items(left,  false, nil, pill_w)
   self:draw_items(right, true)

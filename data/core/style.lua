@@ -42,6 +42,11 @@ local function fallback(key, hex)
   if style[key] == nil then style[key] = { common.color(hex) } end
 end
 
+-- Public so extensions can register their own style fallbacks instead of
+-- core hardcoding colors that only one plugin uses (e.g. vim mode pill
+-- colors, git status colors). Same helper as the local `fallback` above.
+style.set_fallback = fallback
+
 fallback("background", "#050507")
 fallback("background2", "#0b0b10")
 fallback("background3", "#15151c")
@@ -62,12 +67,11 @@ fallback("titlebar_text", "#9a9aaa")
 fallback("titlebar_text_focus", "#eeeeff")
 fallback("titlebar_button_hover", "#303040")
 fallback("titlebar_close_hover", "#e06060")
-fallback("vim_pill_fg", "#eeeeff")
-fallback("vim_normal_bg", "#30303a")
-fallback("vim_insert_bg", "#12345a")
-fallback("vim_visual_bg", "#4a3300")
-fallback("vim_replace_bg", "#4a1616")
-fallback("vim_command_bg", "#204020")
+-- git_* are a shared theme vocabulary, not one plugin's colors: every
+-- bundled theme defines all six, and several independent places read
+-- them with an `or` fallback (statusview.lua's git_items() in core,
+-- plugins/treeview/). Kept here as the neutral pre-theme fallback rather
+-- than picking one consumer to own it.
 fallback("git_modified", "#d0ad55")
 fallback("git_added", "#65b875")
 fallback("git_deleted", "#d06060")

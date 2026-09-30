@@ -1,9 +1,13 @@
 return {
-  -- core: engine defaults -- doc editing, movement/selection, window/root nav, find & replace
+  -- core: engine defaults -- doc editing, movement/selection, window/root nav
+  --
+  -- Every binding here names a command this runtime registers. The
+  -- user-facing workflows — the command palette, find file, open file, open
+  -- folder — are not here: they are optional plugins that own their own
+  -- keystrokes, so an editor with no extensions has no dead keys, and an
+  -- editor with them gets ctrl+shift+p, ctrl+p and ctrl+o from the plugin
+  -- that implements them.
   {
-    ["ctrl+shift+p"] = "core:find-command",
-    ["ctrl+p"] = "core:find-file",
-    ["ctrl+o"] = "core:open-file",
     ["ctrl+n"] = "core:new-doc",
     ["alt+return"] = "core:toggle-fullscreen",
 
@@ -17,23 +21,18 @@ return {
     ["alt+k"] = "root:switch-to-down",
 
     ["ctrl+w"] = "root:close",
-    ["ctrl+tab"] = "root:switch-to-next-tab",
-    ["ctrl+shift+tab"] = "root:switch-to-previous-tab",
-    ["ctrl+pageup"] = "root:move-tab-left",
-    ["ctrl+pagedown"] = "root:move-tab-right",
-    ["alt+1"] = "root:switch-to-tab-1",
-    ["alt+2"] = "root:switch-to-tab-2",
-    ["alt+3"] = "root:switch-to-tab-3",
-    ["alt+4"] = "root:switch-to-tab-4",
-    ["alt+5"] = "root:switch-to-tab-5",
-    ["alt+6"] = "root:switch-to-tab-6",
-    ["alt+7"] = "root:switch-to-tab-7",
-    ["alt+8"] = "root:switch-to-tab-8",
-    ["alt+9"] = "root:switch-to-tab-9",
+    ["ctrl+pageup"] = "root:move-pane-view-left",
+    ["ctrl+pagedown"] = "root:move-pane-view-right",
+    ["alt+1"] = "root:switch-to-pane-view-1",
+    ["alt+2"] = "root:switch-to-pane-view-2",
+    ["alt+3"] = "root:switch-to-pane-view-3",
+    ["alt+4"] = "root:switch-to-pane-view-4",
+    ["alt+5"] = "root:switch-to-pane-view-5",
+    ["alt+6"] = "root:switch-to-pane-view-6",
+    ["alt+7"] = "root:switch-to-pane-view-7",
+    ["alt+8"] = "root:switch-to-pane-view-8",
+    ["alt+9"] = "root:switch-to-pane-view-9",
 
-    ["ctrl+f"] = "find-replace:find",
-    ["shift+r"] = "find-replace:previous-find",
-    ["ctrl+shift+h"] = "find-replace:clear-highlight",
     ["ctrl+g"] = "doc:go-to-line",
     ["ctrl+s"] = "doc:save",
     ["ctrl+shift+s"] = "doc:save-as",
@@ -60,7 +59,9 @@ return {
     ["ctrl+shift+return"] = "doc:newline-above",
     ["ctrl+j"] = "doc:join-lines",
     ["ctrl+a"] = "doc:select-all",
-    ["ctrl+d"] = { "find-replace:select-next", "doc:select-word" },
+    -- find-replace plugin prepends "find-replace:select-next" to this
+    -- stroke via keymap.add() at load time; see data/plugins/findreplace/init.lua.
+    ["ctrl+d"] = "doc:select-word",
     ["ctrl+l"] = "doc:select-lines",
     ["ctrl+/"] = "doc:toggle-line-comments",
     ["ctrl+up"] = "doc:move-lines-up",
@@ -98,13 +99,7 @@ return {
     ["shift+pageup"] = "doc:select-to-previous-page",
     ["shift+pagedown"] = "doc:select-to-next-page",
   }
-,
 
-  -- core: empty view (shown when no file is open)
-  {
-    ["ctrl+o"]       = "empty-view:open-file",
-    ["ctrl+shift+o"] = "empty-view:open-folder",
-  }
 ,
 
   -- core: log view
@@ -113,111 +108,4 @@ return {
     ["ctrl+a"] = "log:select-all",
   }
 ,
-
-  -- plugins/tab: cycling, jump-to-tab, lifecycle, reorder
-  {
-    -- cycle
-    ["ctrl+tab"]       = "tab:next",
-    ["ctrl+shift+tab"] = "tab:prev",
-
-    -- jump to tab N  (Ctrl+1 … Ctrl+9, VSCode-style)
-    ["ctrl+1"] = "tab:go-1",
-    ["ctrl+2"] = "tab:go-2",
-    ["ctrl+3"] = "tab:go-3",
-    ["ctrl+4"] = "tab:go-4",
-    ["ctrl+5"] = "tab:go-5",
-    ["ctrl+6"] = "tab:go-6",
-    ["ctrl+7"] = "tab:go-7",
-    ["ctrl+8"] = "tab:go-8",
-    ["ctrl+9"] = "tab:go-9",
-
-    -- lifecycle
-    ["ctrl+t"]       = "tab:new",
-    ["ctrl+shift+w"] = "tab:close",
-
-    -- reorder
-    ["ctrl+shift+pageup"]   = "tab:move-left",
-    ["ctrl+shift+pagedown"] = "tab:move-right",
-  }
-,
-
-  -- plugins/window: focus, split, close, resize
-  {
-    -- ── focus (Alt + hjkl, like VEX) ─────────────────────────────────────────
-    ["alt+h"] = "window:focus-left",
-    ["alt+j"] = "window:focus-down",
-    ["alt+k"] = "window:focus-up",
-    ["alt+l"] = "window:focus-right",
-    ["alt+w"] = "window:focus-next",
-    ["alt+p"] = "window:focus-prev-window",
-    -- ── split ─────────────────────────────────────────────────────────────────
-    ["ctrl+\\"]        = "window:vsplit",
-    ["ctrl+shift+\\"]  = "window:split",
-
-    -- ── close ─────────────────────────────────────────────────────────────────
-    ["alt+c"] = "window:close",
-    ["alt+o"] = "window:only",
-
-    -- ── resize (Alt + arrow keys, like VEX) ───────────────────────────────────
-    ["alt+right"] = "window:increase-width",
-    ["alt+left"]  = "window:decrease-width",
-    ["alt+up"]    = "window:increase-height",
-    ["alt+down"]  = "window:decrease-height",
-    ["alt+="]     = "window:equalize",
-  }
-,
-
-  -- plugins/treeview: tree actions (toggle/focus/new-file)
-  {
-    ["f2"]            = {"treeview:toggle", "treeview:focus-and-refresh"},
-    ["f3"]            = {"treeview:focus"},
-    ["f4"]            = {"find-replace:repeat-find"},
-    ["ctrl+\\"]       = "treeview:toggle",
-    ["ctrl+shift+e"]  = "treeview:focus",
-    ["ctrl+shift+n"]  = "treeview:new-file",
-    ["ctrl+shift+alt+n"] = "treeview:new-directory",
-  }
-,
-
-  -- plugins/treeview: list navigation (up/down/open/collapse/rename/delete/refresh)
-  {
-    ["up"]            = "treeview:select-previous",
-    ["down"]          = "treeview:select-next",
-    ["return"]        = "treeview:open-cursor-item",
-    ["keypad enter"]  = "treeview:open-cursor-item",
-    ["left"]          = "treeview:collapse-or-parent",
-    ["right"]         = "treeview:expand-or-child",
-    ["ctrl+r"]        = "treeview:rename-key",
-    ["delete"]        = "treeview:delete-key",
-    ["ctrl+shift+r"]  = "treeview:refresh-key",
-  }
-,
-
-  -- plugins/core/autocomplete: popup navigation
-  {
-    ["tab"]    = "autocomplete:complete",
-    ["up"]     = "autocomplete:previous",
-    ["down"]   = "autocomplete:next",
-    ["escape"] = "autocomplete:cancel",
-  }
-,
-
-  -- plugins/core/session: recent files/dirs, save
-  {
-    ["ctrl+shift+r"] = "session:open-recent",
-    ["ctrl+shift+d"] = "session:open-recent-dirs",
-    ["ctrl+alt+s"]   = "session:save",
-  }
-,
-
-  -- plugins/core/projectsearch: refresh, find, result navigation
-  {
-    ["f5"]           = "project-search:refresh",
-    ["ctrl+shift+f"] = "project-search:find",
-    ["up"]           = "project-search:select-previous",
-    ["down"]         = "project-search:select-next",
-    ["return"]       = "project-search:open-selected",
-  }
-,
-
 }

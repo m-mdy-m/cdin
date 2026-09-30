@@ -1,13 +1,26 @@
 local common = require "core.utils.common"
 local config  = require "core.config"
-local git     = require "core.git"
-
-local function flush_treeview_cache()
-  local ok, Cache = pcall(require, "X.core.treeview.cache")
-  if ok and Cache and Cache.flush then Cache.flush() end
-end
 
 local M = {}
+local _core = nil
+
+local function install_vcs_hook(core)
+  core.register_vcs_provider = core.register_vcs_provider or function(provider)
+    core.vcs_provider = provider
+  end
+end
+
+local function get_vcs()
+  return _core and _core.vcs_provider
+end
+
+M._after_root_change = {}
+
+local function flush_treeview_cache()
+  for _, fn in ipairs(M._after_root_change) do
+    pcall(fn)
+  end
+end
 
 local _scanned = {}
 local _prio_q  = {}
@@ -23,11 +36,16 @@ local function get_root()
 end
 
 local function refresh_git_ignored()
-  pcall(git.status.refresh_ignored_now)
+  local vcs = get_vcs()
+  if vcs and vcs.refresh_ignored_now then
+    pcall(vcs.refresh_ignored_now)
+  end
 end
 
 local function is_git_ignored(a)
-  return git.status.is_ignored(a)
+  local vcs = get_vcs()
+  if not vcs or not vcs.is_ignored then return false end
+  return vcs.is_ignored(a)
 end
 
 local function compare_file(a, b)
@@ -105,7 +123,74 @@ function M.prioritize(path)
   table.insert(_prio_q, 1, path)
 end
 
+-- Switching project directory.
+--
+-- cdin is single-project: "which project" is the process working directory,
+-- and the scan thread notices that it changed and rebuilds core.project_files
+-- from it. So this owns the whole transition — validate, chdir, reset the
+-- cached scan state — and the thread does the rest on its next tick.
+--
+-- It is a runtime API rather than something an extension does inline
+-- because the state it touches is the runtime's: core.project_dir, the
+-- project_files table, and the revision counter the views watch. An
+-- extension that chdir'd on its own would leave the revision stale and the
+-- tree would keep showing the old project until something else forced a
+-- rescan.
+--
+-- Returns true, or false plus a reason. The caller reports the reason; this
+-- does not, so the same call works from a command, a keymap or a palette.
+function M.set_project_dir(path)
+  if type(path) ~= "string" or path == "" then
+    return false, "no path given"
+  end
+
+  -- Trailing separators and backslashes are noise here: the user types them,
+  -- and a path that differs only in those is the same directory.
+  local cleaned = path:gsub("%s+$", ""):gsub("\\", "/"):gsub("/+$", "")
+  if cleaned == "" then return false, "no path given" end
+
+  local abs = system.absolute_path(cleaned)
+  if not abs then return false, "cannot resolve: " .. cleaned end
+
+  local info = system.get_file_info(abs)
+  if not info or info.type ~= "dir" then
+    return false, "not a folder: " .. abs
+  end
+
+  -- system.chdir raises on failure rather than returning false, so the call
+  -- has to be guarded or a bad path takes the whole thing down instead of
+  -- reporting why it did not work.
+  local ok, err = pcall(system.chdir, abs)
+  if not ok then
+    return false, "cannot enter: " .. tostring(err or abs)
+  end
+
+  -- The thread detects a changed root on its next tick, but core.project_dir
+  -- and the file list are read synchronously by the views, so they are
+  -- updated here rather than one frame later.
+  local core = _core
+  if core then
+    core.project_dir = abs
+    core.project_files = {}
+    bump_revision(core)
+  end
+
+  -- Drop the cached scan so the new root is walked from scratch. Without
+  -- this the old project's entries would still be in _scanned and a
+  -- same-named file in the new project would never be visited.
+  _scanned = {}
+  _prio_q  = {}
+  _bg_q    = {}
+  _root    = nil
+
+  if core then core.log("Project directory: %s", abs) end
+  return true
+end
+
 function M.thread(core)
+  _core = core
+  install_vcs_hook(core)
+
   local cycle = 0
 
   local function do_initial_scan()

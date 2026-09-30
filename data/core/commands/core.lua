@@ -1,7 +1,15 @@
+-- The editor's own commands.
+--
+-- What is here is what the runtime is: document and view mechanics, window
+-- management, the log, quitting. What is not here is any user-facing
+-- workflow that merely uses them — the command palette, the file finders,
+-- the module pickers. Those are optional plugins, so an editor with no
+-- extensions installed has exactly this set and no more.
+--
+-- The line is drawn at "could this work without any input from the user?".
+-- core:open-file cannot: it prompts for a path. core:new-doc can.
 local core = require "core"
-local common = require "core.utils.common"
 local command = require "core.input.command"
-local keymap = require "core.input.keymap"
 local LogView = require "core.views.logview"
 
 
@@ -21,93 +29,15 @@ command.add(nil, {
     system.set_window_mode(fullscreen and "fullscreen" or "normal")
   end,
 
-  ["core:reload-module"] = function()
-    core.command_view:enter("Reload Module", function(text, item)
-      local text = item and item.text or text
-      core.reload_module(text)
-      core.log("Reloaded module %q", text)
-    end, function(text)
-      local items = {}
-      for name in pairs(package.loaded) do
-        table.insert(items, name)
-      end
-      return common.fuzzy_match(items, text)
-    end)
-  end,
-
-  ["core:find-command"] = function()
-    local commands = command.get_all_valid()
-    core.command_view:enter("Do Command", function(text, item)
-      if item then
-        command.perform(item.command)
-      end
-    end, function(text)
-      local res = common.fuzzy_match(commands, text)
-      for i, name in ipairs(res) do
-        res[i] = {
-          text = command.prettify_name(name),
-          info = keymap.get_binding(name),
-          command = name,
-        }
-      end
-      return res
-    end)
-  end,
-
-  ["core:find-file"] = function()
-    core.command_view:enter("Open File From Project", function(text, item)
-      text = item and item.text or text
-      core.root_view:open_doc(core.open_doc(text))
-    end, function(text)
-      local files = {}
-      for _, item in pairs(core.project_files) do
-        if item.type == "file" then
-          table.insert(files, item.filename)
-        end
-      end
-      return common.fuzzy_match(files, text)
-    end)
-  end,
-
+  -- ctrl+n. Stays in the runtime: a new empty document needs no extension,
+  -- and the vim integrations and every plugin that opens a document assume
+  -- it is there.
   ["core:new-doc"] = function()
     core.root_view:open_doc(core.open_doc())
-  end,
-
-  ["core:open-file"] = function()
-    core.command_view:enter("Open File", function(text, item)
-      local path = (item and item.text) or text
-      if not path or path == "" then return end
-      path = path:match("^%s*(.-)%s*$")
-      local abs  = system.absolute_path(path)
-      if not abs then core.error("Cannot resolve: %s", path); return end
-      local info = system.get_file_info(abs)
-      if not info or info.type ~= "file" then
-        core.error("Not a file: %s", abs); return
-      end
-      core.try(function()
-        core.root_view:open_doc(core.open_doc(abs))
-      end)
-    end, common.path_suggest)
   end,
 
   ["core:open-log"] = function()
     local node = core.root_view:get_active_node()
     node:add_view(LogView())
-  end,
-
-  ["core:open-user-module"] = function()
-    local config = require "core.config"
-    core.root_view:open_doc(core.open_doc(config.user_dir .. "/init.lua"))
-  end,
-
-  ["core:open-project-module"] = function()
-    local filename = ".lite_project.lua"
-    if system.get_file_info(filename) then
-      core.root_view:open_doc(core.open_doc(filename))
-    else
-      local doc = core.open_doc()
-      core.root_view:open_doc(doc)
-      doc:save(filename)
-    end
   end,
 })
