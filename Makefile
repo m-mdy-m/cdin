@@ -8,3 +8,5 @@ include mk/build.mk
 include mk/install.mk
 
 .DEFAULT_GOAL := build
+
+include mk/bundle.mk

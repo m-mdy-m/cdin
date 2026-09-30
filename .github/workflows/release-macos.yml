@@ -34,7 +34,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ── Cache: Homebrew packages ─────────────────────────────────────────
+      # cdin-x is where the mandatory set lives: the vim plugin, the default
+      # theme and the fonts. A cdin build bundles it into build/…/data via
+      # scripts/assemble_data.py -> scripts/bundle.py. It is checked out as
+      # a sibling so the default CDINX_DIR (../cdin-x) resolves; the build
+      # itself never fetches anything.
+      - name: Checkout cdin-x (mandatory bundle source)
+        uses: actions/checkout@v4
+        with:
+          repository: m-mdy-m/cdin-x
+          path: cdin-x
+
       - name: Cache Homebrew packages
         uses: actions/cache@v4
         id: cache-brew
@@ -100,7 +110,6 @@ jobs:
           [[ "$PNG_COUNT" -eq 0 ]] && { echo "::error::Icon PNGs not generated"; exit 1; }
           echo "Generated ${PNG_COUNT} PNG icons"
 
-
       - name: Build release binary
         env:
           PKG_CONFIG_PATH: /opt/sdl3/lib/pkgconfig
@@ -130,7 +139,11 @@ jobs:
 
           cp "$BIN" "$MACOS_DIR/cdin"
           chmod 755 "$MACOS_DIR/cdin"
-          [[ -d data ]] && cp -r data "$MACOS_DIR/"
+          # The ASSEMBLED data/, next to the binary that was just built, not
+          # the source data/: see the note in release-linux.yml. A release
+          # without the bundle cannot start.
+          BUILD_DIR="$(dirname "$BIN")"
+          [[ -d "$BUILD_DIR/data" ]] && cp -r "$BUILD_DIR/data" "$MACOS_DIR/"
 
           [[ -f scripts/icons/icon.icns ]] && cp scripts/icons/icon.icns "$RESOURCES/cdin.icns"
 

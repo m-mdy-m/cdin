@@ -39,6 +39,11 @@ RUN echo "/opt/sdl3/lib" > /etc/ld.so.conf.d/sdl3.conf && \
 WORKDIR /src
 
 COPY . .
+# cdin-x, checked out by docker.yml into ./cdin-x before the build. It is
+# the source of the mandatory bundle: the vim plugin, the default theme and
+# the fonts. Placed at /src/cdin-x so the default CDINX_DIR (../cdin-x,
+# relative to /src) resolves with no extra configuration.
+COPY cdin-x/ /src/cdin-x/
 
 # ── Icon assets — same recipe as release-linux.yml (rsvg-convert + Pillow) ──
 RUN pip3 install --quiet Pillow && \
@@ -82,7 +87,10 @@ RUN echo "/opt/sdl3/lib" > /etc/ld.so.conf.d/sdl3.conf && (ldconfig || ldconfig 
 # ── cdin — the layout from mk/install.mk: the real binary and data/ live side
 RUN install -dm755 /usr/local/lib/cdin
 COPY --from=builder /src/build/linux-release/cdin /usr/local/lib/cdin/cdin
-COPY data/ /usr/local/lib/cdin/data/
+# The ASSEMBLED data/ that the build produced, not the source data/: the
+# source holds only the runtime core, and the mandatory set (vim plugin,
+# default theme, fonts) is bundled from cdin-x into the build output.
+COPY --from=builder /src/build/linux-release/data/ /usr/local/lib/cdin/data/
 RUN chmod 755 /usr/local/lib/cdin/cdin && \
     ln -sf /usr/local/lib/cdin/cdin /usr/local/bin/cdin
 
