@@ -7,10 +7,17 @@ local logo    = require "core.rootview.logo"
 
 local EmptyView = View:extend()
 
+-- Set by whichever plugin provides recents, at load time, via
+-- core.register_recent_provider(). EmptyView only ever reads it through
+-- get_session() below — it does not know which plugin, if any, registered.
+core.recent_provider = core.recent_provider or nil
+
+function core.register_recent_provider(provider)
+  core.recent_provider = provider
+end
+
 local function get_session()
-  local ok, m = pcall(require, "X.core.session")
-  if ok and m then return m end
-  return nil
+  return core.recent_provider
 end
 
 local function rawget_g(name)
@@ -25,59 +32,62 @@ local RECENT_MAX   = 7
 local ICON_FILE = "f"
 local ICON_DIR  = "d"
 
+-- Quick-reference shortcuts shown on the empty view.
+--
+-- Only what the runtime itself owns: the recent-item navigation this view
+-- implements, and ctrl+n. The command palette, find file, open file and open
+-- folder are optional plugins, so listing them here would print a keystroke
+-- that does nothing on an editor with no extensions installed. Those plugins
+-- contribute their own entries through core.register_help_shortcuts(), which
+-- core/help.lua owns — so this list and the screen are the same length.
 local SHORTCUTS = {
   { key = "↑ / ↓",        desc = "Navigate recent items",    section = true },
   { key = "Tab",           desc = "Switch Files ↔ Dirs" },
   { key = "Enter",         desc = "Open selected item" },
   { key = "Esc",           desc = "Clear selection" },
-  { key = "ctrl+o",        desc = "Open file…",              section = true },
-  { key = "ctrl+shift+o",  desc = "Open folder…" },
-  { key = "ctrl+shift+r",  desc = "Recent files picker" },
-  { key = "ctrl+shift+d",  desc = "Recent dirs picker" },
   { key = "ctrl+n",        desc = "New document" },
-  -- Editor
-  { key = "ctrl+p",        desc = "Command palette",         section = true },
-  { key = "ctrl+shift+p",  desc = "Find file (fuzzy)" },
-  { key = ":q / :wq",     desc = "Quit / Save & Quit" },
-  { key = "i / Esc",      desc = "Insert / Normal mode" },
 }
 
-local function safe_open_file(raw)
-  if not raw or raw == "" then return end
-  raw = raw:match("^%s*(.-)%s*$")
-  local abs = system.absolute_path(raw)
-  if not abs then
-    core.error("Cannot resolve path: %s", raw)
-    return
-  end
-  local info = system.get_file_info(abs)
-  if not info then
-    core.error("File not found: %s", abs)
-    return
-  end
-  if info.type ~= "file" then
-    core.error("Not a file: %s", abs)
-    return
-  end
-  core.try(function()
-    core.root_view:open_doc(core.open_doc(abs))
-  end)
+-- The plugin-contributed half of the list. empty_view.lua does not know or
+-- care which plugin contributed which entry; it just appends them after the
+-- core list, in registration order. The registration API itself lives in
+-- core/help.lua rather than here, because a plugin calls it from its own
+-- init() and must not depend on this view having been constructed first.
+local help = require "core.help"
+
+local function all_shortcuts()
+  return help.entries(SHORTCUTS)
 end
 
 command.add(nil, {
+  -- These two delegate. The open-file prompt and the open-folder prompt
+  -- are optional plugins, and this view must not carry a second copy of
+  -- either: two implementations of "open a file" is how the two drift, and
+  -- the copy in the runtime is the one nobody tests.
+  --
+  -- command.perform on a name nothing registered returns false and does
+  -- nothing, which is the behaviour wanted here: with no plugin installed,
+  -- the keystroke is a no-op rather than an error.
   ["empty-view:open-file"] = function()
-    core.command_view:enter("Open File", function(text, item)
-      safe_open_file((item and item.text) or text)
-    end, common.path_suggest)
+    command.perform("core:open-file")
   end,
   ["empty-view:open-folder"] = function()
     command.perform("core:open-folder")
   end,
   ["empty-view:open-recent-files"] = function()
-    command.perform("session:open-recent")
+    -- Routed through the core.recent_provider hook rather than a hardcoded
+    -- plugin command name: opens whatever picker the registered provider
+    -- wants to show, or does nothing if none is registered.
+    local session = get_session()
+    if session and session.open_recent_picker then
+      session.open_recent_picker()
+    end
   end,
   ["empty-view:open-recent-dirs"] = function()
-    command.perform("session:open-recent-dirs")
+    local session = get_session()
+    if session and session.open_recent_dirs_picker then
+      session.open_recent_dirs_picker()
+    end
   end,
 })
 
@@ -148,7 +158,7 @@ local function draw_shortcuts(px, py)
   local y        = draw_section_header("Quick Reference", px, py)
   local first    = true
 
-  for _, item in ipairs(SHORTCUTS) do
+  for _, item in ipairs(all_shortcuts()) do
     if item.section and not first then
       y = y + math.floor(6 * SCALE)
     end
@@ -382,7 +392,7 @@ function EmptyView:draw()
   local logo_h = big_font:get_height() + font:get_height() + style.padding.y * 2
 
   local sh_title_h  = font:get_height() + math.floor(style.padding.y * 0.7) + common.round(SCALE)
-  local shortcuts_h = sh_title_h + #SHORTCUTS * (ITEM_H + math.floor(4 * SCALE))
+  local shortcuts_h = sh_title_h + #all_shortcuts() * (ITEM_H + math.floor(4 * SCALE))
 
   local function recent_block_h(count)
     if count == 0 then return 0 end

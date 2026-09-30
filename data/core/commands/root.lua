@@ -11,7 +11,16 @@ local t = {
     node:close_active_view(core.root_view.root_node)
   end,
 
-  ["root:switch-to-previous-tab"] = function()
+  -- Renamed from root:switch-to-{previous,next}-tab / root:move-tab-*.
+  -- These operate on node.views — the list of open views/buffers within
+  -- the *currently active split pane* (rootview/node.lua) — which is a
+  -- different, lower-level thing than plugins.'s whole-layout
+  -- freeze/restore "tab" concept (data/plugins/tab/manager.lua). Both used
+  -- the word "tab" for their own, unrelated notion of it, which made it
+  -- impossible to tell from a command name alone which system a given
+  -- "tab" command belonged to. The old names are kept below as aliases
+  -- so existing keymaps/scripts referencing them keep working.
+  ["root:switch-to-previous-pane-view"] = function()
     local node = core.root_view:get_active_node()
     local idx = node:get_view_idx(core.active_view)
     idx = idx - 1
@@ -19,7 +28,7 @@ local t = {
     node:set_active_view(node.views[idx])
   end,
 
-  ["root:switch-to-next-tab"] = function()
+  ["root:switch-to-next-pane-view"] = function()
     local node = core.root_view:get_active_node()
     local idx = node:get_view_idx(core.active_view)
     idx = idx + 1
@@ -27,7 +36,7 @@ local t = {
     node:set_active_view(node.views[idx])
   end,
 
-  ["root:move-tab-left"] = function()
+  ["root:move-pane-view-left"] = function()
     local node = core.root_view:get_active_node()
     local idx = node:get_view_idx(core.active_view)
     if idx > 1 then
@@ -36,7 +45,7 @@ local t = {
     end
   end,
 
-  ["root:move-tab-right"] = function()
+  ["root:move-pane-view-right"] = function()
     local node = core.root_view:get_active_node()
     local idx = node:get_view_idx(core.active_view)
     if idx < #node.views then
@@ -60,15 +69,21 @@ local t = {
   end,
 }
 
+t["root:switch-to-previous-tab"] = t["root:switch-to-previous-pane-view"]
+t["root:switch-to-next-tab"]     = t["root:switch-to-next-pane-view"]
+t["root:move-tab-left"]          = t["root:move-pane-view-left"]
+t["root:move-tab-right"]         = t["root:move-pane-view-right"]
+
 
 for i = 1, 9 do
-  t["root:switch-to-tab-" .. i] = function()
+  t["root:switch-to-pane-view-" .. i] = function()
     local node = core.root_view:get_active_node()
     local view = node.views[i]
     if view then
       node:set_active_view(view)
     end
   end
+  t["root:switch-to-tab-" .. i] = t["root:switch-to-pane-view-" .. i]
 end
 
 

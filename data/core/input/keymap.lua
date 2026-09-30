@@ -47,6 +47,39 @@ function keymap.add(map, overwrite)
 end
 
 
+-- Undo a previous keymap.add(). `map` is the same shape that was added
+-- (stroke -> command or list of commands); only the named commands are
+-- detached, so other plugins bound to the same stroke keep working.
+-- This is what lets a plugin's unload() really unbind its keys instead of
+-- leaving them live after the plugin has been unloaded.
+function keymap.remove(map)
+  for stroke, commands in pairs(map or {}) do
+    if type(commands) == "string" then commands = { commands } end
+    local bound = keymap.map[stroke]
+    if bound then
+      for i = #bound, 1, -1 do
+        for _, cmd in ipairs(commands) do
+          if bound[i] == cmd then table.remove(bound, i) end
+        end
+      end
+      if #bound == 0 then keymap.map[stroke] = nil end
+    end
+    -- reverse_map is a cmd -> single stroke lookup, so only clear it
+    -- when no remaining stroke still binds that command.
+    for _, cmd in ipairs(commands) do
+      local still_bound = false
+      for _, other in pairs(keymap.map) do
+        for _, c in ipairs(other) do
+          if c == cmd then still_bound = true; break end
+        end
+        if still_bound then break end
+      end
+      if not still_bound then keymap.reverse_map[cmd] = nil end
+    end
+  end
+end
+
+
 function keymap.get_binding(cmd)
   return keymap.reverse_map[cmd]
 end
