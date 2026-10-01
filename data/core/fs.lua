@@ -120,26 +120,6 @@ function M.dirname(p)
   return _path.dirname(p)
 end
 
-function M.ext(p)
-  return _path.ext(p)
-end
-
-function M.stem(p)
-  return _path.stem(p)
-end
-
-function M.split(p)
-  return _path.split(p)
-end
-
-function M.normalize(p)
-  return _path.normalize(p)
-end
-
-function M.is_absolute(p)
-  return _path.is_absolute(p)
-end
-
 function M.pwd()
   return system.absolute_path(".") or "."
 end

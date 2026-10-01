@@ -235,6 +235,33 @@ the three dead-binding causes under **Fixed**) came out of it and is kept.
 
 ### Removed from the runtime
 
+#### Dead code, by audit
+
+Every symbol below was defined in `data/core/` and had **no reference anywhere** —
+not in core, not in `src/`, not in the tests, not in the docs as a feature, and
+not in cdin-x. Removed because a knob that does nothing is worse than no knob:
+it reads as a promise. Nothing here was on a live path, so nothing here is a
+behaviour change.
+
+| Deleted | File | Was |
+|---------|------|-----|
+| `plugins.autoload_list` | `data/core/plugins.lua` | `return config.plugins`, unread |
+| `core.on_error` | `data/core/lifecycle.lua` | wrote `error.txt`, saved dirty docs — **called by nothing**, ever |
+| `core.runtime.temp` (whole module) + `core.temp_filename` | `data/core/runtime/temp.lua`, `data/core/init.lua` | generated a scratch name from a per-run prefix and swept `EXEDIR` for that prefix on force-quit. Nothing called the generator, so no temp file was ever created and the sweep found nothing |
+| `core.close_log_file` | `data/core/logging.lua` | closed the mirror handle; the process exit closes it |
+| `help.count` | `data/core/help.lua` | number of registered help groups |
+| `common.utf8_len`, `common.bench` | `data/core/utils/common.lua` | a `utf8.len` wrapper, and a `print`-based timing helper |
+| `Object:implement` | `data/core/utils/object.lua` | a mixin helper, never called (and not inherited: `extend` copies only `__`-prefixed keys) |
+| `command.names_of` | `data/core/input/command.lua` | sorted names of a registration map — advertised in the contract, adopted by nobody |
+| `fs.ext`, `fs.stem`, `fs.split`, `fs.normalize`, `fs.is_absolute` | `data/core/fs.lua` | thin `_path` pass-throughs |
+| `config.theme_auto_reload` | `data/core/config.lua` | `true`, read nowhere; there is no theme file watcher |
+| `config.line_limit` | `data/core/config.lua` | `80`, read nowhere; there is no gutter truncation |
+| `style.caret_block_alpha` | `data/core/style.lua` | `0.55`, documented with a failure mode — but **there is no block cursor in this editor**, so nothing read it |
+| `doc_search` local | `data/core/views/docview.lua` | an unused `require "core.doc.search"` binding |
+| `core.views`, `core.utils`, `core.input`, `core.runtime` | four `init.lua` aggregators | re-export tables nobody required. Every consumer already required the leaf directly — `core.views.view`, `core.utils.common`, `core.input.command`, `core.runtime.strict` |
+
+#### Splitting the runtime from the extension set
+
 `data/core/` used to contain things that are workflows, not mechanics:
 
 | Deleted | Lines | Where it is now |
@@ -249,6 +276,7 @@ the three dead-binding causes under **Fixed**) came out of it and is kept.
 | `data/core/session_bootstrap.lua` | 41 | `data/core/preboot.lua` (39 lines, rewritten — same job, no session-plugin dependency) |
 | `core.load_plugins()` from `data/core/lifecycle.lua` | 43 | `core.plugins.load_all()` in the new `data/core/plugins.lua` |
 | `config.optional_plugins` | — | gone with the loader that read it |
+| `command.names_of` | `data/core/input/command.lua` | advertised in the contract; no extension adopted it |
 
 `autoupdate` is gone for good rather than moved: it fetched and self-replaced
 the editor over the network. Updating cdin is the user's job, as it is for

@@ -19,14 +19,6 @@ function common.utf8_chars(text)
 end
 
 
-function common.utf8_len(text)
-  local ok, t = pcall(require, "core.text.utf8")
-  if ok and t and t.len then return t.len(text) end
-  local n = 0
-  for _ in common.utf8_chars(text) do n = n + 1 end
-  return n
-end
-
 function common.visual_text(text, opts)
   if type(text) ~= "string" then return "" end
   local ok, t = pcall(require, "core.text")
@@ -152,16 +144,6 @@ function common.draw_text(font, color, text, align, x,y,w,h, opts)
   return renderer.draw_text(font, text, x, y, color), y + th
 end
 
-
-function common.bench(name, fn, ...)
-  local start = system.get_time()
-  local res = fn(...)
-  local t = system.get_time() - start
-  local ms = t * 1000
-  local per = (t / (1 / 60)) * 100
-  print(string.format("*** %-16s : %8.3fms %6.2f%%", name, ms, per))
-  return res
-end
 
 function common.ensure_dir(path)
   if type(path) ~= "string" or path == "" then return end

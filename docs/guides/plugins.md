@@ -339,4 +339,4 @@ renaming the site directory renames it for both halves at once.
 | [`data/core/init.lua`](../../data/core/init.lua) | `core.add_thread`, `core.set_active_view`, `core.quit` |
 | [`data/core/loop.lua`](../../data/core/loop.lua) | `core.step`, `core.run`, the thread scheduler, and where `core.redraw` is consumed |
 | [`data/core/preboot.lua`](../../data/core/preboot.lua) | the session state read before anything else loads |
-| [`data/core/lifecycle.lua`](../../data/core/lifecycle.lua) | the project module, and an uncalled `core.on_error` |
+| [`data/core/lifecycle.lua`](../../data/core/lifecycle.lua) | the project module, `.lite_project.lua` |

@@ -57,8 +57,8 @@ themes — before anything else, because `config.theme` is applied at
 load time the list is rescanned, so a plugin that installs its themes during its
 own `init()` can still have them listed and selectable; and if the theme named by
 your session file only resolves once plugins have registered their roots, the
-runtime retries unconditionally after loading them. (`config.theme_auto_reload`
-exists in `config.lua` but is read nowhere, so it does not control this.)
+runtime retries unconditionally after loading them. (Nothing watches the theme
+files — there is no key that turns a watcher on.)
 
 ## Every key
 
@@ -196,7 +196,6 @@ because the applier copies every key that is not `name` or `syntax`:
 
 | key | what it is |
 | --- | --- |
-| `caret_block_alpha` | opacity of the block cursor over a selection; `0.55` |
 | `padding` | `{ x, y }` in pixels — `14, 7`, scaled |
 | `divider_size` | 1 |
 | `scrollbar_size` | 4 |
@@ -205,9 +204,10 @@ because the applier copies every key that is not `name` or `syntax`:
 | `titlebar_height` | 34 |
 | `titlebar_button_width` | 46 |
 
-`caret_block_alpha` is the one with a real failure mode: at `1` the selection
-under the block cursor becomes invisible, and at `0` the cursor disappears over
-it.
+There is no `caret_block_alpha` key. One existed with a default of `0.55` and a
+documented failure mode — at `1` the selection under a block cursor became
+invisible — but **there is no block cursor in this editor**, so nothing read it and
+it has been removed. A theme that still sets it lands an unused number on `style`.
 
 ## A worked example
 
@@ -233,7 +233,6 @@ M.background2     = "#131110"
 M.accent          = "#d08770"
 M.syntax.keyword  = "#c4a882"
 M.syntax.comment  = "#6b6055"
-M.caret_block_alpha = 0.7
 
 return M
 ```

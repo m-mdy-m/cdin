@@ -201,8 +201,4 @@ function plugins.unload(name)
   return true
 end
 
-function plugins.autoload_list()
-  return config.plugins
-end
-
 return plugins

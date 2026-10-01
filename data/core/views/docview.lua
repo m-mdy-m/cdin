@@ -5,7 +5,6 @@ local style     = require "core.style"
 local keymap    = require "core.input.keymap"
 local translate = require "core.doc.translate"
 local View      = require "core.views.view"
-local doc_search = require "core.doc.search"
 
 local DocView = View:extend()
 

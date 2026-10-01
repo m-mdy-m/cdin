@@ -52,7 +52,6 @@ fallback("background2", "#0b0b10")
 fallback("background3", "#15151c")
 fallback("text", "#d8d8df")
 fallback("caret", "#ffffff")
-style.caret_block_alpha = style.caret_block_alpha or 0.55
 fallback("accent", "#a89bd8")
 fallback("dim", "#707080")
 fallback("divider", "#252530")
