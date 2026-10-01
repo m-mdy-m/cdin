@@ -71,10 +71,4 @@ function help.entries(core_entries)
   return out
 end
 
--- How many groups are registered. For tests, and for a plugin that wants to
--- know whether anything else already contributes to this screen.
-function help.count()
-  return #groups
-end
-
 return help

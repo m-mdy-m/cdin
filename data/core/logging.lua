@@ -68,11 +68,6 @@ local function install(core)
   function core.log_quiet(...) return log(nil, nil,           ...) end
   function core.error(...)     return log("!", style.accent,  ...) end
 
-  -- Called by core.quit paths that want the file closed cleanly.
-  function core.close_log_file()
-    if mirror_fp then mirror_fp:close(); mirror_fp = nil end
-  end
-
   function core.try(fn, ...)
     local err
     local ok, res = xpcall(fn, function(msg)

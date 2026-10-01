@@ -1,5 +1,4 @@
 require "core.runtime.strict"
-local temp = require "core.runtime.temp"
 
 local config = require "core.config"
 
@@ -15,7 +14,6 @@ local style = require "core.style"
 
 local core = {}
 require("core.logging").install(core)
-core.temp_filename = temp.filename
 
 -- Installs core.register_help_shortcuts / core.unregister_help_shortcuts.
 -- Required here, before any view is built, because plugins call it from their
@@ -41,8 +39,7 @@ function core.quit(force)
   if core._quitting then return end
   if force then
     core._quitting = true
-    core.log("core.quit: force path, deleting temp files; the loop will stop")
-    temp.delete_all()
+    core.log("core.quit: force path; the loop will stop")
     return
   end
   local dirty_count, dirty_name = 0, nil

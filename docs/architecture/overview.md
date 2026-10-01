@@ -104,7 +104,7 @@ Requiring `core` already does a lot, before `core.init()` is ever called:
 `core.style` applying the theme **before plugins run** is why cdin-x registers its
 theme roots from its entry point's `init()`, and why a theme that only exists in
 an extension's root can fall back at startup. The runtime retries after plugins
-load; `config.theme_auto_reload` controls that.
+load, unconditionally — nothing watches the theme files.
 
 Then `core.init()`:
 

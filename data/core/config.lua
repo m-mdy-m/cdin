@@ -17,7 +17,6 @@ config.highlight_current_line = true
 config.line_height = 1.2
 config.indent_size = 2
 config.tab_type = "soft"
-config.line_limit = 80
 
 config.scrolloff = 5
 
@@ -35,8 +34,9 @@ config.direction = "auto"
 config.shaping_enabled = true
 
 -- ── themes ───────────────────────────────────────────────
+-- There is no auto-reload: nothing watches the theme files, and the runtime
+-- re-applies config.theme once after the plugins have loaded, unconditionally.
 config.theme = "default"
-config.theme_auto_reload = true
 
 -- ── plugins ─────────────────────────────────────────────
 -- Selects which SITE plugins load (SITE is config.site_dir below). It has no

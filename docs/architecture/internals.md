@@ -247,7 +247,7 @@ five.
 From `data/core/utils/object.lua`, which is the whole inheritance system:
 
 ```lua
-Object:new()      Object:extend()     Object:implement(...)
+Object:new()      Object:extend()
 Object:is(T)      Object:__tostring() Object:__call(...)
 ```
 
@@ -255,8 +255,7 @@ Object:is(T)      Object:__tostring() Object:__call(...)
 metatable magic beyond that — no `__index` chains to debug, and
 `X.super.new(self)` is the first line of every constructor.
 
-`implement` is for modules that are not classes, and `Object:is` is the
-`instanceof` used everywhere.
+`Object:is` is the `instanceof` used everywhere.
 
 ## `core.fs`
 
@@ -265,7 +264,7 @@ should use rather than shelling out or guessing at separators:
 
 | | |
 | --- | --- |
-| paths | `join`, `basename`, `dirname`, `ext`, `stem`, `split`, `normalize`, `abs`, `is_absolute`, `sep` |
+| paths | `join`, `basename`, `dirname`, `abs`, `sep` |
 | queries | `exists`, `is_dir`, `is_file`, `stat`, `list` (alias `ls`), `pwd` |
 | changes | `mkdir`, `rm`, `touch`, `copy`, `rename`, `move`, `cd` |
 
@@ -312,12 +311,12 @@ C logger's file, `cdin-log.txt` next to the binary, tagged `LUA`. The C logger
 writes its own lines (tagged by level) to the same file, so it reads in the order
 things happened. `CDIN_LUA_LOG=0` turns the Lua half off.
 
-**`core.on_error` is dead code.** `data/core/lifecycle.lua:17` defines it — it
-would write `error.txt` and save every dirty document to `<filename>~` — but
-nothing in the tree calls it. An uncaught raise propagates to the bootstrap's
-`xpcall` (`src/lua/api.c:39-49`), which calls `cdin_log_fatal` → `log_fatal` →
-`cdin-log.txt`, and then `main()` returns and the process exits normally. **There is
-no crash handler, and no `error.txt` is ever written.** Do not rely on either.
+**There is no crash handler, and no `error.txt` is ever written.** An uncaught
+raise propagates to the bootstrap's `xpcall` (`src/lua/api.c:39-49`), which calls
+`cdin_log_fatal` → `log_fatal` → `cdin-log.txt`, and then `main()` returns and the
+process exits normally. It used to write `error.txt` and save every dirty document
+to `<filename>~` from a `core.on_error` handler in `data/core/lifecycle.lua`, but
+nothing ever called it, so it has been removed. Do not rely on either.
 
 ## Things that are load-bearing
 
@@ -364,6 +363,6 @@ are still there for the other fourteen translations.
 | [`data/core/doc/init.lua`](../../data/core/doc/init.lua) | the document, undo, the hooks |
 | [`data/core/doc/highlighter.lua`](../../data/core/doc/highlighter.lua) | the incremental highlighter |
 | [`data/core/text/`](../../data/core/text) | UTF-8, bidi, shaping |
-| [`data/core/utils/object.lua`](../../data/core/utils/object.lua) | `extend`, `is`, `implement` |
+| [`data/core/utils/object.lua`](../../data/core/utils/object.lua) | `extend`, `is` |
 | [`data/core/fs.lua`](../../data/core/fs.lua) | the filesystem and path layer |
 | [`data/core/logging.lua`](../../data/core/logging.lua) | `core.try` and the three levels |

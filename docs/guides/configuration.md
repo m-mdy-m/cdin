@@ -144,12 +144,12 @@ therefore fall back silently at startup — so after plugins load, the runtime
 retries: if `config.theme` differs from what actually applied and now resolves to
 a real file, it is applied again. That retry is unconditional.
 
-There is a `config.theme_auto_reload` key in `config.lua` with the default
-`true`, and **it is read nowhere.** Setting it to `false` does not disable
-anything. It is listed here so you do not spend time on it.
+There is no `config.theme_auto_reload` key. It existed once with the default
+`true` and was read nowhere — there is no file watcher — so it has been removed
+rather than left as a knob that does nothing.
 
 Prefer changing themes at runtime — cdin-x's theme switcher does this, and it
-writes `config.theme` — over editing this key and restarting.
+writes `config.theme` — over editing `config.theme` and restarting.
 
 See [themes](themes.md) for the format and the full colour list.
 
@@ -175,16 +175,11 @@ thing in a language with unusual identifiers. It is not validated against
 anything — a pattern that does not compile is a pattern that matches nothing,
 silently.
 
-### Two keys that do nothing
-
-These are set in `config.lua` and **read nowhere in this repository.** Setting
-them has no effect today; they are not documented as features because they are
-not:
+### One key core does not read
 
 | key | default | status |
 | --- | --- | --- |
-| `config.symbol_pattern` | `"[%a_][%w_]*"` | never read; movement uses `non_word_chars` alone |
-| `config.line_limit` | `80` | never read; there is no gutter truncation |
+| `config.symbol_pattern` | `"[%a_][%w_]*"` | not read by core — movement uses `non_word_chars` alone. cdin-x's search and autocomplete plugins **do** read it (`X/core/search/buffer.lua`, `X/core/autocomplete/source.lua`), so it is not dead, just not a core guarantee. |
 
 If you are chasing a movement bug, `non_word_chars` is the key that matters.
 

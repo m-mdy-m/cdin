@@ -318,9 +318,10 @@ recreated on every build precisely so a stale copy cannot survive.
 
 ## The editor crashed and no `error.txt` appeared
 
-**It never will.** `data/core/lifecycle.lua:17` defines a `core.on_error` handler
-that would write `error.txt` and save every dirty document to `<filename>~` —
-and nothing in the tree calls it. It is dead code.
+**It never will.** There is no crash handler that writes one. `data/core/lifecycle.lua`
+used to carry a `core.on_error` that would write `error.txt` and save every dirty
+document to `<filename>~` — and nothing in the tree ever called it, so it has been
+removed.
 
 What actually happens on an uncaught error: the bootstrap's `xpcall` catches it,
 reports it through `cdin_log_fatal` into **`cdin-log.txt`**, and `main()` returns
@@ -331,8 +332,8 @@ normally. So the one file that reliably has a crash traceback is the one that do
 do lose work, the log view (`core:open-log`) will usually tell you what happened
 even though nothing was written to disk for you.
 
-If this matters to you, the fix is one line — calling `core.on_error` from the
-bootstrap handler — and it is a reasonable thing to propose.
+If a crash backup matters to you, it has to be written from the bootstrap handler
+in `src/lua/api.c`, and that is a reasonable thing to propose.
 
 ## A command exists but does nothing
 

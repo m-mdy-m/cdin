@@ -106,7 +106,6 @@ core behaviour has to do it through one of the seams below.
 ```lua
 command.add(predicate, map, overwrite)
 command.remove(names)               -- a name, or a list of names
-command.names_of(map)               -- the sorted names a map would register
 command.perform(name)               -- true if it ran
 command.get_all_valid()             -- what is available right now
 command.prettify_name(name)         -- for display
@@ -205,8 +204,8 @@ failing.
 `config.theme` is applied at `style.lua` load time, **before any plugin runs.** A
 theme that only exists in a root an extension registers later can therefore fall
 back at startup; the runtime retries once plugins have loaded. That retry is
-unconditional — the `config.theme_auto_reload` key exists in `config.lua` but is
-read nowhere, so it does not control this.
+unconditional — nothing watches the theme files, and there is no key that turns
+one on.
 
 ## Styles
 
@@ -514,10 +513,10 @@ for all of them:
 | `core._status_pills`, `core._help_shortcut_groups` | documented as the removal path, and still internals |
 | `core.project` | use `core.set_project_dir` |
 | `core.window_title`, `core.frame_start` | frame-loop internals |
-| `core.on_error` | defined in `lifecycle.lua` and **called by nothing** |
-| `config.theme_auto_reload`, `config.line_limit`, `config.symbol_pattern` | defined in `config.lua` and **read nowhere** |
+| `config.symbol_pattern` | **is** read, by cdin-x — but it is cdin-x's word pattern, not a core guarantee |
 | `core.project` | does not exist; it is a local in `core/init.lua`. Use `core.set_project_dir` |
 | any module under `core.views.*` except the ones named above | |
+| the aggregator modules `core.views`, `core.utils`, `core.input`, `core.runtime` | **removed.** require the leaf: `core.views.view`, `core.utils.common`, `core.input.command`, `core.runtime.strict` |
 
 **And these commands do not exist**, which is the other half of the contract —
 cdin-x owns them:

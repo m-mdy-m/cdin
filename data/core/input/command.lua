@@ -44,17 +44,6 @@ function command.remove(names)
 end
 
 
--- Names that the given map would register, as a sorted list. A plugin
--- keeps its own registration map around and hands it back here on
--- unload, so the list of names it owns lives in exactly one place.
-function command.names_of(map)
-  local out = {}
-  for name in pairs(map or {}) do out[#out + 1] = name end
-  table.sort(out)
-  return out
-end
-
-
 local function capitalize_first(str)
   return str:sub(1, 1):upper() .. str:sub(2)
 end
