@@ -25,6 +25,15 @@ require("core.help").install(core)
 
 core.project_dir = nil
 
+-- Set by core.quit, read by core.run. It is a REQUEST, not an exit: the frame
+-- loop is on the stack whenever this is called (a keymap -> a command ->
+-- a submit callback), and tearing the process down from there is what used to
+-- hang the editor. `os.exit()` ran atexit(SDL_Quit) -> SDL_DestroyWindow
+-- while SDL was still inside the event dispatch that called us, and what came
+-- back was a live process with no window and no event loop: still
+-- unresponsive to every key, still drawing nothing, unkillable from inside.
+-- Returning from the loop instead lets main() destroy the window itself, in
+-- order, after the Lua state is closed.
 core._quitting = false
 
 function core.quit(force)
@@ -32,9 +41,9 @@ function core.quit(force)
   if core._quitting then return end
   if force then
     core._quitting = true
-    core.log("core.quit: force path, deleting temp files and exiting")
+    core.log("core.quit: force path, deleting temp files; the loop will stop")
     temp.delete_all()
-    os.exit()
+    return
   end
   local dirty_count, dirty_name = 0, nil
   for _, doc in ipairs(core.docs) do

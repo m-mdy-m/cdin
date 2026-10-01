@@ -46,6 +46,61 @@ function Node:split(dir, view, locked)
   return child
 end
 
+-- This node is done: give its space back to its sibling and remove it from the
+-- tree. Shared by closing the last view in a node and by detaching a view, so
+-- the two cannot disagree about what an empty node means.
+--
+-- `reclaim` says *why* this node is going away, and it is the difference
+-- between an empty column and a closed one:
+--
+--   nil     the last view was closed and this pane is the document area. A
+--           locked sibling (a side panel) means the space is not free to be
+--           taken, so this node becomes the empty view instead.
+--   true    this node is empty and nothing is managing it any more, so the
+--           space goes to the sibling whatever that sibling is. Otherwise
+--           disabling a side panel leaves behind a locked column of nothing
+--           that no key can close.
+function Node:collapse(root, reclaim)
+  local parent = self:get_parent_node(root)
+  if not parent then return end
+  local is_a  = (parent.a == self)
+  local other = parent[is_a and "b" or "a"]
+  if not reclaim and other:get_locked_size() then
+    -- The lock goes with it: add_view refuses a locked node, and there is
+    -- nothing left here to protect.
+    self.locked = nil
+    self.views = {}
+    self:add_view(EmptyView())
+  else
+    parent:consume(other)
+    local p = parent
+    while p.type ~= "leaf" do p = p[is_a and "a" or "b"] end
+    p:set_active_view(p.active_view)
+  end
+  core.last_active_view = nil
+end
+
+-- Takes a view out of this node. `root` is needed for the same reason
+-- close_active_view takes it: an emptied node collapses into its sibling.
+--
+-- An emptied node is collapsed BEFORE the active view is repaired, because
+-- collapse picks the replacement itself — handing set_active_view a nil
+-- instead is how the active view ends up pointing at a view nobody draws.
+function Node:remove_view(view, root)
+  local idx = self:get_view_idx(view)
+  if not idx then return false end
+
+  table.remove(self.views, idx)
+  if #self.views == 0 then
+    self:collapse(root, true)
+    return true
+  end
+  if self.active_view == view then
+    self:set_active_view(self.views[idx] or self.views[#self.views])
+  end
+  return true
+end
+
 function Node:close_active_view(root)
   local do_close = function()
     if #self.views > 1 then
@@ -53,18 +108,7 @@ function Node:close_active_view(root)
       table.remove(self.views, idx)
       self:set_active_view(self.views[idx] or self.views[#self.views])
     else
-      local parent = self:get_parent_node(root)
-      local is_a   = (parent.a == self)
-      local other  = parent[is_a and "b" or "a"]
-      if other:get_locked_size() then
-        self.views = {}
-        self:add_view(EmptyView())
-      else
-        parent:consume(other)
-        local p = parent
-        while p.type ~= "leaf" do p = p[is_a and "a" or "b"] end
-        p:set_active_view(p.active_view)
-      end
+      self:collapse(root)
     end
     core.last_active_view = nil
   end
@@ -204,11 +248,16 @@ local function calc_split_sizes(self, x, y, x1, x2)
   end
   self.a.position[x] = self.position[x]
   self.a.position[y] = self.position[y]
-  self.a.size[x]     = n - ds
+  -- Each locked child gets the width it asked for. Handing b the *remainder*
+  -- instead is correct only while at most one side is locked, and two side
+  -- panels is exactly the case that breaks: the second one was being given
+  -- everything the first had not claimed, so a 460px extension panel next to a
+  -- 200px file tree filled the window.
+  self.a.size[x]     = x1 or (n - ds)
   self.a.size[y]     = self.size[y]
   self.b.position[x] = self.position[x] + n
   self.b.position[y] = self.position[y]
-  self.b.size[x]     = self.size[x] - n
+  self.b.size[x]     = x2 or (self.size[x] - n)
   self.b.size[y]     = self.size[y]
 end
 

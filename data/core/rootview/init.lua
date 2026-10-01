@@ -21,6 +21,96 @@ function RootView:get_active_node()
   return self.root_node:get_node_for_view(core.active_view)
 end
 
+-- The outermost node on one side of the layout.
+--
+-- Not the active node: "the node that happens to hold focus" is a property of
+-- the moment, and a panel that attaches itself to it lands wherever the user
+-- last clicked. Two panels doing that is worse than either one alone — the
+-- second split is taken out of the first panel's node, so the file tree ends
+-- up wedged between the document and the extension panel, and which of the
+-- two ends up outermost depends on load order.
+--
+-- The edge is a property of the layout, so it is the same every time.
+--
+-- Sides are HORIZONTAL only, and that is the whole subtlety. The layout is
+-- built out of rows as well as columns — the title bar on top, the status bar
+-- and the command line at the bottom, each a locked pane of its own (see
+-- core/state.lua) — and for those, `b` is the bottom of the window, not the
+-- right of it. Walking `b` down a vertical split therefore lands in the status
+-- bar, and a panel attached there opens from the bottom edge of the screen and
+-- grows across it: which is what the file tree and the extension panel did
+-- before this took sides into account.
+--
+-- So: follow `a`/`b` through horizontal splits, and on a vertical split take
+-- `a` — the content pane, with the rows beneath it. Any number of nested splits
+-- in either direction; it always ends on a leaf in the content region.
+function RootView:get_edge_node(side)
+  local node = self.root_node
+  while node.type ~= "leaf" do
+    if node.type == "hsplit" then
+      node = (side == "left") and node.a or node.b
+    else
+      node = node.a
+    end
+  end
+  return node
+end
+
+-- Puts `view` in its own pane on one edge of the layout, and returns the node
+-- it landed in.
+--
+--   side      "left" or "right". Anything else is treated as "right".
+--   opts.locked   keep the pane out of document routing (default true)
+--   opts.width    the pane's share of the split, 0.01..0.99
+--
+-- Idempotent: a view already in the tree is left where it is rather than split
+-- out a second time, which is what makes it safe to call from init() on every
+-- enable cycle. It is deliberately NOT activated on that path either — a panel
+-- that grabs focus every time it is reloaded is a panel that fights the
+-- document for the caret. Focusing it is a separate command.
+function RootView:attach_side_view(view, side, opts)
+  opts  = opts or {}
+  side  = (side == "left") and "left" or "right"
+
+  local existing = self.root_node:get_node_for_view(view)
+  if existing then return existing end
+
+  -- The edge is a leaf by construction, and Node:split asserts it.
+  local node = self:get_edge_node(side)
+  node:split(side, view, opts.locked ~= false)
+  -- No update_layout here: a caller may be a plugin's init(), which runs before
+  -- the first frame has sized the tree. The divider is read by the layout, and
+  -- the loop calls update_layout every frame anyway.
+  if opts.width then node.divider = common.clamp(opts.width, 0.01, 0.99) end
+
+  return self.root_node:get_node_for_view(view) or node
+end
+
+-- Takes `view` back out of the layout. The counterpart of attach_side_view, and
+-- what an extension's unload calls so that disabling it gives the space back
+-- rather than leaving an empty pane the user cannot get rid of.
+function RootView:detach_view(view)
+  local node = self.root_node:get_node_for_view(view)
+  if not node then return false end
+
+  local was_active = (core.active_view == view)
+  node:remove_view(view, self.root_node)
+
+  -- core.active_view is a view, not a node, so removing the view leaves it
+  -- pointing at something that is no longer drawn. The document it was covering
+  -- is the natural replacement, and last_active_view is what the runtime keeps
+  -- for exactly this. Failing that, the edge node is all that is left.
+  if was_active then
+    local last = core.last_active_view
+    local back = (last and last ~= view and self.root_node:get_node_for_view(last))
+      or self:get_edge_node("left")
+    core.set_active_view(back.active_view)
+  end
+
+  self.root_node:update_layout()
+  return true
+end
+
 function RootView:open_doc(doc)
   local node = self:get_active_node()
 

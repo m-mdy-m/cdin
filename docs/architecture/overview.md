@@ -1,139 +1,255 @@
-# Architecture Overview
+# Architecture overview
 
-cdin is two programs in one process: a small C runtime that owns the window,
-the renderer, and the OS, and a Lua application that is the actual editor.
-The C side is deliberately dumb — it knows nothing about documents, tabs, or
-keybindings. Everything a user would call "the editor" is Lua in `data/`.
+cdin is two programs in one process. A small C layer owns the window, the
+renderer and the OS; a Lua application is the actual editor. The C side knows
+nothing about documents, views, commands or keybindings — everything a user would
+call "the editor" is Lua in `data/core/`.
 
 ```
-┌────────────────────────────────────────────────┐
-│  data/  (Lua)                                  │
-│   core/      documents, views, commands,       │
-│              keymap, syntax, styling           │
-│   plugins/   treeview, vim mode, autocomplete, │
-│              tabs, window splits, session, ... │
-│   user/      your config and themes            │
-├────────────────────────────────────────────────┤
-│  system / renderer  (Lua ↔ C API)              │
-├────────────────────────────────────────────────┤
-│  src/  (C)                                     │
-│   SDL3 window + events, software renderer,     │
-│   font rasterization (stb_truetype), logging   │
-└────────────────────────────────────────────────┘
++---------------------------------------------+
+|  src/          C11                           |
+|                window, renderer, SDL,        |
+|                OS calls, the Lua binding     |
++---------------------------------------------+
+|  data/core/    Lua 5.4                       |
+|                documents, views, commands,   |
+|                keymap, syntax, style         |
++---------------------------------------------+
+|  data/plugins/   bundled extensions          |
+|  data/themes/    the default theme            |
+|  data/fonts/     the three fonts              |
++---------------------------------------------+
 ```
 
-This split comes from lite, which cdin forked from. The boundary is the
-useful property: the C side changes rarely and is easy to audit; the Lua
-side is where all editing behavior lives and can be changed without a
-compiler.
+The split is not a layering argument, it is a **capability** argument. The C
+layer has no idea what a document is, so it cannot grow a bug about documents. It
+exposes a window, a renderer, a clock, a clipboard, a directory listing and a Lua
+state; everything else is Lua.
 
-## The C side (`src/`)
+**Globals are forbidden at runtime.** `data/core/init.lua` loads
+`core.runtime.strict` first, which errors on any undeclared global. It is the
+first line of the editor for a reason: a stray global in a plugin is otherwise
+invisible until two plugins pick the same name.
 
-The C layer has one job: give Lua a window to draw into and a way to talk
-to the OS. It handles SDL initialization, window creation, the software
-renderer, font rasterization, filesystem operations, and logging. All of
-that is exposed to Lua through two libraries registered at startup: `system`
-(events, clipboard, file I/O, process control) and `renderer` (draw rects,
-text, and clipping regions).
+## Two repositories
 
-The renderer is a software rasterizer — no GPU dependency. It divides the
-screen into a grid of cells, hashes each draw command per cell, and only
-redraws cells whose content actually changed. An idle editor draws almost
-nothing.
+```
+cdin     the runtime        data/core/ only; knows nothing about any extension
+cdin-x   the ecosystem      the mandatory set a build bundles, plus everything
+                            optional that users install
+```
 
-Fonts are rasterized with the vendored `stb_truetype`. The app icon is
-compiled in as a C array (`src/icon.inl`) generated from `scripts/icon.svg`
-by `scripts/gen_icon.py` — which is why Python is a build dependency.
+The coupling between them is one build input: the variable `CDINX_DIR`, read in
+`mk/bundle.mk`, `scripts/assemble_data.py` and `scripts/_cdin/*.py`. Nothing
+under `src/` or `data/` refers to cdin-x, and a build never fetches anything.
 
-`src/` is organized into subsystems: `core/` (window, boot, config, logger,
-utils), `api/` (the Lua-facing C API), `ui/` (renderer and its cell cache),
-`fs/` (path and filesystem ops exposed to Lua), `lua/` (Lua state setup and
-entry point), and `search/` (the C-side text search used by find/replace).
+A cdin checkout builds and runs on its own — `make bin` needs no cdin-x — and a
+cdin-x checkout installs, updates and removes itself without going near an editor
+installation. The cost is one line in a build script. What it buys is that "the
+editor is broken" and "an extension misbehaves" stop being the same
+investigation.
 
-`main()` does exactly this: set up logging, initialize SDL3, create a window
-at 80% of the usable display size, initialize the renderer, create a Lua 5.4
-state, register `system` and `renderer`, set globals (`ARGS`, `SCALE`,
-`EXEFILE`, etc.), and run `data/core/init.lua`. From that point the Lua side
-owns the process; when its main loop returns, `main()` cleans up and exits.
+The contract cdin provides, and cdin-x may rely on, is
+[the extension contract](extension-contract.md). Read it before changing anything
+about `config.site_dir`, the loader or the theme registry.
 
-## The Lua side (`data/`)
+## Boot
 
-`data/core/init.lua` builds the editor. It parses command-line arguments,
-constructs the view tree, starts the project scanner, loads every plugin,
-then your user module, then the project module, and enters the frame loop.
+### The C side
 
-The important core modules:
+`main()` in `src/main.c`, in order:
 
-| Module | Role |
-|---|---|
-| `core.doc` | the text buffer: lines, selection, undo/redo, load/save |
-| `core.views.docview` | renders a Doc: caret, scrolling, mouse handling, gutter |
-| `core.views.view` / `core.rootview` | base view class and the split/tab tree |
-| `core.input.command` | named commands with availability predicates |
-| `core.input.keymap` | maps keystrokes to command names |
-| `core.views.commandview` | the one-line input prompt with suggestions |
-| `core.views.statusview` / `core.views.titlebar` | editor chrome |
-| `core.syntax` / `core.doc.highlighter` | syntax highlighting (incremental, runs as a coroutine) |
-| `core.style` | all colors, fonts and metrics in one table |
-| `core.utils.object` | minimal single-inheritance class system (`Object:extend()`) |
-| `core.utils.common` | fuzzy matching, path suggestion, misc utilities |
-| `core.runtime.strict` | errors on undeclared globals |
+1. `utils_get_exe_filename` → the executable's own path
+2. `setup_logging` → opens `cdin-log.txt` **next to the binary**, appending
+3. `cdin_init_setup()`
+4. `SDL_Init(VIDEO | EVENTS)`; the window is 80% of the display's usable bounds
+5. `window_create`, `window_set_icon`, `SDL_StartTextInput`
+6. `ren_init` — the renderer, and its caches
+7. `utils_get_scale` → `SCALE`, the display scale factor
+8. a Lua state, all standard libraries, then `api_load_libs` which puts
+   `system`, `renderer` and `core` on it
+9. `lua_setup_globals` → `VERSION`, `PLATFORM`, `SCALE`, `EXEFILE`, `ARGS`
+10. `lua_run_core`
 
-Three mechanisms tie everything together, and every plugin uses them:
+`lua_run_core` is a string of Lua under `xpcall`, and it is short enough to read
+in full:
 
-**Commands** — every user-visible action is a named command registered with
-`command.add(predicate, table)`. The predicate makes commands contextual.
-The command palette, the keymap, and plugins all speak command names.
+```lua
+PATHSEP = package.config:sub(1, 1)
+EXEDIR  = EXEFILE:match('^(.+)[/\\].*$') or '.'
+package.path = EXEDIR .. '/data/?.lua;'      .. package.path
+package.path = EXEDIR .. '/data/?/init.lua;' .. package.path
+core = require('core')
+core.init()
+core.run()
+```
 
-**Coroutine threads** — `core.add_thread` registers cooperative background
-tasks. The frame loop resumes each one every frame; yielding a number sleeps
-that many seconds. The project scanner, autoreload, syntax highlighting, and
-the tree view's git polling all run this way. There are no OS threads in the
-Lua side.
+Note the two `package.path` entries are **prepended** — the editor's own modules
+come first, so nothing can shadow them. The site directory is *appended* later, by
+the plugin loader, which is the opposite and equally deliberate: an extension may
+extend the editor, not replace it.
 
-**Wrapping** — there is no event/hook system. Code extends behavior by
-replacing a function and calling the original. For example, the vim plugin
-wraps `keymap.on_key_pressed` to intercept keys, and trimwhitespace wraps
-`Doc.save`.
+### The Lua side
 
-## Extensions
+Requiring `core` already does a lot, before `core.init()` is ever called:
 
-Extensions are not sandboxed and not special — they are Lua files, loaded by
-`data/core/plugins.lua` at startup. There is no package manager, no registry
-and no network access. A broken plugin logs the error and startup continues.
+| | |
+| --- | --- |
+| `core.runtime.strict` | globals are errors from here on |
+| `core.config` | every default, and the path resolution |
+| `core.preboot` | reads `session.lua` — the theme and last directory, before anything can depend on them |
+| `core.style` | loads the fonts, sets every colour fallback, applies `config.theme` |
+| `core.logging`, `core.help`, `core.lifecycle` | installed onto `core` |
 
-cdin knows nothing about any specific extension. Its `data/` contains only
-`core/`, and the two things a build needs that are not the runtime — the vim
-plugin, the default theme, the fonts — are copied in at build time from
-[cdin-x](https://github.com/m-mdy-m/cdin-x), through a single input,
-`CDINX_DIR`. See [the extension contract](extension-contract.md).
+`core.style` applying the theme **before plugins run** is why cdin-x registers its
+theme roots from its entry point's `init()`, and why a theme that only exists in
+an extension's root can fall back at startup. The runtime retries after plugins
+load; `config.theme_auto_reload` controls that.
 
-There are two roots, and they have different rules:
+Then `core.init()`:
 
-| root | loaded | selected by |
-|------|--------|-------------|
-| `EXEDIR/data/plugins` — bundled, the mandatory set | always, first | nothing; `--no-plugins` does not skip it |
-| `config.site_dir/plugins` — what the user installed | second | `config.plugins` |
+```
+ 1. parse ARGS          --no-plugins / -u, and the file and directory arguments
+ 2. resolve the project directory   an argument, else the session's last_dir, else EXEDIR
+ 3. system.chdir         the working directory IS the project
+ 4. state.setup_state    frame_start, clip stack, log buffer, docs, threads
+ 5. build the view tree  see below
+ 6. install the runtime  open_doc, reload_module, clip rects, events, the frame loop
+ 7. start the project scan thread
+ 8. command.add_defaults()          every runtime command, every default binding
+ 9. your ~/.config/cdin/user/init.lua
+10. --no-plugins overrides config.plugins
+11. plugins.load_all()              bundled first, then site
+12. re-apply config.theme if it resolves now
+13. load .lite_project.lua
+14. open the files named on the command line
+```
 
-A failing bundled plugin is reported at error level and named, because a build
-missing part of itself is worth knowing about; either way startup continues.
+**Steps 8–11 are the order everything else depends on.** The default keymap is
+installed before your config runs, so a key you set is one a plugin can override;
+and your config runs before plugins, so it can `require` a plugin's module but
+not its side effects. The argument for each is in
+[configuration](../guides/configuration.md#when-it-runs-and-why-that-matters).
 
-Load order: core → user `init.lua` → bundled plugins → site plugins →
-`.lite_project.lua`. Later wins, which is why the user module can override
-anything — and why the runtime's own keymap never names a command a plugin
-might not register.
+**Step 3 is the load-bearing one for everything project-shaped.** The file list,
+the ignore rules and the git status all come from the working directory, so
+`core.project_dir` is `system.absolute_path(".")` after the `chdir` and not a
+parameter anywhere.
+
+## The view tree
+
+There are four views and they never move:
+
+```
+root_node
+├── a:  TitleBar
+└── b:
+    ├── a:  the content area   DocView, EmptyView or LogView
+    └── b:
+        ├── a:  CommandView    the prompt, hidden until something opens it
+        └── b:  StatusView
+```
+
+`rootview/node.lua` owns the tree: `split`, `close_active_view`, `get_child_overlapping_point`,
+`get_locked_size`. A plugin that opens a pane — cdin-x's treeview and its
+manager panel both do — calls `node:split(dir, view, true)` on the active node
+and becomes part of the same tree rather than a layer above it.
+
+**A node holds a list of views.** That is what `root:switch-to-pane-view-N` and
+`root:move-pane-view-*` reach, and it is why those names say *pane view*: the
+word "tab" belongs to cdin-x's plugin, which is a different concept, and the
+runtime's names were changed to say so. The old `-tab-` spellings remain as
+aliases.
+
+**A node can have a locked size**, which is how a panel stays full-width. Every
+`root:` command's predicate is `not node:get_locked_size()`, so the bindings go
+quiet while a panel holds the pane rather than fighting it.
 
 ## The frame loop
 
-One iteration: poll SDL events and dispatch them to the keymap and views →
-resume every background coroutine → recompute layout → redraw (through the
-cell cache, so an idle editor draws almost nothing) → sleep to hold
-`config.fps` (60 by default).
+`core.run()`, in `data/core/loop.lua`:
 
-## Build system
+```lua
+while true do
+  core.frame_start = system.get_time()
+  local did_redraw = core.step()
+  run_threads()
+  if not did_redraw and not system.window_has_focus() then
+    system.wait_event(0.25)
+  end
+  system.sleep(max(0, 1 / config.fps - elapsed))
+end
+```
 
-GNU make, split into small includes under `mk/`: `platform.mk` (OS and
-compiler detection), `version.mk` (version from git tags), `config.mk`
-(flags, SDL/Lua discovery via pkg-config), `build.mk` (compile rules),
-`install.mk` (install/uninstall). Objects and the binary land in
-`build/<platform>-<build>/`. Details in [Building from Source](../guides/building.md).
+`core.step()` is one frame:
+
+1. Poll events. Mouse motion is **coalesced** across the poll and dispatched once
+   with the accumulated delta; a `textinput` is suppressed when the key that
+   produced it was already handled by the keymap, which is what stops a character
+   being typed twice.
+2. Resize the root view, then `root_view:update()`.
+3. **Return early if nothing set `core.redraw`.** A frame that changed nothing is
+   not drawn, and an unfocused window sleeps on `wait_event` instead of spinning.
+   This is the idle-cost story, and it is why `core.redraw = true` after changing
+   state a view has cached is not optional.
+4. Reap documents no view references any more.
+5. Set the window title, if it changed.
+6. `begin_frame`, set the root clip rect, `root_view:draw()`, `end_frame`.
+
+`run_threads` is a scheduler, not a queue. It walks `core.threads`, resumes each
+one whose `wake` time has passed, treats a yielded value as a delay in seconds,
+and **yields back to the frame if the time budget is blown** — checked per thread,
+not per pass, so a thread that sleeps for a second costs one resume and then
+nothing.
+
+`core.threads` has `__mode = "k"`, so a thread registered with a `weak_ref` key
+dies with its key. That is how the highlighter's per-document thread stops when
+the document does.
+
+**Never block this loop with I/O.** A coroutine that runs a shell command without
+yielding stalls every keypress, and on some platforms the window stops responding
+to the compositor as well.
+
+## Data flow
+
+```
+keypress ──> keymap.on_key_pressed
+              └─ stroke -> [commands]  ──> command.perform
+                                                 └─ predicate ──> fn
+                                                       │
+   document edit <──────────────────────────────────────┘
+        │
+        └─> Doc._after_* hooks, Highlighter:invalidate, core.redraw = true
+                                                        │
+   draw <───────────────────────────────────────────────┘
+        │
+        └─> View:draw ──> style colours ──> renderer ──> SDL
+```
+
+Two properties make that diagram work:
+
+**Commands are addressed by name across every boundary.** `command.perform`
+("doc:save") is a string, not a function reference, so a binding, a menu entry and
+a vim ex-command can all reach the same thing without holding a reference to a
+module they did not load. A command name is a public interface.
+
+**Predicates, not registration, decide what is available.** `command.perform`
+returns `false` when the predicate fails and does nothing. That is what lets
+<kbd>Return</kbd> be bound to `{ "command:submit", "doc:newline" }` and work in
+both a prompt and a document, and it is why the runtime can route a key to a
+command an optional plugin might own without erroring when it is absent.
+
+## Where to look
+
+| | |
+| --- | --- |
+| [`data/core/init.lua`](../../data/core/init.lua) | the boot order above, in the order it happens |
+| [`data/core/loop.lua`](../../data/core/loop.lua) | the frame loop and the thread scheduler |
+| [`data/core/state.lua`](../../data/core/state.lua) | the initial state and the view tree |
+| [`data/core/rootview/`](../../data/core/rootview) | the pane tree |
+| [`data/core/views/`](../../data/core/views) | DocView, CommandView, StatusView, TitleBar, LogView |
+| [`data/core/doc/`](../../data/core/doc) | the document, the highlighter, the word translations |
+| [`data/core/input/`](../../data/core/input) | the command and key registries |
+| [`data/core/plugins.lua`](../../data/core/plugins.lua) | the loader |
+| [`data/core/themes.lua`](../../data/core/themes.lua) | the theme registry |
+| [`src/`](../../src) | the C layer |

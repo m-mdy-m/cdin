@@ -1,325 +1,393 @@
 # Troubleshooting
 
-Common problems and how to fix them. If something isn't here, check `cdin.log`
-(written next to the binary on each run) — most errors show up there with
-enough context to figure out what went wrong.
+## Start here
+
+```sh
+make info
+```
+
+It prints the platform, compiler, detected Lua version, every flag and the output
+path. Most build problems are answered by one of those lines.
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>. **That is the only place
+plugin errors appear**: the in-editor view over `core.log_items`, which is what
+`core.log` / `core.error` write.
+
+**Everything is also in one text file**, `cdin-log.txt` next to the binary: the
+C logger's lines (tagged `INFO`, `WARN`, `ERROR`...) and the Lua ones (tagged
+`LUA`, with tracebacks), in order. That is the file to send with a bug report.
+
+The view has two sources, and <kbd>F2</kbd> switches between them. **editor** is
+`core.log_items`; **native** is that same file.
+
+| | |
+| --- | --- |
+| `CDIN_LOG_LEVEL` | console level: `trace` `debug` `info` `warn` `error` `fatal` |
+| `CDIN_LOG_FILE_LEVEL` | file level, `debug` by default |
+| `CDIN_LOG_FILE` | write the log somewhere else |
+| `CDIN_LUA_LOG=0` | stop mirroring the Lua stream into that file (on by default) |
+
+The Lua mirror matters most for one case: a Lua error *during startup*, where
+the log view cannot be opened because there is no editor to open it in.
+`cdin-log.txt` then has the message, the file and the line.
+
+A log past 4 MB is rotated to `cdin-log.txt.1` at startup, so one crash report is
+one file rather than a directory.
+
+**Lua changes need a restart, not a rebuild.** `data/core` is symlinked into the
+build, so editing it and relaunching is enough. If a change you made did not take
+effect, you are almost certainly running a stale copy — see
+[stale `data/core`](#a-lua-change-did-not-take-effect) below.
+
+## Make targets that do not work
+
+Four of the advertised targets are broken. Knowing which saves a confusing
+afternoon:
+
+| target | what actually happens |
+| --- | --- |
+| `make check` | runs `python scripts/check.py` — **that file does not exist** |
+| `make size` | runs `python scripts/bench.py` — **that file does not exist** |
+| `make test` | declared `.PHONY` with **no rule** |
+| `make bench` | declared `.PHONY` with **no rule** |
+| `make debug-san` | sets `SANITIZE=1`, which **no makefile reads** — identical to `make debug` |
+
+These are known and recorded in `CHANGELOG.md`. None of them is on any path you
+need: the build is `make`, and the tests are the four `test-*` targets. `make
+help` also still claims plugins and themes ship inside `data/`, which has not been
+true since 0.2.0-alpha.2.
+
+**There is no lint or style checker in this repository today.** `-Wall -Wextra` is
+the only automated check on C, and it is not `-Werror`; note that
+`-Wno-unused-parameter` is also on, so "clean" means "no warning other than unused
+parameters".
 
 ---
 
-## Build problems
+# Build problems
 
-### SDL3 not found
+## `SDL3/SDL.h not found`
 
-```
-error: sdl3/SDL.h: No such file or directory
-```
-
-Install the SDL3 development package. On most distros:
-
-```sh
-# Debian / Ubuntu
-sudo apt install libsdl3-dev
-
-# Arch
-sudo pacman -S sdl3
-
-# Fedora
-sudo dnf install SDL3-devel
-
-# macOS (Homebrew)
-brew install sdl3
-```
-
-If SDL3 isn't available for your distro yet, SDL2 also works. cdin
-auto-detects whichever is installed (SDL3 takes priority). To force SDL2:
+SDL3 is required. There is an SDL2 auto-detect path in `mk/config.mk` that will
+happily select SDL2 and link `-lSDL2`, but the dependency check compiles a probe
+against `SDL3/SDL.h` and stops there — so an SDL2-only machine selects SDL2 and
+then fails anyway. The auto-detect is vestigial; SDL3 is the supported
+configuration.
 
 ```sh
-make SDL_VERSION=2
+sudo apt install libsdl3-dev          # Debian / Ubuntu
+sudo pacman -S sdl3                   # Arch
+
+If SDL3 is in a non-standard prefix, put a `sdl3.pc` on `PKG_CONFIG_PATH` rather
+than expecting a variable. There is **no `SDL3_PREFIX` make variable** — it
+appears in `make help` and in one error message, but nothing in `mk/` reads it.
 ```
 
-### Lua 5.4 not found
-
-```
-error: lua.h: No such file or directory
-```
-
-Install Lua 5.4 headers:
+## `lua.h not found`
 
 ```sh
-# Debian / Ubuntu
 sudo apt install liblua5.4-dev
-
-# Arch
-sudo pacman -S lua54
-
-# macOS
-brew install lua
+sudo pacman -S lua
+make LUA_VERSION=5.4
 ```
 
-Some distros package the headers under a versioned path. If `pkg-config lua5.4`
-returns nothing, check what's available: `pkg-config --list-all | grep lua`.
-Then tell make which one to use: `make LUA_VERSION=5.4`.
+`make info` shows the detected version. The makefile probes
+`lua5.4 lua54 lua5.3 lua53 lua` in that order via `pkg-config`, so a machine with
+only 5.3 will have 5.3 selected rather than an error — whether the tree then
+compiles cleanly against 5.3 is untested, and 5.4 is the version CI uses.
 
-### Python error during icon generation
+## `python3 not found`
 
-```
-ModuleNotFoundError: No module named 'cairosvg'
-```
+Needed for two things: generating the icon header, and assembling `data/`. The
+assembly script is standard library only, but **icon generation is not** — it
+needs `Pillow`, plus either `cairosvg` or `rsvg-convert` on `PATH`.
 
-Install the Python dependencies:
+`src/icon.inl` is checked in and normally up to date, so you rarely hit this. You
+will after `make distclean`, which deletes it:
 
 ```sh
-pip install cairosvg Pillow
+pip install Pillow cairosvg        # or install librsvg for rsvg-convert
+make gen-icons
 ```
-
-If you don't want to install them, the build will still work as long as
-`src/icon.inl` exists in the repository — it's pre-generated and checked in.
-The Python step only runs when it's missing or when you explicitly regenerate
-icons.
-
-### Warnings treated as errors
-
-The default flags include `-Wall -Wextra` but not `-Werror`. If you're seeing
-compile errors from warnings, check whether your environment or IDE added
-`-Werror`. Remove it from `CFLAGS` or run:
 
 ```sh
-make CFLAGS_EXTRA=""
+make PYTHON=python      # if it is not called python3
 ```
 
----
+## `make` says it needs a cdin-x checkout
 
-## Startup problems
+Expected, and it is the one place the two repositories meet. The message names
+the problem directly:
 
-### The editor exits immediately
+```
+cdin needs cdin-x to produce a runnable editor
+(it provides the mandatory vim plugin, default theme and fonts).
+```
 
-Run it from a terminal so you can see the output:
+The mandatory set lives in cdin-x, and a cdin without it is not an editor, so a
+fresh clone of this repository alone cannot produce a runnable editor.
 
 ```sh
-./build/linux-release/cdin
+git clone https://github.com/m-mdy-m/cdin-x ../cdin-x
+make                                   # it looks there by default
+make CDINX_DIR=/somewhere/else         # or say where
 ```
 
-Also check `cdin.log` next to the binary. If a Lua plugin failed to load, the
-error and stack trace are there.
+**`make bin` needs none of this.** It compiles the binary and stops, which is what
+you want when you are only touching C.
 
-### A plugin error at startup
+## The bundler refuses to write
 
-cdin logs plugin errors but continues loading. You'll see something like:
+Four failures, all deliberate — it fails rather than working around a problem:
 
-```
-[ERROR] plugin 'my_plugin' — attempt to index a nil value (global 'nonexistent')
-```
+| message | meaning |
+| --- | --- |
+| no essential plugin | cdin-x has no `essential = true` plugin under `X/core/`. `vim` should be it |
+| not exactly one essential theme | a build has to know which theme to start with. Zero or two is unanswerable |
+| `fonts/` missing or empty | the text pipeline has nothing to render with |
+| output is a symlink or junction | see below |
 
-The editor starts anyway. To diagnose: open the log view with `core:open-log`
-from the command palette (`Ctrl+Shift+P`) — or, with no palette installed, from
-vim's `:openlog`, or by clicking the status bar. The full error is there.
+**A symlink or junction is refused rather than followed.** This one is a Windows
+trap worth understanding: a junction does not report itself as a symlink through
+the obvious API, so a check written for POSIX passes right over one and the
+bundler writes *through* it — into whatever it was pointed at. The refusal
+covers all reparse points, not just the kind it recognises.
 
-A failing **site** plugin is skipped: move it out of
-`<site>/plugins/` and restart, or take it out of `config.plugins`.
+If you hit it, delete the output directory and let the build recreate it.
 
-A failing **bundled** plugin is reported at error level and prefixed
-`mandatory plugin` — that one is part of the build, and a build missing part of
-itself is worth investigating rather than working around. Check that
-`CDINX_DIR` pointed at a cdin-x checkout with the plugin in it, and rebuild.
+## `--no-plugins` did not turn vim off
 
-There is no enable/disable state and no manager in cdin itself; what is on
-disk is what loads.
+Working as intended. `--no-plugins` and `config.plugins = false` mean **no *site*
+plugins**. The bundled set is mandatory and always loads, because a cdin without
+vim mode is not an editor and a debugging flag is not a policy.
 
-### The window is tiny / huge
+The corollary is the one that surprises people: **cdin-x is a site plugin**, so
+both of those switch off the command palette, the finders, the tree, tabs, search
+and git. See [configuration](configuration.md#plugins).
 
-cdin reads the display scale factor at startup and applies it to fonts and
-metrics. On some HiDPI setups this detection goes wrong. You can force the
-scale in `data/user/init.lua`:
+## Warnings after a change to `src/`
 
-```lua
--- uncomment and set to 1.0 for a normal display or 2.0 for HiDPI
--- SCALE = 1.0
-```
-
-`SCALE` is a global set by the C side before Lua starts, so reassigning it
-there affects all size calculations.
+`-Wall -Wextra` is on and the tree builds clean. A new warning is yours; do not
+suppress it. `make debug` (`-O0 -g3`) is usually more informative about what went
+wrong than the release build's diagnostics.
 
 ---
 
-## Editor behavior
+# Runtime problems
 
-### I'm stuck in Normal mode / can't type
+## `command already exists: <name>`
 
-cdin starts every buffer in Normal mode. Press `i` to enter Insert mode. The
-`[NORMAL]` indicator in the bottom-left status bar changes to `[INSERT]`.
+The `assert` in `command.add`. Two things registered one name, and without the
+`overwrite` argument it stops.
 
-If you want to disable modal editing entirely:
-
-```lua
--- data/user/init.lua
-local config = require "core.config"
-config.vim_mode_enabled = false
-```
-
-### Keybinding isn't working
-
-Check the command palette (`Ctrl+Shift+P`) first — it shows every valid
-command and its current binding. If the key you expect isn't listed, either
-the binding isn't set or the command isn't valid in the current context
-(commands have predicates; some only activate when a document is focused).
-
-Check for conflicts: another binding might be handling the key first. In
-`data/user/init.lua`, you can override any binding:
+The usual cause is **reloading a plugin that self-registers at require time**:
+the loader `dofile`s the entry point, so its body re-runs on every load, while
+sibling modules stay cached from the first one. Guard it:
 
 ```lua
-keymap.add({ ["ctrl+something"] = "the-command-you-want" }, true)
+local loaded = false
+function M.init(core, config)
+  if loaded then return end
+  loaded = true
+  -- …
+end
 ```
 
-The `true` forces the override.
+The other cause is a genuine collision between two plugins. That is what the
+assert is for — the alternative is a binding that silently runs the wrong thing.
 
-### Find (`Ctrl+F`) isn't matching what I expect
+## `attempt to call a nil value` during plugin load
 
-cdin's find uses Lua patterns by default, not plain strings. Characters like
-`.`, `*`, `(`, `)`, `+`, `?` are pattern metacharacters. If you're searching
-for a literal dot or parenthesis, escape it with `%`:
+The function you called does not exist yet. The usual cause in this repository is
+**ordering, not a typo**: `core.register_vcs_provider` is installed from inside
+the project scanner's thread body, and that thread does not run until the frame
+loop starts — which is *after* every plugin's `init()`. A plugin that calls
+`core.register_vcs_provider` from its own `init()` therefore gets exactly this
+error. The other three `register_*` functions are defined at require time and are
+safe to call from `init()`.
 
-```
-%.    -- matches a literal dot
-%(    -- matches a literal open paren
-```
+This is a genuine rough edge in the runtime, not something you did wrong. If you
+hit it from an extension, the workaround is to defer the call with
+`core.add_thread`, or to have your `init()` tolerate a nil
+`core.register_vcs_provider` and register later.
 
-To search for something that contains many special characters, use the
-replace commands with the "plain" variant from the command palette.
+`core:list-plugins` will show the plugin as not loaded; `core:open-log` has the
+traceback.
 
-### File shows as modified but I didn't change it
+## `plugin loading failed; continuing with core only`
 
-Trailing whitespace trimming runs on every save. If your file has trailing
-spaces and you save it, it comes back clean and the unsaved-changes marker
-goes away. If the marker is showing on a file you haven't touched:
+One line in the log says the loader itself raised. The editor is running with the
+core and nothing else. Read the lines above it — that is the plugin that failed.
 
-- The file may have been changed by another process (autoreload detects this
-  and offers to reload)
-- A plugin may have patched `Doc.save` and introduced a spurious change
+Note what this message means: **the editor always starts.** A failing bundled
+plugin is reported at error level and the rest still load; a failing site plugin
+is logged and skipped. An editor that refuses to open is a worse bug than a
+missing feature.
 
-Check `cdin.log` for autoreload messages.
+## A plugin I installed does not load
 
-### Session isn't restoring
+In rough order of likelihood:
 
-Session restore is off by default. To enable it:
+**`config.plugins` excludes it.** `nil` means all site plugins, `false` means
+none, and a table is a whitelist. If you set a whitelist, a plugin you installed
+afterwards is not in it.
+
+**It is in the wrong root.** There are two: `EXEDIR/data/plugins` is bundled and
+always loads, `config.site_path()/plugins` is site and selected by
+`config.plugins`. To see where the editor is looking:
 
 ```lua
-config.session_restore = true
+require("core.config").site_path()
 ```
 
-The session is saved automatically on quit (controlled by
-`config.session_save_on_quit`, which is `true` by default). If restore isn't
-working after enabling it, the session file may be missing or corrupt. Save it
-manually with `session:save` from the command palette, then quit and reopen.
+**A bundled plugin of the same name won.** The scan is bundled-first and
+first-seen-wins, so a name is never loaded twice. `core:list-plugins` shows the
+source of each.
 
----
+**Its entry point did not return a table**, or its `init` raised. Both are in the
+log.
 
-## Tree view
+## The command palette does not open
 
-### Git markers (A/M/D/?) aren't showing
-
-The tree view runs `git status --porcelain` in the background to collect
-markers. A few reasons this might not work:
-
-- The project isn't a git repository — open cdin in a directory that is one
-- `git` isn't on your `PATH`
-- The git poll errored — check `cdin.log`
-
-You can disable git markers if they're causing trouble:
-
-```lua
-config.treeview_git_enabled = false
-```
-
-### The tree is slow to update
-
-On large repositories, `git status` can be slow. Increase the polling interval:
-
-```lua
-config.treeview_git_update_rate = 10  -- seconds between polls (default: 2)
-```
-
-Or disable it entirely if you don't need the markers.
-
----
-
-## Performance
-
-### Startup feels slow
-
-The most common cause is the git status subprocess that the tree view runs
-on startup. See the tree view section above.
-
-If startup is still slow, check `cdin.log` for timing information and for any
-errors from plugins during load.
-
-### The editor is sluggish while typing
-
-Open the log view (`core:open-log`) and watch for error messages repeating
-rapidly — a plugin in a background thread may be crashing and restarting.
-
-Also check `config.fps`. The default is 60. Raising it won't help with typing
-latency; lowering it (to 30, for example) reduces CPU use when you're not
-actively editing.
-
-### High CPU when idle
-
-cdin's renderer uses a cell cache and only redraws changed regions. An idle
-editor should draw almost nothing. If the CPU is high while idle:
-
-- A background coroutine may be polling too aggressively — look for calls to
-  `core.add_thread` in plugins with very short `coroutine.yield` intervals
-- A view may be requesting redraws unnecessarily — check for `core.redraw = true`
-  being set in a tight loop
-
----
-
-## Crashes
-
-### The editor crashed and I lost work
-
-cdin saves dirty (unsaved) documents to `<filename>~` next to the original on
-crash. Look for those files. A stack trace is written to `error.txt` in the
-directory where the binary ran.
-
-### Reporting a crash
-
-Open an issue with the contents of `error.txt` and `cdin.log`, the steps that
-triggered the crash, and your platform. If the crash is in the C layer, a
-build with sanitizers may give more information:
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> is **not a runtime binding.** The
+palette is a plugin in cdin-x. With nothing installed, that key does nothing and
+that is correct — an editor with no extensions should have no dead keys.
 
 ```sh
-make debug SANITIZE=address
-./build/linux-debug/cdin
-# reproduce the crash
+git clone https://github.com/m-mdy-m/cdin-x && cd cdin-x && make link
 ```
 
+Then <kbd>Shift</kbd>+<kbd>M</kbd> opens the manager and <kbd>Space</kbd> on the
+palette installs it. If the manager itself does not open, the entry plugin did not
+load — check the log.
+
+## A theme did not apply
+
+Three things can be true at once, and the order matters:
+
+**The theme is not in a root the registry knows.** Roots are searched in order:
+`config.user_dir/themes`, then `EXEDIR/data/themes`, then anything a plugin added
+with `require("core.themes").add_root()`. `require("core.themes").names()`
+returns exactly what is visible.
+
+**It resolves to a file but the name does not match.** The directory name is the
+theme's name. `<root>/MyTheme/theme.lua` is `MyTheme`. The `name` field *inside*
+the file is only a label for `style.theme_name`, not a lookup key.
+
+**`config.theme` names an extension theme and startup applied nothing.**
+`config.theme` is applied at `style.lua` load time, long before any plugin runs, so
+a theme in a root that only exists after a plugin registers it can fall back
+silently. The runtime then retries unconditionally once plugins have loaded, so
+this normally resolves itself — if it has not, the root is not registered under the
+name you think it is.
+
+A theme that applies but is missing colours is a different problem, and the usual
+answer is that it is a hand-written theme without the `vim_*` keys — the runtime
+has no fallbacks for those, and they render **opaque white** rather than
+disappearing. See [themes](themes.md#vim-mode).
+
+## `data/` is not next to the binary
+
+The binary resolves `data/` relative to itself. Move one without the other and you
+get an editor with no fonts — text renders as nothing or as boxes — and no vim
+mode, because the bundled plugin lives in there too.
+
+```
+build/linux-release/
+├── cdin
+└── data/          ← has to be beside it
+```
+
+## A Lua change did not take effect
+
+Check, in order:
+
+1. **Did you restart?** The binary does not reload Lua. `make` is not needed;
+   relaunching is.
+2. **Is `build/…/data/core` still a symlink?** If it became a copy, your edits go
+   to the source and the build reads the copy.
+3. **Is there a `__pycache__` in the way?** The copy fallback ignores it; a
+   hand-made one may not.
+4. **Did you edit the right repository?** `data/core` is this repository's. The
+   palette, the tree, the finders, the tabs and the extra themes are cdin-x's,
+   under `X/`, and are loaded from the *site* directory — a completely different
+   path.
+
+If `data/core` did get copied, delete `build/` and rebuild; the symlink is
+recreated on every build precisely so a stale copy cannot survive.
+
+## The editor crashed and no `error.txt` appeared
+
+**It never will.** `data/core/lifecycle.lua:17` defines a `core.on_error` handler
+that would write `error.txt` and save every dirty document to `<filename>~` —
+and nothing in the tree calls it. It is dead code.
+
+What actually happens on an uncaught error: the bootstrap's `xpcall` catches it,
+reports it through `cdin_log_fatal` into **`cdin-log.txt`**, and `main()` returns
+normally. So the one file that reliably has a crash traceback is the one that does
+*not* contain plugin errors.
+
+**Do not rely on a crash backup.** Save before you do something risky, and if you
+do lose work, the log view (`core:open-log`) will usually tell you what happened
+even though nothing was written to disk for you.
+
+If this matters to you, the fix is one line — calling `core.on_error` from the
+bootstrap handler — and it is a reasonable thing to propose.
+
+## A command exists but does nothing
+
+Check the predicate, not the binding. `command.get_all_valid()` returns what is
+available *right now*, and the command palette shows that list — so if your
+command is not in the palette, it is the predicate, and `command.perform` returns
+`false` rather than raising.
+
+A predicate is `nil` (always), a module path string, or a class table. The
+document commands use `"core.views.docview"`, so they are unavailable in the log
+view and the empty view.
+
+**They *are* available while a prompt is open**, which surprises people:
+`CommandView` extends `DocView` in order to reuse its gutter and scrolling maths,
+and `View:is` walks the metatable chain, so `active_view:is(DocView)` is true
+there too. That is exactly what makes the `{ "command:submit", "doc:newline" }`
+chains work — <kbd>Return</kbd> submits, or falls through to a newline, depending
+on whether the first predicate holds.
+
+## A key does the wrong thing
+
+Two bindings can both be live on one stroke. `keymap.add` **prepends** unless you
+pass `true`, so a plugin's binding runs before the core's and the core's still
+works when the plugin's predicate fails.
+
+```lua
+keymap.add({ ["ctrl+d"] = "mine" }, true)   -- replace instead of prepend
+```
+
+If you want yours to win outright, pass `true`. If you want the existing one to
+stay as a fallback, leave it off. [The command reference](commands.md#binding-your-own)
+has the rest.
+
+## Unloading a plugin left its keys behind
+
+`keymap.remove` detaches only the commands you name, and takes the same shape you
+added. `command.remove` takes a name or a list of names.
+
+Both expect the plugin to actually call them from its `unload()`. Nothing
+enforces that at runtime — a plugin that registers and never unregisters
+accumulates one copy per load, which shows up as a binding that behaves as if it
+ran twice.
+
 ---
 
-## Ex commands
+# Getting more detail
 
-### `:w` says the file doesn't exist
+```sh
+make debug          # -O0 -g3
+make debug-san      # plus sanitizers
+```
 
-`:w` saves to the current file. If the buffer has no file yet (you opened a
-new untitled document), use `:w path/to/file.txt` to give it a name. Or use
-`Ctrl+Shift+S` (save as).
+`cdin-log.txt` next to the binary has every message at the default log level.
+`core:open-log` shows the same thing in the editor, and its own
+<kbd>Ctrl</kbd>+<kbd>C</kbd> copies a selection out of it.
 
-### `:!cmd` output doesn't appear
-
-Shell output opens in a new scratch buffer. If nothing appeared, the command
-may have exited silently. The buffer is created even for empty output — look
-for a tab with a name like `[shell]` or `[!ls]`. If you don't see it, check
-`cdin.log` for errors from the shell plugin.
-
----
-
-## Still stuck?
-
-Open an issue on GitHub with:
-
-- What you expected to happen
-- What happened instead
-- Your platform, SDL version, and Lua version (`make info` prints these)
-- The contents of `cdin.log`
-- Steps to reproduce
-
-Discussions are also open for questions that aren't bug reports.
+For a bug worth filing, `make info` output plus the relevant part of `cdin-log.txt` is
+usually enough to identify it.

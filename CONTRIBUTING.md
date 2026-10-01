@@ -24,7 +24,8 @@ You need:
 
 - `gcc` or `clang`
 - GNU `make`
-- SDL3 development headers (SDL2 also works and is auto-detected)
+- SDL3 development headers (**required** — the SDL2 auto-detect in `mk/config.mk`
+  is vestigial and the build probes `SDL3/SDL.h` regardless)
 - Lua 5.4 development headers
 - Python 3 with `cairosvg` and `Pillow` (for icon generation)
 
@@ -56,9 +57,10 @@ For more detail and platform-specific notes, see
 ## Development workflow
 
 **For Lua changes** (plugins, config, core editor behavior): build once, then
-edit and restart. The build places a symlink from `build/<platform>-release/data`
-to the repository's `data/`, so any Lua change is live on the next launch.
-No recompile needed.
+edit and restart. The build symlinks only `build/<platform>-release/data/core` to
+the repository's `data/core` — everything else in `data/` is a real copy assembled
+from cdin-x. So any Lua change under `data/core` is live on the next launch, with
+no recompile.
 
 **For C changes** (renderer, SDL bindings, font rasterization): use the debug
 build. It skips optimization, keeps debug symbols, and lets you run under gdb
@@ -69,12 +71,9 @@ make debug
 ./build/linux-debug/cdin
 ```
 
-For memory issues or undefined behavior, add sanitizers:
-
-```sh
-make debug SANITIZE=address
-make debug SANITIZE=undefined
-```
+There is no sanitizer target. `make debug-san` sets a `SANITIZE` variable that no
+makefile reads, so it is identical to `make debug`; to sanitize, pass the flags
+yourself through `CFLAGS`/`LDFLAGS`.
 
 **For checking what the build system detected:**
 
@@ -82,8 +81,10 @@ make debug SANITIZE=undefined
 make info
 ```
 
-This prints the SDL version, Lua version, compiler, output path, and install
-prefix. Run it first if the build fails — it usually shows what's missing.
+This prints the detected Lua version, compiler, flags, output path and install
+prefix. (The SDL line is a literal `3 (required)`, not a version — SDL3 is the only
+supported configuration.) Run it first if the build fails; it usually shows what's
+missing.
 
 ---
 
@@ -91,21 +92,27 @@ prefix. Run it first if the build fails — it usually shows what's missing.
 
 ```
 src/               C layer — window, renderer, SDL, filesystem, Lua binding
-src/api/           the Lua-facing C API (system and renderer libraries)
+src/api/           the Lua-facing C API: system, renderer, search, fs, path
 src/ui/            the software renderer and its cell-based redraw cache
 src/fs/            path and filesystem operations exposed to Lua
 src/search/        the C-side text search engine (used by find/replace)
 src/core/          window lifecycle, boot, config, logger, utilities
 src/lua/           Lua state setup and the entry point into Lua
 
-data/core/         the Lua editor core — documents, views, commands, keymap
-data/core/doc/     the text buffer (lines, undo/redo, load/save, search)
-data/core/views/   DocView, RootView, StatusView, CommandView, TitleBar, …
-data/core/input/   command registry and keymap
-data/core/syntax/  syntax system and incremental highlighter
-data/core/utils/   Object (class system), common utilities
-data/core/git/     git integration (status parsing, command wrappers)
-data/core/plugins.lua  the extension loader
+data/core/                the Lua editor core — see data/core/init.lua for the boot order
+  init.lua, config.lua, state.lua, loop.lua, style.lua, themes.lua,
+  plugins.lua, project.lua, help.lua, docs.lua, events.lua, logging.lua,
+  lifecycle.lua, preboot.lua, fs.lua
+data/core/commands/       the runtime's own commands, one file per group
+data/core/keymaps/        default.lua — every default binding
+data/core/doc/            the text buffer, the highlighter, word translations
+data/core/rootview/       the pane tree, the empty view, the logo
+data/core/views/          DocView, CommandView, StatusView, TitleBar, LogView, View
+data/core/input/          command registry and keymap
+data/core/syntax/         the syntax registry and the tokenizer
+data/core/text/           UTF-8, bidi, shaping
+data/core/runtime/        strict (globals are errors) and temp filenames
+data/core/utils/          Object (class system), common utilities
 
 build/<platform>-<build>/data/   BUILD OUTPUT, not source:
   core/       a symlink to data/core (a copy where symlinks are unavailable)
@@ -115,13 +122,20 @@ build/<platform>-<build>/data/   BUILD OUTPUT, not source:
   fonts/      the fonts a build bundled from cdin-x
   BUNDLE.lua  what the bundle contains
 
-~/.config/cdin/    user configuration (init.lua) and user themes
+~/.config/cdin/user/     user configuration (init.lua) and user themes
+<data_home>/cdin/        data_home itself: session.lua, site/, extensions/, registry/
 <data_home>/cdin/site/   installed extensions (cdin-x)
 
-mk/                Makefile fragments — platform, version, flags, rules
-scripts/           Python wrappers around the build system
+mk/                Makefile fragments — platform, version, flags, build,
+                    install, and bundle (the only place CDINX_DIR is read)
+scripts/           data assembly, icon generation, and the Lua test suites
+tests/lua/         the unit + integration suite
 docs/              documentation (you're here)
 ```
+
+There is no `data/core/git/`. Git support moved to
+[cdin-x](https://github.com/m-mdy-m/cdin-x) in 0.2.0-alpha.2, and the runtime
+reaches it through `core.register_vcs_provider`.
 
 When deciding where a change belongs: if it's optional behavior, it's a
 plugin. If it's something every editor needs, it might belong in core. If it
@@ -189,15 +203,21 @@ before writing code.
    silencing a warning rather than fixing its root cause, explain why in a
    comment.
 
-4. Run the editor and exercise what you changed. There's no automated test
-   suite yet, so include a note in your PR about what you tested and how.
+4. Run the editor and exercise what you changed, and include a note in your PR
+   about what you tested and how. The suites do not replace that.
 
 5. Update the docs if your change affects:
    - Commands or keybindings → [docs/guides/commands.md](docs/guides/commands.md)
    - Configuration options → [docs/guides/configuration.md](docs/guides/configuration.md)
-   - Vim behavior → [docs/guides/vim-keybindings.md](docs/guides/vim-keybindings.md)
-   - Plugin behavior → [docs/guides/plugins.md](docs/guides/plugins.md)
+   - Themes or colours → [docs/guides/themes.md](docs/guides/themes.md)
+   - Syntax highlighting → [docs/guides/syntax.md](docs/guides/syntax.md)
+   - Plugin behavior or an extension seam → [docs/guides/plugins.md](docs/guides/plugins.md)
    - The architecture → [docs/architecture/overview.md](docs/architecture/overview.md)
+   - **What cdin guarantees an extension** → [docs/architecture/extension-contract.md](docs/architecture/extension-contract.md)
+
+   That last one is the one to think hardest about. If cdin-x could plausibly
+   have depended on the change, it is a breaking change, not a documentation
+   update — see the closing section of that page.
 
 6. Add a line to the `[Unreleased]` section of `CHANGELOG.md` if the change
    is user-visible:
@@ -246,8 +266,13 @@ Follow the style of `data/core/`:
 - Prefer `local` for everything. The `core.runtime.strict` module errors on
   undeclared globals — lean on it
 
-Wrap existing behavior rather than patching tables when possible. See how
-`trimwhitespace` (a cdin-x plugin) hooks into `Doc.save` for the pattern.
+Extend via the documented seams before you wrap a function. `Doc._before_save`,
+`Doc._after_load` and `Doc._after_save` are real hooks; `trimwhitespace` (a cdin-x
+plugin) uses `_before_save` rather than replacing `Doc.save`, and
+`autoreload` uses the other two. See
+[the extension contract](docs/architecture/extension-contract.md) for the full
+list, including the functions that are wrapped today but are **not** part of the
+contract.
 
 ### Commit messages
 

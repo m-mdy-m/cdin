@@ -37,7 +37,21 @@ command.add(nil, {
   end,
 
   ["core:open-log"] = function()
-    local node = core.root_view:get_active_node()
+    local root = core.root_view
+    local node = root:get_active_node()
+
+    if node.locked then
+      local function find_unlocked(n)
+        if n.type == "leaf" then return (not n.locked) and n or nil end
+        return find_unlocked(n.a) or find_unlocked(n.b)
+      end
+      node = find_unlocked(root.root_node)
+      if not node then
+        core.log("Cannot open log: no unlocked editor node available")
+        return
+      end
+    end
+
     node:add_view(LogView())
   end,
 })

@@ -1,271 +1,275 @@
 # Configuration
 
-cdin is configured through your personal config file:
-`~/.config/cdin/user/init.lua`. It loads last, after the core and
-all extensions, so anything you set there overrides the defaults.
+Everything is configured in one file:
 
-To open it from inside the editor, run `core:open-user-module` from the
-command palette (`Ctrl+Shift+P`).
+```
+~/.config/cdin/user/init.lua
+```
 
----
-
-## Config values
-
-All options live in the `config` table:
+It is plain Lua. **`core` and `config` are not globals** — the editor raises on
+any undeclared global, so `require` what you need:
 
 ```lua
-local config = require "core.config"
+local core    = require "core"
+local config  = require "core.config"
+local keymap  = require "core.input.keymap"
+local command = require "core.input.command"
+local themes  = require "core.themes"
 
 config.indent_size = 4
-config.tab_type = "hard"
+keymap.add { ["ctrl+g"] = "doc:go-to-line" }
+command.add(nil, { ["my:hello"] = function() core.log("hi") end })
 ```
 
-### Extensions
+Writing bare `config.indent_size = 4` or `core.log(...)` in this file raises
+`cannot get undefined variable`. That is not pedantry — it is what makes a typo
+in a plugin's global a loud failure instead of a silent one.
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.plugins` | `nil` | Which **site** plugins load. `nil` = all, `false` = none, a table = a whitelist. Does not affect the mandatory bundled set. |
-| `config.site_dirname` | `"site"` | The name of the installed-extensions directory, under `<data_home>/cdin/`. |
-| `config.site_dir` | (unset) | A full path, which overrides `site_dirname` entirely. |
-| `config.site_path()` | — | Resolves the site directory. Call this; do not read a path out of the table. |
+The cdin-x `modules` plugin adds a `core:open-user-module` command that opens
+this file from inside the editor. The runtime does not: opening a file is a
+workflow, and workflows live in plugins.
 
-#### The site directory
+## When it runs, and why that matters
 
-Where cdin-x is installed, and where the loader looks for site plugins:
-`$XDG_DATA_HOME`/`cdin/<name>` or `~/.local/share/cdin/<name>` on Linux and
-macOS; on Windows `%LOCALAPPDATA%`, then `%APPDATA%`, then
-`%USERPROFILE%\AppData\Local`, each plus `\cdin\<name>`.
+The order is fixed, and two details in it are load-bearing:
 
-**`config.site_dirname` is the one knob.** Change it and everything follows —
-the loader, the theme registry, and cdin-x, which reads this table rather than
-computing a path of its own:
+```
+1. config defaults          data/core/config.lua
+2. command.add_defaults()   every runtime command and binding
+3. your init.lua            ← you are here
+4. config.plugins = false   if --no-plugins was passed
+5. bundled plugins          unconditional: vim, always
+6. site plugins             whatever your config.plugins selected
+7. .lite_project.lua        the project module, if there is one
+```
+
+**Your file runs before the plugins.** Two consequences, both of which people
+rely on without noticing:
+
+- A key you set is one a plugin **can** override. Because `keymap.add` prepends,
+  a plugin loading after you *will* come first — so to beat a plugin you need
+  `keymap.add(map, true)`, not a second `keymap.add`.
+- `require`-ing a plugin's *module* from here works — the site directory is on
+  `package.path` by then — but its `init()` side effects have not run yet. You
+  are loading code, not starting a plugin.
+
+The alternative — running your config last — would make cdin-x's palette
+impossible to rebind, because nothing could come after it. That is the whole
+reason for this order.
+
+**`--no-plugins` is applied after your file, not before.** So
+`config.plugins = { "vim" }` and `cdin --no-plugins` together give you the
+bundled set and nothing else; the flag wins. It also means you cannot use your
+config to defend against the flag, which is intended — it is a debugging tool,
+not a policy.
+
+**`.lite_project.lua` runs last, after plugins.** Project-local configuration
+therefore *can* override a plugin's choices, which is the opposite of what your
+`init.lua` can do. That asymmetry is deliberate: a project's settings should
+win over your personal ones, and a plugin is a third thing again.
+
+## Where things live
 
 ```lua
--- ~/.config/cdin/user/init.lua
-config.site_dirname = "extensions"     -- ~/.local/share/cdin/extensions
+-- Windows
+--   user_dir   %APPDATA%\cdin\user                     (~/.config/cdin/user elsewhere)
+--   data_home  %LOCALAPPDATA%\cdin
+-- POSIX
+--   user_dir   ${XDG_CONFIG_HOME:-~/.config}/cdin/user
+--   data_home  ${XDG_DATA_HOME:-~/.local/share}/cdin
 ```
 
-It is resolved lazily by `config.site_path()` rather than once at load,
-precisely so that this works: your `init.lua` runs *after* `core.config` has
-been required, so a value computed at load would already be fixed before you
-had a chance to change it.
+| key | default | what it does |
+| --- | --- | --- |
+| `config.user_dir` | `<config_home>/cdin/user` | where `init.lua` and your own themes are looked up |
+| `config.user_root` | `<config_home>/cdin` | the parent of the above |
+| `config.data_home` | `<data_home>/cdin` | the base every other path hangs off |
+| `config.site_dirname` | `"site"` | the site directory's **name**, under `data_home` |
+| `config.site_dir` | unset | a full path, which overrides `site_dirname` entirely |
+| `config.fonts_dir` | `EXEDIR/data/fonts` | bundled with the binary; do not repoint it |
 
-"site" is the word vim and neovim use for exactly this directory (`:h
-site-dir`) — third-party content, as opposed to the editor's own. If you have
-no vim background, `extensions` is the more obvious choice and it costs
-nothing to switch.
+**One knob, and every consumer follows it.** `config.site_dirname` decides where
+installed extensions live, and the plugin loader, the theme registry and cdin-x
+all read the resolved path rather than computing one of their own. Rename it and
+everything follows together; set `site_dir` and the name stops mattering.
 
-For a location outside the data home entirely, set the full path instead:
+`site` is the word vim and neovim use for exactly this directory
+(`:h site-dir`) — third-party content, as opposed to the editor's own. It is the
+editor's name to choose, and cdin-x is told rather than assumed: the installer
+mirrors whatever it is set to.
+
+`config.site_path()` resolves it. **Call it; do not read a path out of the
+table.** It is resolved at the point of use rather than cached into a field at
+load time, because this very file runs after `core.config` was required — a
+value computed then would be fixed before you had a chance to change it, and the
+one knob would silently do nothing.
+
+## Plugins
 
 ```lua
-config.site_dir = "/opt/whatever/cdin-extensions"
+config.plugins = nil          -- every site plugin   (default)
+config.plugins = false        -- no site plugins
+config.plugins = { "vim-tab", "search" }   -- only these
 ```
 
-#### What loads
+Anything other than `nil`, `false` or a list of names is treated as `nil`.
 
-```lua
--- Load nothing from the site. The bundled set — vim, the default theme,
--- the fonts — is part of the build and is unaffected.
-config.plugins = false
-```
+**This selects the *site* set only, and it has no effect on the bundled set.**
+The bundled set is the mandatory one a build copies in — vim mode, the default
+theme, the fonts — and it loads whatever this says, including `false`. That is
+why `--no-plugins` cannot turn vim off: a cdin without vim is not an editor, and
+a debugging flag is not a policy.
 
-```lua
--- Load only these two from the site.
-config.plugins = { "palette", "finder" }
-```
+So `config.plugins = false` means *"the bare editor"*, not *"the editor with
+nothing"*. The bundled set still loads, and the editor still starts, renders,
+edits and answers <kbd>Ctrl</kbd>+<kbd>N</kbd>.
 
-`--no-plugins` is the command-line spelling of `config.plugins = false`. It
-does **not** disable the bundled set: `--no-plugins` cannot turn vim off in an
-editor that has no other modal editing.
+Note the corollary: **cdin-x is a site plugin**, so `config.plugins = false` and
+`--no-plugins` both switch off the palette, the finders, the tree, tabs, search
+and git. If you are wondering why an extension you installed vanished, this is
+usually the answer.
 
-The user `init.lua` runs **before** extensions load, so a key binding set here
-is one a plugin has to override, not the other way round. `require`-ing an
-extension's module works (the site roots are already on `package.path`), but
-its `init()` side effects are not there yet.
-
-### Editor
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.indent_size` | `2` | Spaces per indent level |
-| `config.tab_type` | `"soft"` | `"soft"` (spaces) or `"hard"` (tabs) |
-| `config.line_limit` | `80` | Column where the line guide is drawn |
-| `config.highlight_current_line` | `true` | Highlight the line the cursor is on |
-| `config.line_height` | `1.2` | Line height multiplier |
-| `config.max_undos` | `10000` | Maximum undo steps stored |
-| `config.undo_merge_timeout` | `0.3` | Consecutive edits within this many seconds are merged into one step |
-| `config.symbol_pattern` | `"[%a_][%w_]*"` | Lua pattern defining what counts as a "word" |
-| `config.non_word_chars` | (punctuation) | Characters that word motions stop at |
-
-### Vim mode
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.vim_mode_enabled` | `true` | Enable or disable modal editing |
-| `config.scrolloff` | `5` | Lines of context kept above/below the cursor while scrolling |
-| `config.line_number_relative` | `false` | Show line numbers relative to the cursor |
-
-### Files
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.file_size_limit` | `10` | Maximum file size in MB the editor will open |
-| `config.ignore_files` | `"^%."` | Lua pattern for files to hide from the project scanner |
-
-### Rendering
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.fps` | `60` | Target frame rate |
-| `config.mouse_wheel_scroll` | `54 * SCALE` | Pixels scrolled per mouse wheel tick |
-
-### Project scanner
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.project_scan_rate` | `10` | How often (in seconds) the background thread rescans project files |
-
-### Logs
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.max_log_items` | `80` | Maximum entries kept in the log view |
-| `config.message_timeout` | `3` | Seconds a status bar message stays visible |
-
-### Tree view
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.treeview_size` | `200 * SCALE` | Width of the tree panel in pixels |
-| `config.show_hidden_files` | `true` | Show dot files in the tree |
-| `config.treeview_git_enabled` | `true` | Show git status markers (A/M/D/?) |
-| `config.treeview_git_update_rate` | `2` | Seconds between git status polls |
-
-### Autocomplete
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.autocomplete_max_suggestions` | `6` | Maximum suggestions shown |
-
-### Session
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `config.session_restore` | `false` | Reopen the last session on startup |
-| `config.session_save_on_quit` | `true` | Save the session automatically on quit |
-| `config.session_max_recent` | `10` | Number of recent files/dirs to remember |
-
----
-
-## Keybindings
-
-Add or override keybindings with `keymap.add`:
-
-```lua
-local keymap = require "core.input.keymap"
-
-keymap.add {
-  ["ctrl+escape"] = "core:quit",
-  ["ctrl+h"]      = "find-replace:replace",
-}
-```
-
-To override an existing binding, pass `true` as the second argument:
-
-```lua
-keymap.add({ ["ctrl+s"] = "doc:save-as" }, true)
-```
-
-Modifier names are lowercase and separated by `+`. A stroke can map to a
-single command or a list — cdin tries each in order and stops at the first
-one that does anything:
-
-```lua
-keymap.add {
-  ["escape"] = { "command:escape", "doc:select-none" },
-}
-```
-
-A full list of commands and their default bindings is in the
-[Command Reference](commands.md).
-
----
+There is a whitelist form for when you want most of it but not all of it. Names
+are the directory names under `plugins/`, not manifest names.
 
 ## Themes
 
-Three themes are available. Load one in `data/user/init.lua`:
+| key | default | what it does |
+| --- | --- | --- |
+| `config.theme` | `"default"` | the theme applied at load time |
+
+`config.theme` is applied at `style.lua` load time, which is **before any plugin
+runs**. A theme that only exists in a root an extension registers later can
+therefore fall back silently at startup — so after plugins load, the runtime
+retries: if `config.theme` differs from what actually applied and now resolves to
+a real file, it is applied again. That retry is unconditional.
+
+There is a `config.theme_auto_reload` key in `config.lua` with the default
+`true`, and **it is read nowhere.** Setting it to `false` does not disable
+anything. It is listed here so you do not spend time on it.
+
+Prefer changing themes at runtime — cdin-x's theme switcher does this, and it
+writes `config.theme` — over editing this key and restarting.
+
+See [themes](themes.md) for the format and the full colour list.
+
+## Text
+
+| key | default | what it does |
+| --- | --- | --- |
+| `config.indent_size` | `2` | spaces per indent level, and the width of one unindent step |
+| `config.tab_type` | `"soft"` | `"hard"` inserts a literal tab; anything else inserts spaces |
+| `config.line_height` | `1.2` | line height as a multiple of the font size |
+| `config.highlight_current_line` | `true` | draw the current line's background |
+| `config.line_number_relative` | `false` | show line numbers relative to the cursor |
+| `config.scrolloff` | `5` | lines of context kept when scrolling past the ends |
+| `config.non_word_chars` | see file | the word boundaries movement uses |
+
+`config.indent_size` is used for *backspace as well as indent*: at the start of
+a run of spaces it deletes a whole step rather than one space. That is why
+<kbd>Backspace</kbd> over a four-space indent removes four columns with
+`indent_size = 4` and one with `indent_size = 1`.
+
+`config.non_word_chars` is the one to change if a movement key does the wrong
+thing in a language with unusual identifiers. It is not validated against
+anything — a pattern that does not compile is a pattern that matches nothing,
+silently.
+
+### Two keys that do nothing
+
+These are set in `config.lua` and **read nowhere in this repository.** Setting
+them has no effect today; they are not documented as features because they are
+not:
+
+| key | default | status |
+| --- | --- | --- |
+| `config.symbol_pattern` | `"[%a_][%w_]*"` | never read; movement uses `non_word_chars` alone |
+| `config.line_limit` | `80` | never read; there is no gutter truncation |
+
+If you are chasing a movement bug, `non_word_chars` is the key that matters.
+
+## Direction and shaping
+
+| key | default | what it does |
+| --- | --- | --- |
+| `config.direction` | `"auto"` | `"auto"` per-line base direction, `"ltr"` left-to-right, `"rtl"` right-to-left |
+| `config.shaping_enabled` | `true` | join Arabic and Indic letterforms into their shaped forms |
+
+These are runtime keys, not plugin keys, because the shaper and the bidi
+resolver are in the text pipeline. cdin-x's `rtl_toggle` plugin cycles
+`config.direction` and flips `config.shaping_enabled` for you; it is two
+commands over keys that already exist here.
+
+Turn shaping off if you are editing text in an Arabic script and want the
+isolated forms — it is a real difference when reading letter by letter, and the
+default is on because the shaped forms are what a reader expects.
+
+## Behaviour
+
+| key | default | what it does |
+| --- | --- | --- |
+| `config.fps` | `60` | frame rate cap |
+| `config.project_scan_rate` | `10` | seconds between project file rescans |
+| `config.max_log_items` | `80` | entries kept in the log view |
+| `config.message_timeout` | `3` | seconds a transient message stays up |
+| `config.undo_merge_timeout` | `0.3` | seconds within which consecutive edits merge into one undo step |
+| `config.max_undos` | `10000` | undo stack depth |
+| `config.file_size_limit` | `10` | megabytes; larger files are not indexed by the project scan |
+| `config.ignore_files` | `"^%."` | a Lua pattern; matching entries are skipped by the scan |
+| `config.mouse_wheel_scroll` | `54 * SCALE` | pixels per wheel notch |
+
+**`config.undo_merge_timeout` is the one people want to change and do not know
+exists.** Typing is merged into a single undo step while the gaps between
+keystrokes are under the timeout, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back a
+word rather than a character. Raising it makes undo coarser; setting it to `0`
+makes every edit its own step.
+
+`config.ignore_files` is a pattern, not a glob, and it applies to the **project
+scan** — the file list the tree and the finders read. It does not stop you
+opening a dotfile by name. cdin-x's git plugin layers its own ignore rules on
+top of this, and is the better place to change them.
+
+## Owned by plugins, not here
+
+These are deliberately **absent** from `data/core/config.lua`. Each is defined by
+the plugin that uses it, with its own default, so the key does not outlive the
+plugin and cannot drift from it:
+
+| key | owner |
+| --- | --- |
+| `config.vim_mode_enabled` | cdin-x's `vim` plugin |
+| `config.session_restore` | cdin-x's `session` plugin |
+| `config.session_restore_dir`, `config.session_restore_theme` | owned by cdin-x's `session`, but the **runtime defaults both to `true`** at boot (`data/core/init.lua:7-8`) and reads the persisted theme before anything else loads |
+| `config.site_dir` set by cdin-x | cdin-x's manager, to the same value you set |
+
+**A key a plugin declares in its manifest is a declaration, not an application.**
+Nothing copies it onto `config` for you. If a plugin documents a default, set it
+yourself:
 
 ```lua
--- warm dark theme
-require "user.colors.fall"
-
--- light theme
-require "user.colors.summer"
-
--- default (near-black, purple accent) — no require needed
+config.vim_mode_enabled = true   -- the documented default, stated explicitly
 ```
 
-To write your own theme, create a Lua file in `data/user/colors/` and set
-fields on the `style` table:
+A copy of a plugin's default in `data/core/config.lua` would be a key that
+outlives the plugin: meaningless once it is disabled, and one more place for the
+two to disagree.
+
+## Setting a default
+
+Use a `nil` guard rather than an assignment, so your file and a plugin can both
+express a default without the last one loaded winning:
 
 ```lua
-local style  = require "core.style"
-local common = require "core.utils.common"
-
-style.background = { common.color "#1e1e2e" }
-style.text       = { common.color "#cdd6f4" }
-style.caret      = { common.color "#f5c2e7" }
-style.accent     = { common.color "#89b4fa" }
--- ... and so on
+if config.indent_size == nil then config.indent_size = 4 end
 ```
 
-See `data/core/style.lua` for the full list of style fields and their
-defaults.
+You will rarely need this — the point is that it is *possible*. A plain
+assignment is a decision, and a decision made in your config is exactly what
+should beat a plugin.
 
----
+## Files
 
-## Project-local config
-
-Drop a `.lite_project.lua` file in the root of any project directory and
-cdin loads it automatically when you open that directory. Use it for
-per-project overrides:
-
-```lua
--- .lite_project.lua
-local config = require "core.config"
-config.indent_size = 4
-config.tab_type = "hard"
-```
-
-It's a plain Lua script with the same context as `user/init.lua`. To create
-or open it from the editor, run `core:open-project-module` from the command
-palette.
-
----
-
-## Example user config
-
-```lua
-local config = require "core.config"
-local keymap = require "core.input.keymap"
-
--- indentation
-config.indent_size = 4
-config.tab_type = "soft"
-
--- vim
-config.scrolloff = 8
-config.line_number_relative = true
-
--- session
-config.session_restore = true
-
--- theme
-require "user.colors.fall"
-
--- extra keybindings
-keymap.add {
-  ["ctrl+escape"] = "core:quit",
-  ["ctrl+h"]      = "find-replace:replace",
-}
-```
+| file | holds |
+| --- | --- |
+| [`data/core/config.lua`](../../data/core/config.lua) | every default, and the path resolution |
+| [`data/core/preboot.lua`](../../data/core/preboot.lua) | the session state read before anything else loads |

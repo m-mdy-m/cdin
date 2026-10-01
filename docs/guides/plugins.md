@@ -1,376 +1,342 @@
 # Plugins
 
-## Overview
+cdin has a loader, a site directory, and an extension contract. It does **not**
+have a package manager, a plugin registry, a dependency resolver, or network
+access at runtime.
 
-cdin has no package manager, no plugin registry, and no network access at
-runtime. It also knows nothing about any specific plugin.
+That is not a missing feature so much as a boundary. The loader is about twenty
+lines of intent; the interesting part is what it deliberately refuses to do, and
+why each refusal matters. Everything above that line — installing, versioning,
+dependency order, a UI for it — is
+[cdin-x](https://github.com/m-mdy-m/cdin-x), which is free to be as large as it
+needs to be.
 
-Plugins live in one of two places, and the difference decides how they load:
+**And a build now ships that half**, marked `essential` next to vim, so the panel
+is reachable in every editor rather than only in one that was set up by hand.
+Which of the two you are talking about matters: `data/core/` owns what *loads*,
+cdin-x owns what is *installed*. [The manager](#the-manager) below.
 
-| root | what it is | who puts it there |
-|------|------------|-------------------|
-| `EXEDIR/data/plugins` | **bundled** — the mandatory set | a build, from [cdin-x](https://github.com/m-mdy-m/cdin-x) |
-| `config.site_dir/plugins` | **site** — what you installed | `make install` in a cdin-x checkout, or you |
+## Two roots, and the difference decides everything
 
-`data/core/plugins.lua` loads the bundled set first, unconditionally, and then
-the site set as `config.plugins` selects it.
+| root | what it is | who puts it there | when it loads |
+| --- | --- | --- | --- |
+| `EXEDIR/data/plugins` | **bundled** — the mandatory set | a build, from cdin-x | always, whatever `config.plugins` says |
+| `config.site_path()/plugins` | **site** — what you installed | you, or cdin-x's manager | only if `config.plugins` selects it |
 
-**The bundled set is not optional.** A build without the vim plugin, a default
-theme and the fonts is not an editor that starts, so those are bundled and
-always load — including under `--no-plugins`. This is the one thing cdin
-delegates to cdin-x, and it happens at build time through a single variable,
-`CDINX_DIR`.
+**Every bundled entry loads, always.** Not "the ones that are enabled" — all of
+them. That is what makes a build a runnable editor rather than a runtime with
+plugins available, and it is why `config.plugins = false` and `--no-plugins`
+cannot turn off vim mode: a cdin without it is not an editor, and a debugging
+flag is not a policy.
 
-Everything else is optional and lives in the site directory. With none of it,
-cdin is a plain text editor with vim keys.
+A failing **bundled** plugin is reported at error level and the rest still load.
+A failing **site** plugin is logged and skipped. The editor always starts, because
+an editor that refuses to open is a worse bug than a missing feature.
 
-## The site directory
+**A bundled plugin always wins over a site plugin of the same name** — on disk and
+at runtime. The scan is bundled-first and first-seen-wins, so a name is never
+loaded twice from two places.
 
-cdin resolves it, because cdin is what walks it: `config.site_path()`, which is
-`config.site_dir` if you set it and otherwise
-`<data_home>/cdin/<config.site_dirname>`. `data_home` is `$XDG_DATA_HOME` or
-`~/.local/share` on Linux and macOS; on Windows `%LOCALAPPDATA%`, then
-`%APPDATA%`, then `%USERPROFILE%\AppData\Local`, each plus `\cdin`.
+## What counts as a plugin
 
-`config.site_dirname` is the one knob. Change it and the loader, the theme
-registry and cdin-x all move together:
+Either of these, in either root:
+
+```
+plugins/my-plugin/init.lua      a directory
+plugins/my-plugin.lua           a single file
+```
+
+The name is the directory name or the filename without `.lua`. Entry points are
+loaded in **sorted order by name**, not in filesystem order — so load order is
+reproducible, and a plugin cannot rely on being scanned first because its name
+sorted earlier by accident.
+
+Load order within a root is alphabetical, and **that is not dependency order.** If
+plugin A needs something plugin B registered, A has to be robust to running
+first. Where that is not acceptable, the answer is cdin-x's manager, which sorts
+on declared dependencies.
+
+## What a plugin is handed
 
 ```lua
--- ~/.config/cdin/user/init.lua
-config.site_dirname = "extensions"     -- ~/.local/share/cdin/extensions
+-- <site>/plugins/my-plugin/init.lua
+local M = {}
+
+function M.init(core, config)
+  -- called with two positional arguments
+end
+
+function M.unload()             -- optional
+end
+
+return M                        -- must return a table
 ```
 
-"site" is the word vim and neovim use for exactly this directory
-(`:h site-dir`): third-party content, as opposed to the editor's own. It is
-also what `make install` in cdin-x writes to by default. If you would rather
-it said `extensions`, change that one line — and the installer's
-`SITE_DIRNAME`, which `make test-site-dir` checks still agrees.
+Two things are easy to get wrong here, and both fail quietly.
 
-To install extensions into an installed cdin:
+**`init` receives two arguments, positionally.** `function M.init(config)` compiles
+perfectly and then reads the `core` table as your config. Worth checking by eye
+rather than by testing.
 
-```sh
-git clone https://github.com/m-mdy-m/cdin-x.git
-cd cdin-x
-make link      # symlink, for development — edits take effect on restart
-make install   # copy
-```
+**The entry point must return a table.** A `nil` return is reported as
+`entry point must return a table`, not as a missing-plugin error.
 
-## Layout
-
-A plugin is either a directory containing `init.lua`, or a single `.lua` file.
-Both are loaded the same way.
-
-```text
-<site>/
-  plugins/
-    cdin-x/init.lua       -- the extension manager's entry point
-    my-plugin/init.lua     -- a directory plugin
-    my-thing.lua           -- a single-file plugin
-  cdinx/                   -- the extension manager
-  X/                       -- the extension catalog
-```
-
-Modules inside a plugin are required by their path from the site root, because
-the loader puts `<site>/?.lua` and `<site>/?/init.lua` on `package.path`:
+**`init` may be called more than once.** The loader `dofile`s the entry point — it
+does not `require` it — so a reload re-runs the file's body, while sibling modules
+you pulled in with `require` stay cached from the first load. Guard it:
 
 ```lua
-require "cdinx"                      -- <site>/cdinx/init.lua
-require "X.core.treeview.api"        -- <site>/X/core/treeview/api.lua
-```
-
-Those roots are **appended**, never prepended. A site can add extensions to the
-editor; it cannot shadow `core.*` or the bundled `X.core.vim.*`, which is what
-stops a plugin from replacing the runtime it is extending.
-
-## Choosing what loads
-
-`config.plugins` selects the **site** set only. It does not affect the bundled
-set.
-
-| Value | Site plugins that load |
-|-------|------------------------|
-| `nil` (default) | all of them |
-| `false` | none — the mandatory bundle still loads |
-| `{ "palette", "finder" }` | exactly these |
-
-```lua
--- ~/.config/cdin/user/init.lua
-
--- Load nothing from the site. The bundled set is unaffected.
-config.plugins = false
-```
-
-A plugin you leave out is not gone — it is still on disk and can be loaded
-later with `core:load-plugin`. A name that isn't there is logged and skipped,
-so a config written on another machine still gets an editor.
-
-### From the command line
-
-```sh
-cdin --no-plugins          # same as config.plugins = false
-cdin -u NONE               # the Vim spelling of the same thing
-```
-
-The flag wins over `config.plugins`. It sets the *site* set to nothing; the
-mandatory bundle still loads, because `--no-plugins` cannot turn vim off in an
-editor that has no other modal editing.
-
-### Loading a plugin after startup
-
-| Command | Effect |
-|---------|--------|
-| `core:load-plugin <name>` | load a site plugin that wasn't autoloaded; accepts a comma-separated list |
-| `core:unload-plugin <name>` | run its `unload()` and forget it |
-| `core:list-plugins` | what is on disk, where it came from, and what of it is loaded |
-
-These are the only way to change the set at runtime, and nothing about it
-persists — after a restart you are back to whatever `config.plugins` says.
-
-## What core owns, and what a plugin owns
-
-A keymap binding that names a command nobody registered is the worst kind of
-bug: the key press is consumed, nothing runs, and nothing errors. So core
-draws a hard line, and `make test-plugins` enforces it.
-
-**Everything in the core keymap is a core command.** All of them resolve with
-zero plugins loaded.
-
-The line is drawn at: *could this work with no input from the user?*
-
-- `Ctrl+N` — new document. No input needed, so it is core, and it works in a
-  bare editor.
-- `Ctrl+P` — find file. Prompts, so it is a plugin.
-- `Ctrl+Shift+P` — command palette. Prompts, so it is a plugin.
-- `Ctrl+O` — open file. Prompts, so it is a plugin.
-
-`Ctrl+C` / `Ctrl+A` in the log view are core.
-
-A plugin that wants a key must bind it itself, in its own `init()`. Nothing in
-`data/core/keymaps/default.lua` may name a plugin command, which is what keeps
-the bare editor free of bindings that go nowhere.
-
-The reverse also holds: core never requires a plugin. If a feature needs one,
-it goes through a hook the plugin fills in — `core.register_help_shortcuts` for
-the empty view's shortcut list, `core.register_status_pill` for status-bar
-badges, `core.register_vcs_provider` for git status,
-`core.register_recent_provider` for recents. With no plugin loaded, the hook is
-simply unset and core renders nothing there.
-
-### What moved to cdin-x, and what did not
-
-These were runtime commands and are now optional plugins in cdin-x:
-
-| was | is now | key |
-|-----|--------|-----|
-| `core:find-command` | `X/core/palette` | `Ctrl+Shift+P` |
-| `core:find-file` | `X/core/finder` | `Ctrl+P` |
-| `core:open-file` | `X/core/finder` | `Ctrl+O` |
-| `core:open-folder` | `X/core/finder` | `Ctrl+Shift+O` |
-| `core:reload-module` | `X/core/modules` | — |
-| `core:open-user-module` | `X/core/modules` | — |
-| `core:open-project-module` | `X/core/modules` | — |
-
-What stayed in the runtime, because vim, shell, search, treeview, tab, window,
-menu and the theme switcher are all written against it:
-
-- `core.command_view` and CommandView
-- the command registry (`command.add`, `command.remove`) and the keymap
-  registry
-- Doc, DocView, RootView, and the `doc:*` / `root:*` commands
-- `core:set_project_dir(path)` — the project-directory transition
-
-`core.command_view` is a **runtime service**, not an optional workflow. Do not
-move it.
-
-## Writing a plugin
-
-Minimal single-file plugin:
-
-```lua
--- <site>/plugins/my-plugin.lua
-return {
-  name = "my-plugin",
-
-  init = function(core, config)
-    local command = require "core.input.command"
-    local keymap  = require "core.input.keymap"
-
-    command.add(nil, {
-      ["my-plugin:hello"] = function()
-        core.log("Hello from my plugin!")
-      end,
-    })
-    keymap.add { ["ctrl+shift+h"] = "my-plugin:hello" }
-  end,
-
-  unload = function()
-    require("core.input.keymap").remove { ["ctrl+shift+h"] = "my-plugin:hello" }
-    require("core.input.command").remove { "my-plugin:hello" }
-  end,
-}
-```
-
-Drop it in `<site>/plugins/` and restart.
-
-`unload()` has to undo everything `init()` registered. A plugin that binds a
-key and never removes it will fight the next thing to bind that key, and one
-that is reloaded will accumulate a copy of its registrations per load. For
-help entries, keep the handle `core.register_help_shortcuts` returns and hand it
-back to `core.unregister_help_shortcuts`.
-
-`init()` must be safe to call twice — guard it, as above.
-
-A plugin with several files uses a directory:
-
-```text
-<site>/plugins/my-plugin/
-  init.lua        -- returns the table above
-  commands.lua
-  keymap.lua
-```
-
-`init.lua` is the only entry point the loader looks at, and it is `dofile`d
-rather than `require`d, so its body re-runs on every load while sibling modules
-stay cached. Keep `require` calls for your own modules *inside* `init()`.
-
-### Required and optional fields
-
-Only `init` and `unload` are read by the loader. `name` is used as the display
-name; without it the filename is used.
-
-A failure inside `init()` is caught and logged — the plugin is skipped and the
-editor carries on. A plugin that raises an error cannot take the editor down
-with it. A failing *bundled* plugin is reported at error level and named
-explicitly, because you will want to know a build is missing part of itself.
-
-### command.add(predicate, commands)
-
-`predicate` controls when the command is active. `nil` means always. Pass a
-class name to make it active only when a view of that type is focused:
-
-```lua
-command.add("core.views.docview", {
-  ["my-plugin:do-something"] = function()
-    local doc = core.active_view.doc
-    core.log("Current file: %s", doc:get_name())
-  end,
-})
-```
-
-### core.log(fmt, ...)
-
-Writes a message to the status bar and the log view. Uses `string.format`
-conventions.
-
-### core.add_thread(fn)
-
-Registers a coroutine for background work. Yield a number to sleep:
-
-```lua
-core.add_thread(function()
-  while true do
-    coroutine.yield(10)  -- sleep 10 seconds
-  end
-end)
-```
-
-### core.set_project_dir(path)
-
-Switches project directory. The working directory *is* the project, so this
-validates the path, chdirs, resets the project file list and bumps the
-revision. Returns `true`, or `false` plus a reason. cdin-x's folder workflow
-calls this rather than chdir-ing itself.
-
-### Accessing the active document
-
-```lua
-local doc = core.active_view.doc
-local line, col = doc:get_selection()
-local text = doc:get_text(line, col, line, math.huge)
-```
-
-### Adding a syntax definition
-
-```lua
-local syntax = require "core.syntax"
-
-syntax.add {
-  name = "My Language",
-  files = "%.mylang$",
-  patterns = {
-    { pattern = "#.*",         type = "comment" },
-    { pattern = { '"', '"' },  type = "string"  },
-    { pattern = "%d+",         type = "number"  },
-    { pattern = "[%a_][%w_]*", type = "symbol"  },
-  },
-  symbols = {
-    ["if"]   = "keyword",
-    ["else"] = "keyword",
-    ["end"]  = "keyword",
-  },
-}
-```
-
-Token types that map to style colors: `"normal"`, `"symbol"`, `"comment"`,
-`"keyword"`, `"keyword2"`, `"number"`, `"literal"`, `"string"`,
-`"operator"`, `"function"`.
-
-### Wrapping existing behavior
-
-There's no event/hook system. Extend behavior by wrapping functions:
-
-```lua
-local Doc = require "core.doc"
-local _save = Doc.save
-
-function Doc:save(...)
-  -- do something before saving
-  _save(self, ...)
-  -- do something after saving
+local loaded = false
+function M.init(core, config)
+  if loaded then return end
+  loaded = true
+  -- …
 end
 ```
 
-## Running with no extensions
+Without the guard, an enable/disable cycle doubles every registration the body
+performs. The loader's `command.add` duplicate-name assert is what turns that
+into a visible failure rather than a silent one — but only for commands.
 
-The site directory can be empty. cdin still starts, still edits, and still has
-vim keys, because the mandatory bundle is part of the build rather than part of
-the site.
+**`unload` is the counterpart, and using it is what makes the cycle work.** A
+plugin that registers and never unregisters accumulates one copy per load. The
+loader calls it on `core:unload-plugin` and nothing else; it is not called on
+exit.
 
-```sh
-cdin --no-plugins      # load nothing from the site
-mv "$SITE" /tmp/site-backup && cdin    # or take the whole site away
+## Requiring your own files
+
+The site directory is added to `package.path` as `site/?.lua` and
+`site/?/init.lua`, so inside a plugin:
+
+```lua
+require("my-plugin.commands")     -- → <site>/plugins/my-plugin/commands.lua
+require("my-plugin.util")         -- → <site>/plugins/my-plugin/util/init.lua
 ```
 
-You keep: file open/save/undo, editing, window and pane navigation, the log
-view, the default theme, and the bundled vim plugin.
+**The roots are appended, never prepended.** A site plugin may extend the editor;
+it may not shadow the core it extends, nor the bundled modules the runtime loads
+first. That is why a plugin that wants to replace a `core.*` behaviour has to do
+it through one of the seams below rather than by putting a file in the way.
 
-You lose: the command palette, find file, the open-file and open-folder
-prompts, the project tree, tabs, split management, search, and the other
-themes.
+`require`-ing a *plugin's module* from your `init.lua` works, because your file
+runs before the plugins and the site path is already extended. Its `init()` side
+effects have not run at that point — you are loading code, not starting a
+plugin.
 
-Nothing keystrokes into a wall. `Ctrl+P` with no `finder` installed is not bound
-to anything, rather than bound to a command that does not exist.
+## The seams
 
-Both halves of that are tested, because they fail differently:
+There is no hook or event system. There are a set of provider registries and
+document hooks, and beyond that you wrap a function and call the original. Every
+seam below is documented in
+[the extension contract](../architecture/extension-contract.md), which is the
+normative version.
 
-```sh
-make test-plugins     # the runtime half: no cdin-x, nothing read from disk
-make test-workflows   # the cdin-x half: needs CDINX_DIR
-make test-lua         # the unit + integration suite in tests/lua
+### Provider registries
+
+The clean ones. Register, and the runtime uses your answer; the runtime never
+learns what a plugin is for.
+
+| call | what it claims |
+| --- | --- |
+| `core.register_status_pill(key, fn)` | one coloured badge at the left of the status bar; `fn` returns `nil` or `(text, bg_key, fg_key)` |
+| `core.register_vcs_provider(provider)` | `{ is_ignored, refresh_ignored_now, status }` — file ignoring and the git branch in the status bar |
+| `core.register_recent_provider(provider)` | the recent-item list on the empty view |
+| `core.register_help_shortcuts(list)` | entries for the quick-reference list on the empty view; returns a handle |
+| `core.unregister_help_shortcuts(handle)` | removes that group |
+| `style.set_fallback(key, hex)` | a default colour for a key your plugin reads |
+
+**A pill returns style *key names*, not colours.** The second and third values are
+resolved as `style[bg_key]` and `style[fg_key]`, so they must be names of keys a
+theme defines — `"vim_normal_bg"`, `"accent"` — and that is what lets the badge
+follow a theme change. A literal colour there will not work.
+
+A pill whose function returns `nil` draws nothing, so the badge disappears rather
+than sitting there showing a zero. `register_status_pill` is keyed, so
+`core._status_pills[key] = nil` removes one — documented here because the
+registry has no `remove` and a plugin that registered it is the only thing that
+should clear it.
+
+**`core.register_vcs_provider` cannot be called from `init()`.** Unlike the other
+three, it is installed from inside the project scanner's thread body, and that
+thread does not start until the frame loop runs — after every plugin's `init()`
+has returned. Calling it there gives `attempt to call a nil value`. This is a real
+rough edge in the runtime, not a mistake on your part: defer the call with
+`core.add_thread`, or tolerate a nil function and register on a later pass.
+
+`core.unregister_help_shortcuts` returns `false` for a handle that was never
+registered rather than raising, because `unload` also runs on the error path and a
+second call should be harmless.
+
+### Document hooks
+
+Three lists on the `Doc` class, called with the document:
+
+```lua
+table.insert(Doc._before_save, fn)   -- fn(doc) before writing to disk
+table.insert(Doc._after_save,  fn)   -- fn(doc) after writing
+table.insert(Doc._after_load,  fn)   -- fn(doc) after reading
 ```
 
-`test_commands.lua` pins what the runtime owns. `test_workflows.lua` boots the
-real loader against a cdin-x checkout and pins what it owns, that each of
-`Ctrl+P` / `Ctrl+Shift+P` / `Ctrl+O` / `Ctrl+Shift+O` has exactly one command
-bound to it, and that unloading `palette`, `finder` and `modules` takes the
-commands and the keystrokes with them.
+These are preferred over wrapping `Doc.save`, because wrapping it puts your code
+in the path of every save including ones you did not want to touch, and because
+unloading is `table.remove` rather than a restore-everything dance. cdin-x's
+`trimwhitespace` uses `_before_save` and its `autoreload` uses `_after_load` and
+`_after_save`; neither wraps anything.
 
-The single-owner assertion is the one worth having. `keymap.add` prepends, so a
-second plugin binding a stroke it does not own is queued behind the first
-rather than replacing it — nothing errors, and the shadowed binding only shows
-up if you go looking.
+### The prompt
 
-## The contract
+`core.command_view` is the one prompt primitive:
 
-What cdin guarantees an extension, and what cdin-x may rely on, is written
-down in [the extension contract](../architecture/extension-contract.md).
+```lua
+core.command_view:enter(label, submit, suggest, cancel)
+core.command_view:set_text(text)
+```
+
+`submit(text, suggestion)` and `suggest(text) -> items` may both be `nil`. An item
+is anything with a `text` field; cdin's own `doc:go-to-line` adds a `__tostring`
+metatable so an item can be both a display string and carry a payload.
+
+A plugin that builds a second prompt rather than using this one ends up with two
+implementations of the same thing, and the one in the plugin is the one nobody
+tests.
+
+### Wrapping a function
+
+For everything else, save the original and put it back on unload:
+
+```lua
+local original = { update = RootView.update }
+RootView.update = function(...) original.update(...) end
+
+function M.unload()
+  RootView.update = original.update
+end
+```
+
+`core.quit`, `keymap.on_key_pressed`, `StatusView.get_items` and
+`RootView.on_text_input` / `update` / `draw` are wrapped this way by the
+extensions that need them. **Wrap the outermost one, and restore it in
+`unload`** — a wrapper that leaks is a wrapper that runs again next load.
+
+### What cdin hands you outright
+
+| | |
+| --- | --- |
+| `core.add_thread(fn, weak_ref)` | a coroutine; `coroutine.yield(seconds)` to sleep. **Never block the frame loop with I/O** |
+| `core.try(fn, ...)` | run it, log the error, return whether it worked |
+| `core.log(fmt, …)` / `core.log_quiet(…)` / `core.error(fmt, …)` | printf-style; the `error` level goes to the log view |
+| `core.open_doc(filename)` | open or create; returns the existing one if already open |
+| `core.active_view`, `core.last_active_view` | the focused view, and the one before it |
+| `core.active_docview()` | the active view if it is a document view, else `nil` |
+| `core.set_active_view(view)` | focus a view |
+| `core.set_project_dir(path)` | change the working directory; the project scan follows |
+| `core.reload_module(name)` | drop from `package.loaded`, require again, **fold the new fields back into the old table** |
+| `core.push_clip_rect` / `core.pop_clip_rect` | scoped clipping, for a custom view |
+| `core.redraw = true` | after any state change a view caches |
+
+`core.reload_module` folding new fields into the old table is the detail worth
+knowing: a module somebody is still holding stays valid instead of becoming a
+second, stale copy of itself. What it does **not** undo is what the module
+registered while loading. A module that registers commands at its top level and
+gets reloaded will collide with itself — so write modules so their top level is
+declarations and their `init()` does the registering.
+
+`core.set_project_dir` is a runtime operation, not a workflow. The working
+directory *is* the project; the file list and revision the views read are runtime
+state. The prompt that asks which directory is a workflow, and lives in a plugin
+that calls this.
+
+## Managing the set at runtime
+
+Three commands, and they are the only way to change the loaded set after startup:
+
+| command | does |
+| --- | --- |
+| `core:list-plugins` | what is on disk in both roots, and which of it is loaded |
+| `core:load-plugin <name>…` | load by name, whatever `config.plugins` said |
+| `core:unload-plugin <name>…` | run its `unload()` and forget it |
+
+Comma-separated or whitespace-separated lists work. With no argument they report
+what to do rather than failing silently.
+
+These are the `:packadd` case: `config.plugins` decides what loads on its own,
+and naming a plugin explicitly is how a bare editor stays *useful* rather than
+merely empty. Loading is deliberately not gated on the site set being enabled, so
+`config.plugins = false` still leaves you a way to bring one thing in.
+
+**Nothing here persists.** There is no saved state — what you load this way is
+gone at exit, and the only thing that survives a restart is what `config.plugins`
+asks for. Persistence is the package manager's job, and the manager is in every
+build: see below.
+
+## The manager
+
+Not a runtime command, and not a plugin you have to install. It is marked
+`essential` in [cdin-x](https://github.com/m-mdy-m/cdin-x), so `make` bundles it
+the way it bundles vim, and the panel is a keystroke away in any build:
+
+| key | does |
+| --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> | open / close the extension panel |
+| <kbd>M</kbd> | the same, in vim normal mode |
+| <kbd>J</kbd> / <kbd>K</kbd> | move |
+| <kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>F</kbd> | search; type to filter |
+| <kbd>Space</kbd> / <kbd>Return</kbd> | enable or disable |
+| <kbd>I</kbd> / <kbd>U</kbd> | install / remove |
+| <kbd>D</kbd> | details |
+| <kbd>R</kbd> | rescan |
+
+It lists what the build carries, what is installed, and what the catalog offers,
+grouped by category, and it filters as you type. **What it can install depends
+on what is on disk**: with only a build present it lists the set the build ships
+and nothing else, because installing means copying files that have to exist
+somewhere. Install cdin-x and the whole catalog is there.
+
+Two things about it worth knowing, because they are deliberate. The extensions
+the build ships show as **in editor**: present, listed, and not the manager's to
+remove. And enable/disable *does* persist — in cdin-x's own state file, keyed by
+name, so the panel's idea of what is on survives a restart without the runtime
+growing a registry of its own.
+
+## Installing your own
+
+Drop a directory or a `.lua` file into `config.site_path()/plugins/` and restart,
+or run `core:load-plugin <name>`. To find out where that is:
+
+```lua
+require("core.config").site_path()
+```
+
+`config.site_path()` rather than a field on the table, deliberately — see
+[configuration](configuration.md#where-things-live). Your plugin can be loaded by
+name while it is still being written, which is the whole development loop.
+
+For a package manager, an in-app UI, dependency resolution or anything that
+survives a restart, that is cdin-x, and you want it rather than a second
+implementation here.
+
+## The two things that are not yours
+
+**The bundled set.** The loader knows nothing about where it came from. Whatever
+produced it is not this repository's business; only the build knows, and it knows
+it as a path — `CDINX_DIR`. A build never fetches anything.
+
+**The site directory's name.** `config.site_dirname` is the editor's to choose,
+and cdin-x reads `config.site_path()` rather than computing a path of its own.
+That is the whole of what it knows about where anything lives, and it is why
+renaming the site directory renames it for both halves at once.
+
+## Files
+
+| file | holds |
+| --- | --- |
+| [`data/core/plugins.lua`](../../data/core/plugins.lua) | the loader: both roots, entry points, the error policy |
+| [`data/core/config.lua`](../../data/core/config.lua) | `config.plugins` and the path resolution |
+| [`data/core/commands/plugin.lua`](../../data/core/commands/plugin.lua) | the three management commands |
+| [`data/core/help.lua`](../../data/core/help.lua) | the help-shortcut registry |
+| [`data/core/project.lua`](../../data/core/project.lua) | the VCS provider hook, and the file scan |
+| [`data/core/docs.lua`](../../data/core/docs.lua) | `core.open_doc`, `core.reload_module`, clipping |
+| [`data/core/init.lua`](../../data/core/init.lua) | `core.add_thread`, `core.set_active_view`, `core.quit` |
+| [`data/core/loop.lua`](../../data/core/loop.lua) | `core.step`, `core.run`, the thread scheduler, and where `core.redraw` is consumed |
+| [`data/core/preboot.lua`](../../data/core/preboot.lua) | the session state read before anything else loads |
+| [`data/core/lifecycle.lua`](../../data/core/lifecycle.lua) | the project module, and an uncalled `core.on_error` |

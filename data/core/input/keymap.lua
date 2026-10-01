@@ -36,8 +36,15 @@ function keymap.add(map, overwrite)
       keymap.map[stroke] = commands
     else
       keymap.map[stroke] = keymap.map[stroke] or {}
+      local chain = keymap.map[stroke]
+      -- A command already in the chain is moved to the front rather than
+      -- inserted a second time, so a plugin that registers twice (enable /
+      -- disable cycles, reloads) does not grow the chain on every load.
       for i = #commands, 1, -1 do
-        table.insert(keymap.map[stroke], 1, commands[i])
+        for j = #chain, 1, -1 do
+          if chain[j] == commands[i] then table.remove(chain, j) end
+        end
+        table.insert(chain, 1, commands[i])
       end
     end
     for _, cmd in ipairs(commands) do

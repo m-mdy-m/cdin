@@ -1,270 +1,294 @@
 # Themes
 
-cdin's visual style is controlled by the `style` table in `data/core/style.lua`.
-Everything — background color, text color, font, line height, caret width —
-is a field in that table. A theme is just a Lua file that sets some of those
-fields.
+A theme is one Lua file returning a table of colours. There is no theme format,
+no inheritance, no theme engine, and no theme manager in this repository.
 
-One theme ships in every build: `default`. It comes from
+```
+<root>/<name>/theme.lua
+```
+
+That layout is the whole contract, and it is the layout cdin's registry reads
+unmodified — which is why a directory can be handed to
+`require("core.themes").add_root()` as-is.
+
+**One theme ships in every build: `default`.** It comes from
 [cdin-x](https://github.com/m-mdy-m/cdin-x) and is copied into
-`build/<platform>-<build>/data/themes/default/theme.lua` at build time. cdin-x
-has more; install it and they appear through its theme switcher.
+`build/<platform>-<build>/data/themes/default/theme.lua` at build time. A build
+has to be able to start, and it has to have something to start with, so exactly
+one theme is mandatory. cdin-x ships ten; install it and the rest appear in its
+theme switcher.
 
-Themes are plain Lua files. No package manager, no registry.
+## The fastest way
 
-Themes are looked up in three places, in order — user first, then the build's
-own bundled set, then any root an extension registered:
-
-```
-~/.config/cdin/user/themes/<name>/theme.lua           yours
-<site>/X/themes/<name>/theme.lua                      cdin-x's, once installed
-build/<platform>-<build>/data/themes/<name>/theme.lua  the mandatory default
-```
-
-Because the user directory is searched first, dropping a `dracula/theme.lua`
-into `~/.config/cdin/user/themes/` makes `config.theme = "dracula"` work
-without touching anything else.
-
-An extension registers its own root with `core.themes.add_root(dir)`, which
-also rescans. That matters because the theme list used to be a snapshot taken
-at require time: a theme that appeared later was loadable by name but never
-listed, and a `config.theme` naming it fell back to the default for the first
-frame. The list is now rescanned when a root is added, and `config.theme` is
-re-applied at startup once the extensions have registered theirs.
-
-To switch themes, set `config.theme = "mytheme"` in your
-`~/.config/cdin/user/init.lua`.
-
----
-
-## Writing a theme
-
-Create `~/.config/cdin/user/themes/mytheme/theme.lua`:
+Point the registry at a directory. No build, no manifest, no install:
 
 ```lua
--- ~/.config/cdin/user/themes/mytheme/theme.lua
-local common = require "core.utils.common"
+-- ~/.config/cdin/user/init.lua
+require("core.themes").add_root(os.getenv("HOME") .. "/my-themes")
+```
 
--- helper that converts a hex string to an RGBA table
-local function color(hex)
-  return { common.color(hex) }
+Each subdirectory holding a `theme.lua` becomes a theme. This is the right way
+to try one out and the right way to keep your own, since a directory you own can
+be version-controlled and symlinked independently of the editor.
+
+Or, with no code at all, put it in your own themes directory — the first place
+the registry looks:
+
+```
+~/.config/cdin/user/themes/my-theme/theme.lua
+```
+
+## Where themes are found
+
+In order, and the first hit wins:
+
+1. `config.user_dir/themes` — yours
+2. `EXEDIR/data/themes` — the bundled one
+3. every root added with `require("core.themes").add_root()` — extensions, in the
+   order they were added
+
+**So you can override a bundled theme by name.** Drop a `default/` directory in
+your own themes root and the bundled `default` stops being what loads. That is
+the intended way to tweak the default theme rather than forking it.
+
+`add_root` is called by cdin-x's entry plugin to register the extension catalog's
+themes — before anything else, because `config.theme` is applied at
+`style.lua` load time, long before any plugin runs. If a root appears *after*
+load time the list is rescanned, so a plugin that installs its themes during its
+own `init()` can still have them listed and selectable; and if the theme named by
+your session file only resolves once plugins have registered their roots, the
+runtime retries unconditionally after loading them. (`config.theme_auto_reload`
+exists in `config.lua` but is read nowhere, so it does not control this.)
+
+## Every key
+
+A theme sets **some** of these. Any key it omits keeps the value it already had,
+so a six-colour theme works, and that is deliberate: a theme should be able to be
+a *variation*, not a complete specification. An error would make the six-colour
+theme impossible.
+
+Colours are hex strings. **The one exception is `search_highlight`, which is
+`{ r, g, b, a }`** — four numbers, not a hex string, because it has to be
+composited over whatever is behind it, and a hex string with an alpha channel
+would be a second colour format for one key. A table is passed through
+untouched, so that is the only way to express one.
+
+### Surfaces and text
+
+| key | what it colours | fallback |
+| --- | --- | --- |
+| `background` | the editor's own backdrop | `#050507` |
+| `background2` | the one behind it — tab bar, status bar | `#0b0b10` |
+| `background3` | one step further forward — menus, the popup | `#15151c` |
+| `text` | ordinary text | `#d8d8df` |
+| `caret` | the cursor | `#ffffff` |
+| `accent` | the one saturated colour in the scheme, used sparingly | `#a89bd8` |
+| `dim` | secondary text — hints, inactive entries | `#707080` |
+| `divider` | the lines between things | `#252530` |
+| `selection` | the selected region | `#252536` |
+| `search_highlight` | `{ r, g, b, a }` — matches | `{ 255, 210, 80, 90 }` |
+
+### Gutter and scrollbars
+
+| key | what it colours | fallback |
+| --- | --- | --- |
+| `line_number` | the gutter | `#555565` |
+| `line_number2` | the current line's number | `#a89bd8` |
+| `line_highlight` | the current line's background | `#111119` |
+| `scrollbar` | the scrollbar thumb, at rest | `#090910` |
+| `scrollbar2` | the scrollbar thumb, hovered or dragged | `#55556a` |
+
+`line_number` and `line_number2` are two colours rather than one bolded number
+because the current line has to be findable at a glance in a hundred-line file,
+and that is easier with a different hue than with a different weight.
+
+### Title bar
+
+| key | what it colours | fallback |
+| --- | --- | --- |
+| `titlebar_text` | the title, unfocused | `#9a9aaa` |
+| `titlebar_text_focus` | …focused | `#eeeeff` |
+| `titlebar_button_hover` | a button under the mouse | `#303040` |
+| `titlebar_close_hover` | the close button, hovered | `#e06060` |
+
+### Git
+
+| key | what it colours | fallback |
+| --- | --- | --- |
+| `git_modified` | tracked, with changes | `#d0ad55` |
+| `git_added` | staged | `#65b875` |
+| `git_deleted` | deleted | `#d06060` |
+| `git_conflict` | in conflict | `#e07050` |
+| `git_untracked` | untracked | `#888899` |
+| `git_renamed` | renamed | `#9b8de0` |
+
+**These six live in the runtime, not in a plugin.** They are a shared vocabulary
+rather than one extension's colours: every bundled theme defines all six, and
+several independent places read them with an `or` fallback — the status bar's
+branch display in core, and cdin-x's treeview badges. They are kept here as the
+neutral pre-theme value rather than picking one consumer to own them.
+
+With no git extension loaded nothing reads them, and you can leave them out.
+
+### Vim mode
+
+`vim_pill_fg`, `vim_normal_bg`, `vim_insert_bg`, `vim_visual_bg`,
+`vim_replace_bg`, `vim_command_bg`.
+
+**The runtime has no fallbacks for these, and that is the interesting part.**
+They are cdin-x's vocabulary: the mode pill and the command line are drawn by
+vim mode, which is a bundled extension, not by core. A theme that omits them
+works fine until vim mode is loaded, at which point those reads are `nil` and the
+renderer falls back to **opaque white** — a white pill, not a missing one.
+
+Every bundled theme in cdin-x defines all six, so this only bites a hand-written
+theme. If you write one by hand and the mode pill is white, this is why. The fix
+is to define them, or to give them a default from an extension with
+`style.set_fallback(key, hex)` before vim mode reads them.
+
+The six `git_*` keys are the opposite case: they **do** have core fallbacks,
+because they are a shared vocabulary that several independent places read.
+
+**The pill has to be legible at a glance.** That is the one job it has, and a
+scheme can be beautiful and still leave normal and visual mode indistinguishable.
+That is the part of a theme people get wrong.
+
+### Syntax
+
+The tokens the highlighter emits. A syntax *definition* decides which type a span
+gets; these decide what colour that type is. That split is the whole contract
+between a language definition and a colour scheme.
+
+| key | what it colours | fallback |
+| --- | --- | --- |
+| `normal` | the base for anything not otherwise classified | `#d8d8df` |
+| `symbol` | identifiers | `#c4c4d0` |
+| `comment` | comments | `#686878` |
+| `keyword` | the language's own reserved words | `#9b8cff` |
+| `keyword2` | a second class of them — types, builtins, second-level keywords | `#7f75c8` |
+| `number` | numeric literals | `#e0a060` |
+| `literal` | `true`, `false`, `nil` — values rather than words | `#aaaac0` |
+| `string` | strings | `#86c986` |
+| `operator` | operators | `#ccccd8` |
+| `function` | function names | `#75b9ed` |
+
+A `type` a definition emits that has no key here is **not** guaranteed to fall back
+to `normal`. One of the three draw paths in `docview.lua` does
+(`style.syntax[type] or style.syntax["normal"]`); the other two pass
+`style.syntax[t.type]` straight to the renderer, which turns a missing colour into
+opaque white. So a typo in a syntax definition can render as ordinary text, as
+white, or as a partly-coloured line depending on which span it lands in.
+
+Define every `type` your definitions emit. The full vocabulary the shipped
+definitions use is `string`, `comment`, `comment2`, `number`, `operator`,
+`function`, `symbol`, `keyword`, `keyword2`, `literal`, `normal`, and `special`
+— and the last two have no key here either.
+
+`keyword` and `keyword2` are two classes on purpose. A language with one big
+reserved-word list renders as a wall of identical colour; splitting it lets `self`
+and `true` stand out from `if` and `end` without a theme having to know any
+particular language.
+
+### Not colours
+
+These are numbers, set before the theme loads, and a theme **can** override them
+because the applier copies every key that is not `name` or `syntax`:
+
+| key | what it is |
+| --- | --- |
+| `caret_block_alpha` | opacity of the block cursor over a selection; `0.55` |
+| `padding` | `{ x, y }` in pixels — `14, 7`, scaled |
+| `divider_size` | 1 |
+| `scrollbar_size` | 4 |
+| `caret_width` | 2 |
+| `tab_width` | 170 |
+| `titlebar_height` | 34 |
+| `titlebar_button_width` | 46 |
+
+`caret_block_alpha` is the one with a real failure mode: at `1` the selection
+under the block cursor becomes invisible, and at `0` the cursor disappears over
+it.
+
+## A worked example
+
+Start from a theme you already like. This copies `default`, darkens it, and
+warms the accent — about eight lines of difference:
+
+```lua
+local base = dofile(os.getenv("HOME") .. "/my-themes/default/theme.lua")
+
+local M = {}
+for k, v in pairs(base) do
+  if type(v) == "table" then
+    M[k] = {}
+    for k2, v2 in pairs(v) do M[k][k2] = v2 end
+  else
+    M[k] = v
+  end
 end
 
-return {
-  name            = "mytheme",
-  background      = color "#1e1e2e",
-  background2     = color "#181825",
-  background3     = color "#313244",
-  text            = color "#cdd6f4",
-  dim             = color "#6c7086",
-  caret           = color "#f5c2e7",
-  selection       = color "#45475a",
-  line_highlight  = color "#1e1e2e",
-  line_number     = color "#6c7086",
-  line_number2    = color "#cdd6f4",
-  accent          = color "#89b4fa",
-  scrollbar       = color "#45475a",
-  scrollbar_track = color "#181825",
-}
+M.name            = "default-warm"
+M.background      = "#0a0908"
+M.background2     = "#131110"
+M.accent          = "#d08770"
+M.syntax.keyword  = "#c4a882"
+M.syntax.comment  = "#6b6055"
+M.caret_block_alpha = 0.7
+
+return M
 ```
 
-A theme **returns** a table — it does not mutate `style` directly. Any field
-you leave out keeps the default from `data/core/style.lua`. A nested
-`syntax = { ... }` table, if present, overrides the syntax colors in the same
-way; see the bundled `default/theme.lua` for a complete example.
+Two things about that shape.
 
-To use it, set `config.theme = "mytheme"` in your
-`~/.config/cdin/user/init.lua`.
+**Copying is a deep copy.** `M = base` and then changing one colour would change
+the original — and the original is on disk and shared, so the change is not
+reverted when you close the editor. Walking the nested `syntax` table by hand is
+the price of not doing that. `search_highlight` is a table too, so it needs the
+same treatment; getting it wrong is how a copied theme ends up with a shared
+highlight table that one edit mutates for everybody.
 
----
+**The directory name is the theme's identity.** `require("core.themes").names()`
+returns directory names, and that is what a switcher has to list and what
+`config.theme` has to be set to. The file's own `name` field only becomes
+`style.theme_name` — a label for the status of the current theme, not a lookup
+key. The two are not required to agree, and a mismatch is confusing rather than
+fatal: the theme still loads, and `theme_name` simply says something else.
 
-## Style fields
+## How it works
 
-These are all the fields the editor reads from the `style` table. Setting any
-of them overrides the default. You don't have to set all of them — only the
-ones you want to change.
+**A theme is a table, and the runtime does the rest.** The registry reads the
+table, keeps every key it did not supply, and hands the result to the `style`
+table everything draws with. `style.theme_name` records which one it was.
 
-### Colors
+**`themes.apply(style, name)` copies every key except `name` and `syntax`.** The
+nested `syntax` table is merged key by key rather than replaced, which is what
+lets a theme set one syntax colour and inherit the other nine.
 
-| Field | What it colors |
-|-------|---------------|
-| `style.background` | Editor area background |
-| `style.background2` | Tree view and panel backgrounds |
-| `style.background3` | Highlighted items (autocomplete selection, etc.) |
-| `style.text` | Normal editor text |
-| `style.dim` | Dimmed text (e.g. inactive items) |
-| `style.caret` | The cursor |
-| `style.selection` | Selected text background |
-| `style.line_highlight` | Background of the line the cursor is on |
-| `style.line_number` | Gutter line numbers |
-| `style.line_number2` | Gutter line number for the current line |
-| `style.accent` | Accent color (active tab indicator, focus rings) |
-| `style.scrollbar` | Scrollbar thumb |
-| `style.scrollbar_track` | Scrollbar track |
-| `style.divider` | Divider lines between panels |
-| `style.drag_overlay` | Overlay shown when dragging a split |
-| `style.drag_overlay_tab` | Overlay shown when dragging over a tab bar |
-| `style.good` | Positive status indicators |
-| `style.warn` | Warning indicators |
-| `style.error` | Error indicators |
-| `style.modified` | Modified file indicator (tabs, status bar) |
+**Strings are parsed to colours; tables are passed through.** That is the entire
+mechanism behind the `search_highlight` exception — a table is not a colour
+string, so it is used as-is, and RGBA is already the internal representation.
 
-Color values are `{ r, g, b }` or `{ r, g, b, a }` tables where each
-component is a number from 0 to 255. The `common.color(hex)` helper converts
-a hex string for you:
+**Selection order is user, then bundled, then extension roots in the order added.**
+`add_root` ignores a path that is not a directory rather than registering it, so
+a caller cannot poison the search order with something that will never resolve.
+Adding the same root twice is a no-op.
+
+**The runtime never installs a theme picker.** Setting `config.theme` and
+restarting works; changing it at runtime is one call:
 
 ```lua
-local r, g, b, a = common.color "#89b4fa"
-style.accent = { r, g, b, a }
-
--- or in one step, using the spread:
-style.accent = { common.color "#89b4fa" }
+require("core.style").set_theme("nord")
 ```
 
-### Syntax token colors
+cdin-x's theme switcher is that call plus a list, and `session-theme-switcher` is
+what remembers the choice across restarts. Two plugins, because "change it now"
+and "remember that I did" are separate questions and some people want the first
+without the second.
 
-Syntax highlighting tokens map to style fields:
+## Files
 
-| Field | Token type |
-|-------|-----------|
-| `style.syntax["normal"]` | Plain text |
-| `style.syntax["symbol"]` | Identifiers |
-| `style.syntax["comment"]` | Comments |
-| `style.syntax["keyword"]` | Keywords (`if`, `for`, `return`, …) |
-| `style.syntax["keyword2"]` | Secondary keywords (types, builtins) |
-| `style.syntax["number"]` | Numeric literals |
-| `style.syntax["literal"]` | Other literals (`true`, `false`, `nil`, …) |
-| `style.syntax["string"]` | String literals |
-| `style.syntax["operator"]` | Operators |
-| `style.syntax["function"]` | Function names at call sites |
-
-```lua
-style.syntax["keyword"]  = color "#cba6f7"
-style.syntax["string"]   = color "#a6e3a1"
-style.syntax["comment"]  = color "#585b70"
-style.syntax["function"] = color "#89dceb"
-```
-
-### Fonts
-
-Fonts are set on the `style.font` and `style.code_font` fields. They take a
-`renderer.font` value, loaded with `renderer.font.load`:
-
-```lua
-local font_path = EXEFILE .. "/../data/fonts/monospace.ttf"   # the bundled copy
-style.code_font = renderer.font.load(font_path, 14 * SCALE)
-```
-
-`EXEFILE` is the path to the cdin binary. `SCALE` is the display scale factor
-(1.0 on a normal display, 2.0 on HiDPI). Multiply font sizes by `SCALE` so
-things look right on both.
-
-The bundled fonts are in `build/<platform>-<build>/data/fonts/`, next to the
-binary:
-
-| File | Default use |
-|------|------------|
-| `font.ttf` | UI text (menus, status bar, tree) and `style.big_font` |
-| `monospace.ttf` | Editor (code) text |
-| `icons.ttf` | Icons (used internally by the UI) |
-
-To use a system font or your own, provide the full path.
-
-| File | Default use |
-|------|------------|
-| `font.ttf` | UI text (menus, status bar, tree) and `style.big_font` |
-| `monospace.ttf` | Editor (code) text |
-| `icons.ttf` | Icons (used internally by the UI) |
-
-To use a system font or your own, provide the full path.
-
-#### Fallback fonts (non-Latin scripts, emoji)
-
-`font.ttf`/`monospace.ttf` are typically Latin-only. stb_truetype (cdin's
-rasterizer) can only draw glyphs a font file actually contains and has no
-built-in "try another font" behavior, so any codepoint outside a font's
-coverage — Arabic/Persian presentation forms, CJK, emoji — renders as a
-blank box unless you give the font a fallback chain:
-
-```lua
-local arabic = renderer.font.load(EXEFILE .. "/../data/fonts/fallback.ttf", 14 * SCALE)
-style.code_font:add_fallback(arabic)
--- keep a reference alongside the primary font — see the note below
-style._fallback_fonts = style._fallback_fonts or {}
-table.insert(style._fallback_fonts, arabic)
-```
-
-`add_fallback` tries the primary font first for each character, then walks
-the fallback chain (in the order added) until it finds a font with a real
-glyph for that codepoint; if none has one, it draws with the primary font
-(typically a `.notdef`/tofu box) rather than nothing. Up to 8 fallbacks per
-font.
-
-`style.lua` already does this automatically for `style.font`, `big_font`
-and `code_font` if `data/fonts/fallback.ttf` and/or `data/fonts/emoji.ttf`
-exist next to the binary
-exist — drop suitable files there and no extra config is needed:
-
-- **`fallback.ttf`** — broad-coverage text font, e.g. Noto Sans Arabic or
-  Noto Naskh Arabic for Arabic/Persian/Urdu.
-- **`emoji.ttf`** — must be an *outline* (vector) font. stb_truetype
-  cannot rasterize color bitmap or `COLR`/`CPAL` emoji fonts (Noto Color
-  Emoji, Apple Color Emoji, Segoe UI Emoji all fail to load or render
-  blank); a monochrome outline emoji font is required. Both files are
-  optional — if absent, cdin runs exactly as it does today.
-
-The `style._fallback_fonts` table above is required, not cosmetic: the C
-side stores only a raw pointer to each fallback font in the chain. If
-nothing on the Lua side keeps the fallback font's userdata reachable,
-Lua's garbage collector can free it while it's still wired into the
-chain, and the next draw that needs it reads freed memory. Keep a
-reference for as long as the primary font (and thus the chain) is alive.
-
-### Metrics
-
-| Field | What it controls |
-|-------|-----------------|
-| `style.padding` | General padding (used in menus, tabs, etc.) |
-| `style.caret_width` | Caret width in pixels |
-| `style.tab_width` | Width of the tab indicator in the tab bar |
-| `style.scrollbar_size` | Scrollbar width |
-| `style.expanded_scrollbar_size` | Scrollbar width when hovered |
-| `style.line_height` | Multiplier applied to the font's line height |
-| `style.border_radius` | Corner radius for rounded UI elements |
-
----
-
-## Vim mode colors
-
-The vim plugin adds per-mode color indicators to the status bar. The color of
-the `[NORMAL]`, `[INSERT]`, and `[VISUAL]` label is controlled by these fields
-on the `style` table:
-
-```lua
-style.vim_normal_color  = color "#89b4fa"   -- blue
-style.vim_insert_color  = color "#a6e3a1"   -- green
-style.vim_visual_color  = color "#f9e2af"   -- yellow
-```
-
-Set these in your theme file or in `data/user/init.lua` to match your palette.
-
----
-
-## Tips
-
-**Override only what you need.** A theme doesn't have to set every field. Load
-the default first (by doing nothing) and then override specific colors. This
-way your theme automatically inherits any new fields added in future versions.
-
-**Check `data/core/style.lua` for the authoritative list.** The table in that
-file is the ground truth. The fields listed here are accurate as of this
-writing, but the source file is always up to date.
-
-**Use `core.log` for debugging.** If a color isn't appearing where you expect,
-add a `core.log(tostring(style.background))` call temporarily to check what
-value is actually set.
-
-**Reload without restarting.** You can reload your user module from the command
-palette with `core:reload-module`. This re-runs `data/user/init.lua`, so
-color changes take effect immediately — useful when you're iterating on a
-theme.
+| file | holds |
+| --- | --- |
+| [`data/core/themes.lua`](../../data/core/themes.lua) | the registry: roots, discovery, apply |
+| [`data/core/style.lua`](../../data/core/style.lua) | every fallback, and the metrics a theme can override |
+| `X/themes/<name>/theme.lua` | the ten themes, in cdin-x |

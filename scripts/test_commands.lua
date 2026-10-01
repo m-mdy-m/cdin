@@ -170,6 +170,15 @@ check(command.map["core:new-doc"] ~= nil, "core:new-doc is a runtime command")
 check(keymap.get_binding("core:new-doc") == "ctrl+n",
   "core:new-doc reverse-maps to ctrl+n")
 
+-- The log view is core's own, so the stroke that opens it is core's too.
+-- It had none, and a command nobody can reach is a command that does not
+-- exist as far as a bare editor is concerned: the palette is a plugin, so
+-- with no plugins installed there was no route to the log at all.
+check(bound("ctrl+shift+l") == "core:open-log",
+  "ctrl+shift+l is bound to core:open-log in the runtime")
+check(keymap.get_binding("core:open-log") == "ctrl+shift+l",
+  "core:open-log reverse-maps to ctrl+shift+l")
+
 -- The workflow commands are expected to be gone from the runtime entirely
 -- (see §4.12.3: they become optional cdin-x plugins). If any of these still
 -- exists here, the move is incomplete.

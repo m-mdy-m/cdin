@@ -264,6 +264,22 @@ do
   check(#raised == 0, "every command predicate is callable (" .. #raised .. " raise)")
 end
 
+-- And every command has something to run. A `perform` that is not a function
+-- registers cleanly, shows up in the palette, and raises on the keystroke -
+-- where core.try catches it and logs it, so the only symptom is a key that
+-- stopped working. It is the cheapest possible mistake to make in a table of
+-- commands and the hardest one to notice.
+do
+  local total, broken = 0, {}
+  for name, cmd in pairs(command.map) do
+    total = total + 1
+    if type(cmd.perform) ~= "function" then broken[#broken+1] = name end
+  end
+  table.sort(broken)
+  check(#broken == 0, "every registered command performs a function (" .. total ..
+    " commands" .. (#broken > 0 and ", broken: " .. table.concat(broken, ", ") or "") .. ")")
+end
+
 -- 4. The strokes the split moved are owned by the workflow plugin, and by
 --    nothing else.
 --
@@ -315,6 +331,47 @@ check(keymap.get_binding("core:new-doc") == "ctrl+n",
   "core:new-doc still reverse-maps to ctrl+n")
 check(bound("ctrl+s") == "doc:save", "ctrl+s is still doc:save")
 check(bound("ctrl+w") == "root:close", "ctrl+w is still root:close")
+check(bound("ctrl+shift+l") == "core:open-log",
+  "ctrl+shift+l is still core:open-log")
+
+-- 6b. The extension panel is reachable, and it is not listening when closed.
+--
+-- The panel used to bind its keys with no predicate at all, which is the
+-- worst kind of bug: ctrl+r fired a panel refresh from the log view, and
+-- space toggled an extension from anywhere in the editor, with nothing to
+-- show for it. Every one of its commands has to answer false while the panel
+-- is closed, and the stroke that opens it has to belong to it alone.
+check(command.map["pluginmanager:toggle"] ~= nil,
+  "the extension panel registers pluginmanager:toggle")
+check_eq(bound("ctrl+shift+m"), "pluginmanager:toggle",
+  "ctrl+shift+m opens the extension panel")
+check_eq(#bound_all("ctrl+shift+m"), 1,
+  "ctrl+shift+m has exactly one command bound to it")
+
+for _, name in ipairs({
+  "pluginmanager:select-next",
+  "pluginmanager:toggle-cursor",
+  "pluginmanager:install-cursor",
+  "pluginmanager:uninstall-cursor",
+  "pluginmanager:search",
+  "pluginmanager:update-catalog",
+}) do
+  local cmd = command.map[name]
+  if check(cmd ~= nil, "the panel registers " .. name) then
+    local ok, active = pcall(cmd.predicate)
+    check(ok and active == false,
+      name .. " does nothing while the panel is closed")
+  end
+end
+
+-- A stroke the panel and the runtime both want must still reach the
+-- runtime's own command when the panel is not looking at it. keymap.add
+-- prepends, so the panel's entry is first and the runtime's is behind it.
+local reaches_log_reload = false
+for _, name in ipairs(bound_all("ctrl+r")) do
+  if name == "log:reload" then reaches_log_reload = true end
+end
+check(reaches_log_reload, "ctrl+r still reaches log:reload somewhere in its chain")
 
 -- 7. Every workflow command actually runs. Registration is not behaviour: a
 --    command can be in command.map and still do nothing, which looks exactly

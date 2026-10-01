@@ -14,6 +14,7 @@ static struct {
   log_LockFn   lock;
   int          level;
   bool         quiet;
+  char         path[2048];
   Callback     callbacks[MAX_CALLBACKS];
 } L;
 
@@ -101,6 +102,14 @@ void log_set_lock(log_LockFn fn, void *udata) {
 
 void log_set_level(int level) { L.level = level; }
 void log_set_quiet(bool enable) { L.quiet = enable; }
+
+const char *log_get_path(void) { return L.path[0] ? L.path : NULL; }
+
+void log_set_path(const char *path) {
+  if (!path) { L.path[0] = '\0'; return; }
+  strncpy(L.path, path, sizeof(L.path) - 1);
+  L.path[sizeof(L.path) - 1] = '\0';
+}
 
 int log_add_callback(log_LogFn fn, void *udata, int level) {
   for (int i = 0; i < MAX_CALLBACKS; i++) {

@@ -84,8 +84,13 @@ local function install(core)
     return true
   end
 
+  -- `_quitting` is core.quit's request (see core/init.lua): the loop returns,
+  -- and main() unwinds the window in the right order. It is checked at the top
+  -- of the frame so the frame that asked to quit is also the last one drawn —
+  -- a loop that checked it only after rendering would draw one more frame with
+  -- a half-torn-down editor in it.
   function core.run()
-    while true do
+    while not core._quitting do
       core.frame_start = system.get_time()
       local did_redraw = core.step()
       run_threads()

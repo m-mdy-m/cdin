@@ -9,6 +9,116 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **One text file holds the whole log.** The C logger's file is now
+  `cdin-log.txt` (was `cdin.log`; the rotated copy is `cdin-log.txt.1`), and the
+  Lua stream is mirrored into it by default, tagged `LUA`, with `core.try`
+  tracebacks. Before, the mirror was opt-in (`CDIN_LUA_LOG=1`) and wrote the
+  message but never the traceback, because the traceback is attached after the
+  line is logged. `CDIN_LUA_LOG=0` turns the mirror off. The file is opened once
+  per run in line-buffered append mode instead of once per message.
+- **`Ctrl+Shift+L` opens the log.** `core:open-log` had no binding, which made
+  the log unreachable in exactly the build it matters most: the command palette
+  is a plugin, so a bare editor had no route to it and no error either. The log
+  view is the runtime's own view, so the stroke is the runtime's.
+- **The log view has two sources and a key for each.** <kbd>F2</kbd> switches
+  between the editor's `core.log_items` (every `core.log` / `core.error`, with
+  tracebacks) and the C logger's file, and <kbd>Ctrl</kbd>+<kbd>R</kbd>
+  re-reads the current one. The header names the file and its size, because
+  "the log is somewhere" is not an answer and the file is next to the binary,
+  which is not where anyone looks.
+- **`cdin.log` is bounded and quiet.** The file was opened at `LOG_TRACE`, so a
+  day of editing produced 3.4 MB of per-frame renderer traces and nothing
+  useful; it is now `LOG_DEBUG`, and past 4 MB the previous run is rotated to
+  `cdin.log.1` at startup rather than the file growing forever. `CDIN_LOG_LEVEL`,
+  `CDIN_LOG_FILE_LEVEL` and `CDIN_LOG_FILE` override the level and the path.
+- **`CDIN_LUA_LOG=1` mirrors the Lua stream into that file.** Off by default:
+  the two streams are deliberately separate and a bug report wants the file to
+  hold what the file is for. It exists for the one situation with no other way
+  out — a Lua error during startup, when the log view cannot be opened yet.
+- **`config.data_dir` is published.** An extension can only answer "what does
+  this editor already ship?" if the editor says so, and an extension cannot
+  know where its own data directory is. cdin-x reads this to see the set a
+  build carries.
+- **`RootView:attach_side_view(view, side, opts)` and
+  `RootView:detach_view(view)`.** A side panel's whole interface, and the reason
+  two extensions can both own an edge. Splitting the *active* node — which is
+  what both cdin-x panels did — makes the layout depend on load order and on
+  where the user last clicked: the second panel to load splits itself out of the
+  first one, so the file tree ended up between the document and the extension
+  panel. `attach_side_view` targets the edge of the layout instead, is idempotent
+  across enable cycles, and does not steal focus; `detach_view` gives the space
+  back on `unload`, so a disabled extension no longer leaves an unclosable empty
+  column. Documented under *Side panels* in the extension contract.
+
+### Changed
+
+- **The extension manager ships with every build.** It is marked `essential` in
+  cdin-x, the same marker vim carries, so `make` bundles it and the panel is
+  reachable in a build with nothing installed — <kbd>Ctrl</Shift>+<kbd>M</kbd>,
+  or <kbd>M</kbd> in vim normal mode. Everything it *offers* stays optional;
+  what is not optional is the ability to ask what is installed. See cdin-x's
+  changelog for the panel itself.
+- **`core.quit` asks the loop to stop instead of calling `os.exit()`.** Quitting
+  runs with the frame loop on the stack — a keymap, a command, a submit callback
+  — and `os.exit()` from there put `atexit(SDL_Quit)` in the middle of SDL's own
+  event dispatch. The process survived it: window destroyed, event loop gone,
+  every key dead, nothing drawn, and no way out from inside. `:qa!`, the title
+  bar's close button and the window manager's close all went through this, so
+  all three froze the editor instead of closing it. `core.run()` now returns when
+  the quit is requested and `main()` unwinds the window in order. Extensions that
+  wrap `core.quit` are unaffected as long as their wrapper is synchronous,
+  because a thread scheduled at exit is a thread that will now never run.
+
+### Fixed
+
+- **A keystroke that named a command nobody registered.** `make test-plugins`
+  and `make test-workflows` cover this; both pass.
+- **The second of two side panels was given the whole window.**
+  `calc_split_sizes` placed the divider using the first locked child's size and
+  handed the remainder to the other, so it only ever honoured *one* locked pane
+  per split. That is correct until two panels are side by side — the file tree
+  and the extension panel — and then the second one, which had asked for 460px,
+  filled everything the first had not claimed and pushed the document off the
+  screen. Each locked child now gets the width it asked for.
+- **A pane collapsing next to a locked pane raised instead of collapsing.**
+  `Node:collapse` is now shared by closing a node's last view and by
+  `remove_view`, and it clears the lock before installing the empty view —
+  `add_view` refuses a locked node, so that branch could only ever assert.
+
+### Documentation
+
+- **`docs/` rewritten.** Twelve pages and a new `docs/README.md` index, with a
+  reading order. The old set had no index, duplicated the extension
+  documentation, and could not be navigated.
+- **The runtime/cdin-x boundary is now stated everywhere.** Every page used to
+  tell users to press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> and to run
+  `core:open-user-module` — neither of which the runtime owns. Both are cdin-x
+  plugins. The command reference now says so explicitly and explains why the
+  runtime leaves those keys unbound.
+- **`docs/guides/configuration.md` no longer inverts the load order.** It
+  claimed the user config "loads last, after the core and all extensions". It
+  loads *before* plugins, which is what makes a plugin able to override a key you
+  set and you able to override a key a plugin sets.
+- **`docs/guides/vim-keybindings.md` no longer describes files that do not
+  exist.** It listed `vimode.lua`, `ex.lua`, `fmenu.lua` and `shell.lua`; vim
+  mode is `X/core/vim/` in cdin-x, and there is no `fmenu.lua`. It also pointed
+  at `data/user/init.lua`, which is not a path cdin reads.
+- **New: `docs/guides/syntax.md`.** The highlighter, the tokenizer and the
+  definition format are in this repository and no page covered them.
+- **UTF-8 corruption removed from `docs/`.** Six pages had em-dashes and
+  box-drawing characters mangled into replacement characters, including the whole
+  architecture diagram.
+- `docs/architecture/extension-contract.md` rewritten as the normative list of
+  what cdin guarantees, with an explicit **not guaranteed** section — including
+  the functions cdin-x wraps today (`keymap.on_key_pressed`, the `RootView`
+  methods, `StatusView.get_items`) and the commands that belong to cdin-x.
+- `docs/guides/building.md` no longer claims SDL2 is auto-detected and
+  supported. `mk/config.mk` still has the path, but `mk/build.mk` hard-requires
+  `SDL3/SDL.h`, so an SDL2-only machine selects SDL2 and then fails. The page
+  now says SDL3 is required and why.
+
 ---
 
 ## [0.2.0-alpha.2] — 2026-09-30
