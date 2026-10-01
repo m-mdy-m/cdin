@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include <SDL3/SDL.h>
 #include <lua.h>
@@ -17,27 +18,81 @@
 
 SDL_Window *window;
 
+/* A log that grows forever is not a log, it is a leak with a .log suffix.
+ * Past this size the previous run is kept as cdin-log.txt.1 and the new one
+ * starts empty, so a crash report is one file rather than a directory. */
+#define CDIN_LOG_MAX_BYTES (4L * 1024L * 1024L)
+
+
+/* "trace" | "debug" | "info" | "warn" | "error" | "fatal", else the fallback. */
+static int level_from_env(const char *name, int fallback) {
+  const char *v = getenv(name);
+  if (!v || !*v) return fallback;
+
+  struct { const char *name; int level; } table[] = {
+    { "trace", LOG_TRACE }, { "debug", LOG_DEBUG }, { "info",  LOG_INFO  },
+    { "warn",  LOG_WARN  }, { "error", LOG_ERROR }, { "fatal", LOG_FATAL },
+  };
+  for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
+    if (strcmp(v, table[i].name) == 0) return table[i].level;
+  }
+  return fallback;
+}
+
+
+static long file_size(const char *path) {
+  struct stat st;
+  if (stat(path, &st) != 0) return -1;
+  return (long)st.st_size;
+}
+
+
+/* Keeps one previous run, then starts over. Renaming over an existing
+ * destination fails on some platforms, so the old one is unlinked first. */
+static void rotate_log(const char *path) {
+  if (file_size(path) < CDIN_LOG_MAX_BYTES) return;
+
+  char prev[2100];
+  snprintf(prev, sizeof(prev), "%s.1", path);
+  remove(prev);
+  if (rename(path, prev) != 0) remove(path);
+}
+
 
 static FILE *setup_logging(const char *exefile) {
-  log_set_level(LOG_INFO);
-
-  char dir[2048];
-  strncpy(dir, exefile, sizeof(dir) - 1);
-  dir[sizeof(dir) - 1] = '\0';
-
-  char *slash = strrchr(dir, '/');
-#ifdef _WIN32
-  char *bslash = strrchr(dir, '\\');
-  if (!slash || (bslash && bslash > slash)) slash = bslash;
-#endif
-  if (slash) *slash = '\0';
+  /* stderr is the console, so it stays at INFO unless asked otherwise.
+   * The file is the record: it defaults to DEBUG because the per-frame
+   * renderer traces are noise in a log nobody can read, and a boot that
+   * fails after the console closed still needs to be readable. */
+  log_set_level(level_from_env("CDIN_LOG_LEVEL", LOG_INFO));
 
   char log_path[2080];
-  snprintf(log_path, sizeof(log_path), "%s/cdin.log", slash ? dir : ".");
+  const char *custom = getenv("CDIN_LOG_FILE");
+  if (custom && *custom) {
+    snprintf(log_path, sizeof(log_path), "%s", custom);
+  } else {
+    char dir[2048];
+    strncpy(dir, exefile, sizeof(dir) - 1);
+    dir[sizeof(dir) - 1] = '\0';
+
+    char *slash = strrchr(dir, '/');
+#ifdef _WIN32
+    char *bslash = strrchr(dir, '\\');
+    if (!slash || (bslash && bslash > slash)) slash = bslash;
+#endif
+    if (slash) *slash = '\0';
+    else dir[0] = '\0';
+
+    snprintf(log_path, sizeof(log_path), "%s%s%s", dir, dir[0] ? "/" : "",
+             dir[0] ? "cdin.log" : "./cdin.log");
+  }
+
+  rotate_log(log_path);
 
   FILE *fp = fopen(log_path, "a");
   if (fp) {
-    log_add_fp(fp, LOG_TRACE);
+    log_set_path(log_path);
+    log_add_fp(fp, level_from_env("CDIN_LOG_FILE_LEVEL", LOG_DEBUG));
   } else {
     log_warn("could not open %s for writing, file logging disabled", log_path);
   }

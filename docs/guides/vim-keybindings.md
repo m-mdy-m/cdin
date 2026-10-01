@@ -1,175 +1,119 @@
-# Vim Keybindings
+# Vim mode
 
-cdin's modal editing is implemented by the `plugins/vim` plugin family:
-`vimode.lua` (modes and normal-mode keys), `ex.lua` (the `:` command line),
-`fmenu.lua` (the `m` action menu), and `shell.lua` (shell commands in
-scratch buffers). It's a deliberate subset of vim — the everyday keys, not
-a full emulation layer. Counts, registers, marks, and text objects are not
-implemented yet.
+Vim mode is a **bundled extension**, not part of the runtime. It lives in
+[cdin-x](https://github.com/m-mdy-m/cdin-x) as `X/core/vim`, it is marked
+`essential`, and a build copies it into `data/plugins/vim.lua`. It is loaded
+before any site plugin and cannot be switched off with `config.plugins` or
+`--no-plugins`, because an editor with no modal editing is not an editor.
 
-Vim mode is on by default. To turn it off, set
-`config.vim_mode_enabled = false` in `data/user/init.lua`. All the regular
-`Ctrl`-based bindings keep working either way, since keys with `ctrl`/`alt`
-modifiers are passed straight through to the normal keymap.
+**The full key set is documented in cdin-x**, which is where the code is:
 
-## Modes
+- [the vim plugin page](https://github.com/m-mdy-m/cdin-x/blob/main/docs/plugins/vim.md) —
+  every mode, motion, editing key and ex-command, and what is deliberately absent
+- [extending vim mode](https://github.com/m-mdy-m/cdin-x/blob/main/docs/extending-vim.md) —
+  the seven seams integrations register through
 
-Every buffer starts in NORMAL mode. The status bar (bottom left) shows the
-current mode: `[NORMAL]`, `[INSERT]`, or `[VISUAL]`.
+This page covers the half that belongs to cdin: what the runtime actually
+contributes to vim mode, which is less than most people expect, and one setting
+whose absence from the runtime is deliberate.
 
-- `i` — insert at the caret
-- `a` — insert after the caret
-- `A` — insert at end of line
-- `I` — insert at start of line
-- `o` — open a line below and insert
-- `O` — open a line above and insert
-- `v` — visual mode (extends the selection with motions)
-- `Esc` — back to NORMAL mode; in NORMAL mode it also clears the selection
+## What the runtime provides
 
-## Motions (NORMAL and VISUAL)
+**The motions are ordinary commands.** Every vim movement and editing key is a
+`doc:*` command — `doc:move-to-previous-word-start`, `doc:select-to-next-line`,
+`doc:join-lines`, `doc:delete-to-previous-word-start` — declared as data in
+cdin-x's `vimode/motions.lua` and dispatched through the same registry as
+everything else. They are all in [the command reference](commands.md#document).
 
-| Key | Motion |
-|---|---|
-| `h` `j` `k` `l` | left, down, up, right |
-| `w` / `e` | next word end |
-| `b` | previous word start |
-| `0` | start of line |
-| `$` (`Shift+4`) | end of line |
-| `^` (`Shift+6`) | first non-blank character of line |
-| `gg` | start of file |
-| `G` | end of file |
+That is the whole mechanism, and it has a consequence worth stating: **a keymap
+in your `init.lua` is enough to re-bind any of them.** Vim mode does not own the
+movement commands; it owns the keys that reach them.
 
-In VISUAL mode the same keys extend the selection instead of moving the
-caret.
-
-## Operators and editing
-
-| Key | Action |
-|---|---|
-| `x` | delete character under the caret |
-| `dd` | delete the current line |
-| `yy` | yank (copy) the current line |
-| `cc` | change the current line (delete and enter INSERT) |
-| `D` | delete to end of line |
-| `J` | join the next line onto this one |
-| `p` | paste |
-| `u` | undo |
-| `r` | redo (note: this is redo, not vim's replace-char) |
-
-Double-key sequences (`gg`, `dd`, `yy`, `cc`) have a 0.6 second timeout
-between the two presses.
-
-In VISUAL mode:
-
-| Key | Action |
-|---|---|
-| `d` / `x` | delete the selection |
-| `y` | yank the selection |
-| `>` / `<` | indent / unindent |
-
-## Search
-
-| Key | Action |
-|---|---|
-| `/` | open find bar |
-| `n` / `N` | next / previous match |
-| `*` | search for the word under the caret |
-
-## Other normal-mode keys
-
-| Key | Action |
-|---|---|
-| `:` | open the ex command line |
-| `m` | open the action menu (see below) |
-| `Tab` | switch to the next tab |
-
-## Ex commands
-
-Press `:` to open the command line. `Up`/`Down` browse command history.
-Tab-completion suggests command names and, for file commands, paths.
-`:help` opens this reference in a buffer.
-
-File commands:
-
-```
-:w              save current file
-:w!             force-save
-:wa             save all open files
-:q              close current view (fails if unsaved)
-:q!             force-close without saving
-:qa  :qall      quit (fails if unsaved files exist)
-:qa! :qall!     force quit
-:wq  :x         save then close
-:wqa :xa        save all then quit
+```lua
+-- ~/.config/cdin/user/init.lua
+local keymap = require "core.input.keymap"
+keymap.add { ["ctrl+u"] = "doc:move-to-previous-page" }
 ```
 
-Open and create:
+Which also means the honest limit: **a keymap can only reach what the runtime
+already has.** There is no "move down half a page" command, so there is no way to
+bind one. cdin-x documents the same limit from the other side — vim mode has no
+<kbd>Ctrl</kbd>+<kbd>U</kbd> because the underlying command moves a line, and
+adding one would mean a runtime command that only vim mode wants.
 
+**The status pill is a seam, not a drawing.** Vim mode registers
+`core.register_status_pill("vim_mode", fn)` and the status bar draws it. Core
+never mentions vim, never names a mode, and never hardcodes a colour for it —
+which is what lets the pill exist without the runtime knowing what a mode is.
+
+**The colours are the theme's, and the runtime has no fallback for them.**
+`vim_pill_fg`, `vim_normal_bg`, `vim_insert_bg`, `vim_visual_bg`,
+`vim_replace_bg` and `vim_command_bg` are read from `style`, and
+[`data/core/style.lua`](../../data/core/style.lua) defines fallbacks for every
+other colour **except these six**. They are cdin-x's vocabulary, not the
+runtime's, so they live in cdin-x's themes and not in the core defaults list.
+
+If you write a theme by hand and the mode pill is invisible, that is why. See
+[themes](themes.md#vim-mode).
+
+**Key resolution is where integrations get their turn.** Vim mode wraps
+`keymap.on_key_pressed`, and the lookup order is: vim's own keys first, and only
+if they decline is the registry asked. That ordering is what makes it safe for an
+integration to claim <kbd>m</kbd> or <kbd>M</kbd> — it can add a key, but it
+cannot shadow one vim already handles.
+
+If a key you expected from an integration does nothing, that is the reason, and
+it is a documented property rather than a bug. The key needs vim to decline
+first.
+
+**`config.vim_mode_enabled` is not in this repository's config.** It is defined
+by the vim plugin itself, with its own default, applied in its `init()` under a
+`nil` guard.
+
+```lua
+-- ~/.config/cdin/user/init.lua
+config.vim_mode_enabled = true    -- the default, stated explicitly
+config.vim_mode_enabled = false   -- normal typing
 ```
-:e <path>       open a file
-:edit <path>    alias for :e
-:new <path>     create a file and open it
-```
 
-Filesystem:
+A copy of that default in `data/core/config.lua` would be a key that outlives the
+plugin: meaningless if the plugin were ever disabled, and one more place for the
+two to disagree. The same applies to `config.session_restore` and the
+`session_restore_*` keys — see
+[configuration](configuration.md#owned-by-plugins-not-here) for the full list.
 
-```
-:mkdir <path>          create a directory (with parents)
-:rm <path>             remove a file or directory tree
-:delete <path>         alias for :rm
-:rename <old> <new>    rename (open buffers follow the rename)
-:copy <src> <dst>      copy a file or directory
-:move <src> <dst>      move (open buffers follow the move)
-```
+**A key declared in a plugin's manifest is a declaration, not an application.**
+Nothing copies it onto `config`. If you want vim mode on at startup, say so.
 
-Navigation:
+## Turning it off
 
-```
-:ls [path]      list a directory in a scratch buffer
-:pwd            print the working directory
-:cd <path>      change the working directory
-:tree           focus and refresh the project tree
-:<number>       jump to a line, e.g. :42
-```
+<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd>, or `vim:toggle-mode` from any command
+runner.
 
-Shell:
+**The choice is not remembered across restarts** — there is no persisted state
+for it. So set `config.vim_mode_enabled` if you want it stable. Every
+<kbd>Ctrl</kbd>-based binding keeps working either way, since the keys vim mode
+uses are its own.
 
-```
-:!<cmd>         run a shell command; output opens in a scratch buffer
-                examples:  :!ls -la    :!git status    :!npm test
-```
+## What this runtime deliberately does not know
 
-Shell output buffers are ordinary documents — you can search them, copy
-from them, and close them with `:q`.
+Tabs, the file tree, search, git, splits, the extension manager, the menu.
 
-## The action menu (`m`)
+That is not an omission and it is the design decision the whole arrangement rests
+on. If vim mode had its own `:tabnew`, then removing the tab plugin would leave a
+`:tabnew` that quietly did nothing — and you would have no way to tell that from
+a broken one. So vim mode offers **seams** and the wiring lives in
+`X/integration/vim/`, where it can be removed as a unit.
 
-Press `m` in NORMAL mode to open a single-key action menu. It's
-context-aware: when the tree view has a selected item the actions apply to
-it, otherwise to the file in the active view.
+Nothing in `data/core/` names a tab, a tree, a search or a git command. When you
+are reading vim mode's source and find it conspicuously thin, that is the point.
 
-**Files** — `n` new file, `N` new directory, `o` open file, `r` rename,
-`y` copy, `v` move, `x` delete (with y/n confirmation).
+## Files
 
-**Navigate** — `f` change directory, `u` up one level, `.` reveal in tree,
-`R` refresh tree, `/` project search.
-
-**Git** — `s` status, `l` log (last 20, oneline), `d` diff, `a` add all,
-`c` commit (prompts for a message), `P` push, `p` pull, `b` branches.
-Output opens in a scratch buffer.
-
-**Build** — `m` runs `make`, `t` runs `make test`.
-
-**Shell** — `!` run a custom command, `w` pwd, `e` env, `i` network info.
-
-The same actions are available as named commands (`vim-fmenu:*`,
-`vim-shell:*`) in the command palette, so you can bind them directly.
-
-## Known limitations
-
-- No counts (`5j`), registers, marks, macros, or text objects.
-- `r` is redo, not replace-char.
-- `d`/`y`/`c` only work as line operations (`dd`, `yy`, `cc`) or on a
-  visual selection — `dw`, `ciw`, and similar operator+motion combinations
-  are not implemented.
-- Yank/paste use the system clipboard; there are no separate registers.
+| file | holds |
+| --- | --- |
+| [`data/core/input/keymap.lua`](../../data/core/input/keymap.lua) | the key resolution vim mode wraps |
+| [`data/core/views/statusview.lua`](../../data/core/views/statusview.lua) | the pill registry, and the branch display |
+| [`data/core/style.lua`](../../data/core/style.lua) | the fallbacks — and the six it does not have |
+| `X/core/vim/` | the plugin, in cdin-x |
+| `X/integration/vim/` | the seven integrations that fill the seams |

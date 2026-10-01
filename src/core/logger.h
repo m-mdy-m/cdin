@@ -37,6 +37,12 @@ void log_set_quiet(bool enable);
 int log_add_callback(log_LogFn fn, void *udata, int level);
 int log_add_fp(FILE *fp, int level);
 
+/* The path of the file log, or NULL when file logging is off. Published so
+ * the editor can show the user where the log is instead of leaving them to
+ * guess: it is next to the binary, which is not where anyone looks. */
+const char* log_get_path(void);
+void log_set_path(const char *path);
+
 void log_log(int level, const char *file, int line, const char *fmt, ...);
 
 #endif

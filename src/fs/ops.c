@@ -1,5 +1,6 @@
 #include "ops.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
@@ -34,13 +35,55 @@ int fs_path_exists(const char *path) {
   struct stat st;
   return stat(path, &st) == 0;
 }
+
+// Where the first component that has to be created starts, which is not the
+// start of the string.
+//
+// A Windows path opens with a root that is not a directory to create: "C:" for a
+// drive, "\\server\share" for a UNC path. mkdir("C:") fails with EACCES, not
+// EEXIST, so a walk that treats every separator as a component boundary stops at
+// the drive letter and reports "Permission denied" for every absolute path on
+// Windows -- including ones whose parent already exists. Returns the index just
+// past the root, or 0 when the path has no root to skip.
+static size_t mkdir_root_end(const char *path, size_t len) {
+  if (len >= 2 && isalpha((unsigned char)path[0]) && path[1] == ':') {
+    return 2;
+  }
+  if (len >= 2 && (path[0] == '\\' || path[0] == '/') &&
+      (path[1] == '\\' || path[1] == '/')) {
+    // \\server\share: skip the server and the share, keep what follows.
+    size_t i = 2, seps = 0;
+    while (i < len && seps < 2) {
+      if (path[i] == '\\' || path[i] == '/') seps++;
+      i++;
+    }
+    return i - 1;
+  }
+  return 0;
+}
+
 static int mkdir_all_r(char *buf) {
   size_t len = strlen(buf);
-  for (size_t i = 1; i < len; i++) {
+  size_t root = mkdir_root_end(buf, len);
+
+  // Nothing past the root: the path is the root itself, which is already there.
+  if (len <= root + 1) return 0;
+
+  // Trailing separators would leave the final mkdir with "C:\dir\", which is
+  // fine on Windows but not worth relying on. Strip them, remembering how many
+  // so the loop below still sees a real last component.
+  while (len > root + 1 && (buf[len - 1] == '/' || buf[len - 1] == '\\')) {
+    buf[--len] = '\0';
+  }
+  if (len <= root + 1) return 0;
+
+  for (size_t i = root + 1; i < len; i++) {
     if (buf[i] == '/' || buf[i] == '\\') {
       char saved = buf[i];
       buf[i] = '\0';
-      if (buf[0] != '\0' && FS_MKDIR(buf) != 0 && errno != EEXIST) {
+      // FS_MKDIR gets the whole path, drive letter included: a Windows path is
+      // only absolute while it still carries the drive.
+      if (FS_MKDIR(buf) != 0 && errno != EEXIST) {
         buf[i] = saved;
         return -1;
       }

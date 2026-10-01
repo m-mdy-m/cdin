@@ -30,6 +30,14 @@ void lua_setup_globals(lua_State *L, int argc, char **argv, double scale, const 
   lua_pushstring(L, exefile);
   lua_setglobal(L, "EXEFILE");
 
+  /* Where main() put the file log, or "" when file logging is off. The
+   * editor shows this in the log view: "the log is somewhere" is not an
+   * answer, and the file is next to the binary, which is not where anyone
+   * thinks to look. */
+  const char *logpath = log_get_path();
+  lua_pushstring(L, logpath ? logpath : "");
+  lua_setglobal(L, "LOGFILE");
+
   log_info("lua_connector: globals ready (VERSION=%s PLATFORM=%s SCALE=%.2f)",
            CDIN_APP_VERSION, SDL_GetPlatform(), scale);
 }

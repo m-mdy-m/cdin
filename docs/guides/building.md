@@ -1,150 +1,234 @@
-# Building from Source
+# Building from source
 
-## Dependencies
+## What you need
 
-You need four things to build cdin:
-
-- a C compiler (gcc or clang)
+- a C11 compiler — gcc or clang
 - GNU make
-- SDL3 development headers and library (SDL2 also works and is auto-detected if SDL3 isn't found)
-- Lua 5.4 development headers
-
-Get these from your system's package manager. On most Linux distros they're a
-single command away. On macOS, Homebrew covers all of them. On Windows, see
-the note at the bottom.
-
-Python 3 is also needed, but only to regenerate `src/icon.inl` from the SVG
-source. The build checks for it and calls it automatically. If you already
-have a current `src/icon.inl` checked in, you can skip Python entirely — but
-if you're building from a fresh clone you'll want it. The two Python packages
-it needs are `cairosvg` and `Pillow` (`pip install cairosvg Pillow`).
-
-## Building
+- **SDL3** development headers and library
+- **Lua 5.4** development headers
+- `python3` — standard library for assembly, but icon generation also needs
+  `Pillow` and either `cairosvg` or `rsvg-convert`
+- a [cdin-x](https://github.com/m-mdy-m/cdin-x) checkout, for anything but `make bin`
 
 ```sh
-make                # release build (default)
-make debug          # debug build — no optimization, debug symbols, sanitizers available
-make run            # build then immediately launch the result
-make info           # print what was detected (SDL version, Lua version, flags, output path)
+# Debian / Ubuntu
+sudo apt install build-essential make libsdl3-dev liblua5.4-dev python3
+pip install Pillow cairosvg
+
+# Arch
+sudo pacman -S base-devel sdl3 lua python librsvg
 ```
 
-There is no network access at any point, and nothing is fetched. But a fresh
-clone does need a [cdin-x](https://github.com/m-mdy-m/cdin-x) checkout next to
-it, because the mandatory set — the vim plugin, the default theme and the
-fonts — lives there and is copied into the build output at build time:
+**SDL3 is required, not optional.** `mk/config.mk` still carries an SDL2
+auto-detect path and will link `-lSDL2` if that is all it finds, but `main.c`,
+`renderer.h` and `utils.c` all `#include <SDL3/SDL.h>` unconditionally, and the
+dependency check in `mk/build.mk` compiles a probe against `SDL3/SDL.h` and stops
+if it is missing. So an SDL2-only machine selects SDL2 and then fails to compile.
+`make info` prints `SDL  3 (required)` — a literal, not a version, which is why
+it never disagrees.
+
+Install SDL3 rather than fighting the makefile. The auto-detect is vestigial and
+`SDL_VERSION=2` is not a supported configuration.
+
+**Windows** has no package manager for this. You need MinGW, the SDL3 MinGW devel
+package, and Lua 5.4 headers, and the makefile finds both through `pkg-config` —
+so the mechanism is a `.pc` file on `PKG_CONFIG_PATH`, which is what the release
+workflow does. Put `SDL3.dll` next to the binary afterwards.
+
+There are **no `SDL3_PREFIX` or `LUA_PREFIX` make variables.** `SDL3_PREFIX`
+appears in `make help` and in one error message, `LUA_PREFIX` appears nowhere, and
+setting either does nothing.
+
+## The quick version
 
 ```sh
-git clone https://github.com/m-mdy-m/cdin-x.git
-make                    # CDINX_DIR defaults to ../cdin-x
+git clone https://github.com/m-mdy-m/cdin-x   # next to cdin, or anywhere
+git clone https://github.com/m-mdy-m/cdin
+cd cdin
+
+make                        # binary + the bundled data/ → build/<platform>-release/
+make run                    # …and launch it
 ```
 
-`make bin` compiles the binary alone and needs no cdin-x, if you are only
-working on C. `make bundle` assembles the data and does need one. With no
-cdin-x reachable, `make` says so and stops rather than producing an editor that
-cannot start.
+**A fresh clone does not build with `make` alone.** It needs a cdin-x checkout,
+because the mandatory set — vim mode, the default theme, the fonts — lives there
+and a cdin without them is not an editor. The failure message says so and names
+the variable.
 
-The output lands in `build/<platform>-release/cdin` (or `cdin.exe` on
-Windows). A symlink to the `data/` directory is placed there automatically so
-you can run the binary from the build directory.
-
-To clean up:
+That split is the point, not an inconvenience. The cost is one line in a build
+script; what it buys is that "the editor is broken" and "an extension misbehaves"
+stop being the same investigation.
 
 ```sh
-make clean       # remove this platform's build directory
-make distclean   # remove all build directories and the generated icon.inl
+make CDINX_DIR=/path/to/cdin-x    # …using that checkout instead of ../cdin-x
 ```
 
-### Build targets reference
+## Targets
 
-| Target | Description |
-|--------|-------------|
-| `make` | Release binary + assembled `data/` (needs `CDINX_DIR`) |
-| `make bin` | Release binary only — no cdin-x, no data assembly |
-| `make bundle` | Assemble `build/<platform>-<build>/data` only (needs `CDINX_DIR`) |
-| `make run` | Build and launch |
-| `make debug` | Debug build |
-| `make install` | Install binary + assembled data to PREFIX |
-| `make uninstall` | Remove what install put there |
-| `make info` | Print build configuration |
-| `make help` | Show all targets |
-| `make clean` | Remove build directory |
-| `make distclean` | Remove build + generated icon.inl |
-| `make test-plugins` | Data-layer tests (needs `lua` only; no cdin-x) |
+| target | does |
+| --- | --- |
+| `make` | `bin` then `bundle`. A runnable editor |
+| `make bin` | **the binary only.** No cdin-x, no `data/` assembly |
+| `make bundle` | assemble `build/…/data` only |
+| `make run` | build, then launch |
+| `make debug` | `-O0 -g3` into `build/<platform>-debug/` |
+| `make info` | what was detected, and where it will go. **Run this first when something is wrong** |
+| `make install` / `make uninstall` | install under `PREFIX` |
+| `make clean` | remove this build's output |
+| `make distclean` | remove `build/` entirely, and the generated icon header |
+| `make tiny` | an `-Os` + `--gc-sections` build |
+| `make gen-icons` | regenerate the icon assets |
+| `make test-plugins` / `test-lua` / `test-workflows` / `test-site-dir` | the test suites, below |
 
-## Options
+Variables: `CDINX_DIR`, `PREFIX`, `DESTDIR`, `BUILD=release|debug|tiny`, `CC`,
+`PYTHON`, `SDL_VERSION`, `LUA_VERSION`, `LUA`, `PLATFORM`.
 
-These can be passed on the make command line:
+**Start with `make info`.** It prints the platform, the compiler, the detected
+Lua version, every flag and the output path, which is most of what a build
+problem turns out to need.
 
-| Variable | Default | Effect |
-|----------|---------|--------|
-| `BUILD` | `release` | Set to `debug` for a debug build |
-| `PREFIX` | `/usr/local` | Installation prefix |
-| `SDL_VERSION` | `auto` | Force `2` or `3`; auto prefers SDL3 |
-| `LUA_VERSION` | `auto` | Force a version like `5.4` |
-| `CC` | `gcc` / `clang` | Override the compiler |
+### Targets that do not work
 
-Example — build with debug symbols and install to your home directory:
+Four targets are advertised and broken. They are recorded as known issues in
+`CHANGELOG.md`, and none is on a path you need:
+
+| target | what happens |
+| --- | --- |
+| `make check` | runs `python scripts/check.py` — the file does not exist |
+| `make size` | runs `python scripts/bench.py` — the file does not exist |
+| `make test` | `.PHONY` with no rule |
+| `make bench` | `.PHONY` with no rule |
+| `make debug-san` | sets `SANITIZE=1`, which no makefile reads — identical to `make debug` |
+
+**There is no lint or style checker in this repository.** The only automated check
+on C is the compiler's, at `-Wall -Wextra` without `-Werror`; note that
+`-Wno-unused-parameter` is also on, so a clean build means "no warning other than
+unused parameters". `make help` additionally still claims that plugins and themes
+ship inside `data/`, which has been untrue since 0.2.0-alpha.2.
+
+## What `make` actually produces
+
+`build/<platform>-<build>/cdin` — `cdin.exe` on Windows — and next to it a
+`data/` directory. **The two travel together**; the binary looks for `data/`
+relative to itself, so moving one without the other gives you an editor with no
+fonts and no vim mode.
+
+```
+build/linux-release/
+├── cdin
+└── data/
+    ├── core/        a link to this checkout's data/core — not a copy
+    ├── plugins/     the mandatory set
+    ├── themes/      default/
+    ├── fonts/
+    ├── X/           the extension catalog
+    └── BUNDLE.lua
+```
+
+`data/core` is a **symlink to the source tree**, recreated on every build, with a
+copy as a fallback on filesystems that cannot do it. That is why editing
+`data/core/*.lua` needs no recompile — edit, restart, done. Only C changes
+require a rebuild.
+
+The recreate is deliberate rather than create-if-missing. A link made once and
+then assumed correct is exactly how a stale copy becomes the editor you are
+running, and you spend an afternoon on a bug that was fixed three commits ago.
+
+**Only `src/` changes need `make`.** A Lua change under `data/core/` needs a
+restart.
+
+## Assembling the data
+
+`scripts/assemble_data.py` owns it, and it does two things:
+
+1. **Recreate `data/core`** as a symlink to the source `data/core`, falling back
+   to a copy. An old `build/…/data` that is itself a symlink is unlinked, never
+   followed — following one is how a build writes into your source tree.
+2. **Run cdin-x's bundler**, `<CDINX_DIR>/scripts/bundle.py --out <build>/data`,
+   in the same interpreter.
+
+Everything else in `data/` comes from cdin-x's `scripts/bundle.py`: the vim
+plugin, the default theme, the fonts, a one-line shim per bundled plugin, and a
+`BUNDLE.lua` index. That script is cdin-x's, and its own contract is documented
+in [its README](https://github.com/m-mdy-m/cdin-x/blob/main/scripts/README.md) —
+but the four ways it refuses to continue are worth knowing here, because they are
+the failure modes of *this* build:
+
+- no essential plugin under `X/core/`
+- not exactly one essential theme — a build has to know which one to start with,
+  so zero and two are both unanswerable
+- a missing or empty `fonts/`
+- an output directory that is a symlink or junction, which it refuses rather than
+  writing through, because a junction does not report itself as one through the
+  obvious API and a check written for POSIX passes right over it
+
+It is also idempotent: a second run over the first run's output is byte-identical
+and no timestamps are preserved, so a bundle that differs between builds of the
+same commit is a bug rather than a matter of trust.
+
+**Nothing is ever fetched.** A build takes a directory and reads files out of it.
+
+## Tests
+
+Four suites, and they are not interchangeable. Three need only `lua` — no build,
+no editor, no cdin-x.
 
 ```sh
-make BUILD=debug
-make install PREFIX=~/.local
+make test-plugins     # keymap integrity and the loader
+make test-lua         # unit + integration, in tests/lua/
+make test-workflows   # the cdin-x workflows — needs CDINX_DIR
+make test-site-dir    # the one duplicated constant, vs cdin-x
 ```
 
-## Installing
+| suite | asserts |
+| --- | --- |
+| `test-plugins` | every command a binding names actually exists, **with zero plugins installed**; the palette gets a working submit and suggest; `ctrl+n` maps correctly and the seven commands the runtime moved away from are absent; `ctrl+p` / `ctrl+shift+p` / `ctrl+o` are unbound; `command.perform` on an unknown name does not raise. Then the loader and theme registry over `scripts/fixtures/`, across site-present × site-absent × `config.plugins` = `nil` / `false` / whitelist |
+| `test-lua` | the text pipeline (UTF-8, bidi, shaper), `Doc` editing, and the theme registry — including that a failed `apply` leaves `style` completely untouched |
+| `test-workflows` | cdin-x's workflow plugins register their commands; `ctrl+p`, `ctrl+shift+p`, `ctrl+o` and `ctrl+shift+o` **each have exactly one command bound**; the **source text** of `data/core/keymaps/default.lua` names none of them; every registered predicate is callable; all seven workflow commands survive `enter → suggest → submit`; unloading `palette`, `finder` and `modules` detaches commands *and* strokes |
+| `test-site-dir` | cdin's `config.site_dirname` and cdin-x's copy of it are the same string, and cdin-x reads `config.site_path()` rather than hardcoding a path |
+
+`test-plugins` and `test-lua` build their tree from `scripts/fixtures/` rather
+than from whatever happens to be on disk, so those tests can never be satisfied by
+accident. `test-workflows` does the opposite on purpose: it points
+`config.site_dir` straight at your `CDINX_DIR`, because the thing it is checking —
+that cdin and cdin-x agree — is only meaningful against the real catalog. It also
+reads `default.lua` **from disk** rather than from the loaded table, so a
+plugin's `keymap.add` prepend cannot hide a stale line in the file.
+
+**`test-workflows` is the one that cannot be replaced.** A stale runtime binding
+and a duplicated plugin binding are the two failures worth catching, and neither
+is visible from one repository alone — one needs cdin-x present to know what it
+should have bound. Run it whenever you touch `data/core/keymaps/`, the loader, or
+anything a plugin might also be registering.
+
+`make check` is separate: it is lint and style, not tests.
+
+## CI
+
+Release workflows check out **this repository and cdin-x as siblings**, generate
+icons, and run `make build`. The `Dockerfile` does the same. What they package is
+the **assembled** `build/…/data`, never the source `data/`.
+
+Platforms: Linux x86-64, Windows x86-64, macOS arm64 (a DMG). `release.yml`
+collects the artifacts and publishes them, and separately runs the Docker matrix
+— `linux/amd64` and `linux/arm64` natively, no QEMU. `docker.yml` is the
+single-platform path and `deploy-website.yml` is unrelated.
+
+## What to do before opening a pull request
 
 ```sh
-make install            # installs to PREFIX/bin and PREFIX/lib/cdin
-make install PREFIX=~   # or any other path
-make uninstall          # removes what install put there
+make            # and make debug — both must build clean, -Wall -Wextra
+make test-plugins
+make test-lua
+make test-workflows
 ```
 
-The binary goes to `$PREFIX/bin/cdin` as a symlink to the real binary in
-`$PREFIX/lib/cdin/`. The **assembled** `data/` — the runtime `core/` plus the
-bundled vim plugin, default theme and fonts — is copied from
-`build/<platform>-<build>/data` to `$PREFIX/lib/cdin/data/`, following the
-`core` symlink so the result is a real directory.
+Note there is no `make check` in that list, because it does not work.
 
-## Python script
+Then run the editor and exercise what you changed.
 
-If you'd rather not use make directly, `scripts/cdin.py` wraps the same
-operations and adds a few extras (auto-install, update from GitHub, icon
-generation, interactive wizard):
+Lua changes under `data/core/` need no recompile; only C does. So the loop is
+`make` once, then edit and restart as many times as you like.
 
-```sh
-python3 scripts/cdin.py build
-python3 scripts/cdin.py build-install
-python3 scripts/cdin.py install --shortcut   # also creates a desktop entry
-```
-
-Run it with no arguments for an interactive menu. Full documentation is in
-[`scripts/README.md`](../../scripts/README.md).
-
-## Windows
-
-On Windows you need the SDL3 MinGW development package. Download it from the
-SDL releases page, extract it, and copy `SDL3.dll` from the `x86_64-w64-mingw32/bin/`
-folder into the project root before building. The compiler flags pick up the
-headers and import libraries automatically if you point them at the right place.
-
-The Python install script handles more of this automatically:
-`python scripts/cdin.py build` walks you through it if dependencies are missing.
-
-## Checking what was detected
-
-Before building, run `make info` to see exactly what the build system found:
-
-```
-cdin build configuration
-────────────────────────────────────────
-  VERSION      0.1.0-beta.1
-  PLATFORM     linux
-  BUILD        release
-  SDL          3 (required)
-  LUA          5.4.7 [pkg: lua5.4]
-  CC           gcc
-  OUT          build/linux-release/cdin
-  PREFIX       /usr/local
-────────────────────────────────────────
-```
-
-If SDL or Lua headers aren't found, the error message tells you what's missing.
+[CONTRIBUTING.md](../../CONTRIBUTING.md) has the conventions and the PR checklist.
+[Troubleshooting](troubleshooting.md) has what a specific failure means.

@@ -50,6 +50,15 @@ config.plugins = nil
 -- Fonts directory (bundled with the binary)
 config.fonts_dir = EXEDIR .. "/data/fonts"
 
+-- The bundled data directory: EXEDIR/data, where a build's mandatory set is
+-- assembled (the vim plugin, the default theme, the fonts, and whatever else
+-- is marked essential). Published because an extension can only answer "what
+-- does this editor already ship?" if the editor says so — and the one thing
+-- an extension cannot know is where its own data directory is. cdin-x reads
+-- this to see the extensions a build carries, and treats it as optional: an
+-- installed extension set has none.
+config.data_dir = EXEDIR .. "/data"
+
 -- ── user / site directories ─────────────────────────────
 -- user_dir : where user themes (themes/<name>/theme.lua) and init.lua are looked up.
 --

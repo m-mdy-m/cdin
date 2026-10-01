@@ -338,7 +338,18 @@ function system.get_time()  return os.time() end
 function system.get_clipboard() return "" end
 function system.set_clipboard() end
 function system.set_window_mode() end
-function system.exec() return true end
+-- The real system.exec runs a command detached (src/api/system.c). The stub
+-- runs it synchronously: a test that exercises a fetch polls for a marker
+-- file that only a real git would write, so a no-op here would make every
+-- fetch look like it timed out.
+function system.exec(cmd) return run(cmd) ~= nil end
+-- Present on the real system object (src/api/system.c) and used by the
+-- blocking fetch path; the stub sleeps for real so a polling loop under test
+-- does not spin.
+function system.sleep(seconds)
+  local deadline = os.clock() + (tonumber(seconds) or 0)
+  while os.clock() < deadline do end
+end
 function system.request_exit() end
 function system.set_title() end
 function system.open_url() end
@@ -395,6 +406,9 @@ function M.install(opts)
     PLATFORM = IS_WIN and "Windows" or "Linux",
     EXEDIR   = opts.exedir or ".",
     EXEFILE  = (opts.exedir or ".") .. "/cdin",
+    -- Empty, as main() publishes it when the log file could not be opened:
+    -- core.log_path must be nil then, not a path that does not exist.
+    LOGFILE  = opts.logfile or "",
     ARGS     = {},
     PATHSEP  = SEP,
     system   = system,

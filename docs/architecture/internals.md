@@ -1,277 +1,369 @@
 # Internals
 
-This is a deeper look at how cdin works under the hood. The
-[Architecture Overview](overview.md) covers the big picture. This document
-goes into the pieces you'll need to understand if you're working on the C
-layer, the renderer, or the frame loop.
+A deeper look at the pieces you need if you are working on the C layer, the text
+pipeline, or the frame loop. [The overview](overview.md) has the split and the
+boot order; this page has the machinery.
+
+## The C layer
+
+`src/` is deliberately thin. It owns a window, a renderer and an OS interface,
+and exposes them to Lua. It knows nothing about documents, views, commands or
+keybindings.
+
+| directory | holds |
+| --- | --- |
+| `src/main.c` | `main()` and the bootstrap string |
+| `src/core/` | window, logger, utils, and the Windows DPI setup in `boot.c` |
+| `src/ui/` | the renderer, and its caches |
+| `src/fs/` | path handling and filesystem operations |
+| `src/search/` | the C-side substring search used by the find bar |
+| `src/api/` | the Lua-facing bindings: `system.*`, `renderer.*`, `core.*` |
+| `src/lua/` | the Lua state, the globals, and `lua_run_core` |
+
+**The C11 rule is that the C side has no editor concepts.** It cannot grow a bug
+about a document, because it has no idea what one is. If you find yourself wanting
+to add "tab" or "selection" to `src/`, the answer is a binding for something the
+renderer already knows how to draw.
+
+### What Lua gets
+
+Five native modules, from `api_load_libs` (`src/api/api.c:11-22`). Three are
+registered **eagerly**, two are **lazy preloads**:
+
+| module | on it |
+| --- | --- |
+| `system` | events, cursor, window, clipboard, time, `sleep`, `chdir`, `list_dir`, `absolute_path`, `get_file_info`, `exec`, `popen`, `fuzzy_match`, `set_hit_regions`, `show_confirm_dialog` |
+| `renderer` | `show_debug`, `get_size`, `begin_frame`, `end_frame`, `set_clip_rect`, `draw_rect`, `draw_text`, plus the `renderer.font` sub-table (`load`, `set_tab_width`, `get_width`, `get_height`, `add_fallback`, `__gc`) |
+| `search` | the C substring search behind `doc/search.lua`, and `fuzzy_match` |
+| `fs` | `mkdir_all`, `remove_all`, `copy_all`, `stat`, `list_dir` — reached through `core.fs` |
+| `path` | `absolute`, `join`, `basename`, `dirname`, `ext`, `stem`, `split`, `normalize`, `is_absolute` — reached through `core.fs` |
+
+**There is no `core` table from the C layer.** `core` is the Lua runtime module
+(`data/core/init.lua`), installed by the bootstrap. Hit regions are
+`system.set_hit_regions`; the scale factor is the `SCALE` global.
+
+Plus five globals from `lua_setup_globals`: `VERSION`, `PLATFORM`, `SCALE`,
+`EXEFILE`, `ARGS`. The bootstrap string then adds `PATHSEP` and `EXEDIR`.
+
+**`SCALE` is the display content scale, and it is `1.0` on every non-Windows
+platform** — `utils_get_scale()` has an `#ifdef _WIN32` around the real value and
+returns a literal `1.0` otherwise. Everything sized in pixels multiplies by it
+(`style.lua` does this uniformly: `common.round(14 * SCALE)` for padding and so
+on), which is why a theme sets colours and never sizes. On Windows this is a real
+HiDPI factor; everywhere else it is a hook that is not currently connected to
+anything.
+
+**The renderer has no line primitive.** Rects and text only — a rule or a divider
+is a one-pixel rect. A glyph-coverage check walks a chain of at most **8 font
+fallbacks** (`renderer.c:217-230`), with a per-fallback baseline offset so metrics
+differ harmlessly.
+
+### The renderer cache
+
+`src/ui/renderer_cache.c` exists because immediate-mode drawing of a text editor
+re-issues the same rectangles every frame. It buckets commands into an **80 × 50
+grid of 96 px cells**, hashes each command into the cells it touches, diffs
+against the previous frame, and expands changed cells to dirty pixel rects. The
+command buffer is 512 KB.
+
+Invalidation is explicit, via `rencache_invalidate`, on a resize **or a clip-rect
+change** — not per frame.
+
+**This is why `core.redraw = true` matters.** A frame that does not redraw skips
+the whole draw path, which is the idle-cost story. Any state change a view has
+cached needs to set it, or the screen goes stale.
+
+## The text pipeline
+
+`data/core/text/` is where non-ASCII gets decided, and it is three independent
+pieces that run in that order.
+
+### `utf8.lua`
+
+| | |
+| --- | --- |
+| `is_cont(byte)` | is this a continuation byte |
+| `len(text)` | character count, not byte count |
+| `chars(text)` | an iterator over characters |
+| `offset(text, n)` | byte offset of character *n* |
+| `decode(text, pos)` | codepoint at *pos* |
+| `encode(cp)` | one character from a codepoint |
+| `sanitize(text)` | drop or replace anything invalid |
+
+**Columns are byte offsets, not character indices.** This is worth stating
+plainly because the opposite is the natural assumption. `DocView:get_col_x_offset`
+slices with `text:sub(1, col - 1)` and hands the bytes straight to the font;
+`doc/translate.lua` steps by byte while *skipping* UTF-8 continuation bytes, so a
+motion never lands mid-codepoint; and `get_text`, `insert` and `remove` are all
+byte-indexed. The document layer is byte-indexed throughout.
+
+UTF-8 awareness appears in exactly two places: skipping continuation bytes so a
+position is always on a character boundary, and `utf8.sanitize` on load.
+
+A column past the end of a line is `math.huge` and means "the end", which is why
+`doc:newline-below` and `doc:duplicate-lines` can append without measuring.
 
----
+`sanitize` is applied to every line on load. A file with invalid UTF-8 opens
+rather than failing, and the invalid bytes are dropped — a text editor that
+refuses to open a file is a worse bug than one that shows it slightly wrong.
 
-## Startup sequence
+### `bidi.lua`
 
-`main()` in `src/main.c` does this, in order:
+| | |
+| --- | --- |
+| `is_rtl_char(cp)` | |
+| `base_dir(text)` | the paragraph direction — the first strong character wins, defaulting to ltr |
+| `has_rtl(text)` | |
+| `visual(text, dir)` | the visual-order run list for a line |
 
-1. Set up logging (to `cdin.log` next to the binary)
-2. Initialize SDL3 (or SDL2) — window, event queue, display info
-3. Create the window at 80% of the usable display area
-4. Initialize the software renderer
-5. Create a Lua 5.4 state
-6. Register the `system` and `renderer` C libraries
-7. Set globals that Lua will read: `ARGS`, `SCALE`, `EXEFILE`, `VERSION`,
-   `PLATFORM`, `MOD_VERSION`
-8. Call `data/core/init.lua`
+### `shaper.lua`
 
-From step 8 onward the Lua side owns the process. When the Lua main loop
-returns, `main()` tears down SDL and exits.
+`needs_shaping(s)` and `shape(s)` — letterform joining, the reason Arabic and
+Indic scripts look like words rather than sequences of letters. Driven by
+`config.shaping_enabled`, which defaults on.
 
-`data/core/init.lua` does the rest of startup: parses `ARGS`, creates the
-initial view tree, starts background threads (project scanner, etc.),
-loads user configuration from `~/.config/cdin/user/init.lua`, loads the
-extensions (the mandatory bundled set, then the site set), loads the
-per-project `.lite_project.lua` if it exists, and enters the frame loop.
+`style.font`, `style.code_font` and `style.big_font` each get `fallback.ttf` and
+`emoji.ttf` added as fallbacks if those files are present, which is how a single
+monospace font renders an emoji without a second font stack per view.
 
-Extensions load after the user module, so a keymap or command the user set in
-`init.lua` is what a plugin has to override — not the other way round.
+### The order, which is the whole point
 
----
+`text.visual()` is six lines, and both of its branches matter:
 
-## The frame loop
+```lua
+local shaped = (shaping and shaper.needs_shaping(s)) and shaper.shape(s) or s
+if dir == "ltr" and not bidi.has_rtl(s) then return shaped end
+return bidi.visual(shaped, dir)
+```
 
-One iteration of the loop, in `data/core/loop.lua`:
+**Shaping runs first, then bidi.** Not the other way round. The shaper produces
+the joined letterforms in *logical* order; the bidi pass then reorders the
+already-shaped runs into visual order. Reversing them would reorder unshaped
+isolated forms, which is wrong in a way that is obvious the moment you have seen
+it and invisible in a test.
+
+**Bidi is not skipped for a line with no RTL text unless `direction` is exactly
+`"ltr"`.** `"auto"` — the default — still calls `bidi.visual` on every line and
+lets it decide the base direction per line. The short-circuit is for a document
+that has explicitly been declared left-to-right, not an optimisation for
+ordinary text.
 
-1. **Poll events** — SDL events (keyboard, mouse, window resize, quit, …) are
-   pulled off the queue one by one and dispatched. Key events go through the
-   keymap, which maps them to command names. Mouse events go to the focused
-   view.
+Shaping is guarded separately by `needs_shaping`, so an English or CJK line skips
+the shaper without any configuration.
 
-2. **Resume background threads** — every coroutine registered with
-   `core.add_thread` is resumed. If it yielded a number, it sleeps that many
-   seconds before being resumed again. If it errors, the error is logged and
-   the thread is removed.
+## The document
 
-3. **Compute layout** — the root view recalculates positions and sizes for
-   all views. This is cheap when nothing has changed.
+`data/core/doc/init.lua`. A `Doc` is a `lines` table, a selection, and two undo
+stacks.
 
-4. **Redraw** — each view's `draw` method is called. The software renderer
-   collects draw commands (rectangles, text, lines) and runs them through the
-   cell cache before writing to the framebuffer.
+### Undo
 
-5. **Sleep** — the loop sleeps to hold the target FPS (`config.fps`, default
-   60). When nothing is happening, the redraw step touches almost nothing and
-   the loop mostly just sleeps.
+```lua
+self.undo_stack = { idx = 1 }
+self.redo_stack = { idx = 1 }
+self.clean_change_id = 1
+```
 
-The loop keeps a `core.redraw` flag. Any code that changes editor state can
-set `core.redraw = true` to ensure the next frame does a full redraw. Most
-code doesn't need to do this explicitly — the views handle it automatically
-when their content changes.
+**The change id is the undo stack's index**, and dirtiness is
+`clean_change_id ~= undo_stack.idx`. There is no separate dirty flag to get out
+of sync: saving calls `clean()`, which copies the current index. Undo back to the
+clean index and the document is clean again, which is the behaviour you want and
+the reason it is implemented this way.
 
----
+**Consecutive edits merge** within `config.undo_merge_timeout`, so typing is one
+undo step rather than one per keystroke. `raw_insert` and `raw_remove` take the
+time and decide; the public `insert`/`remove` do not expose it.
 
-## The renderer
+### The three hooks
 
-The renderer is in `src/ui/renderer.c` and `src/ui/renderer_cache.c`.
+```lua
+Doc._before_save = {}   -- fn(doc) before writing to disk
+Doc._after_save  = {}   -- fn(doc) after writing
+Doc._after_load  = {}   -- fn(doc) after reading
+```
 
-It's a software rasterizer — no GPU, no OpenGL, no Vulkan. This is
-intentional: it means cdin has zero graphics driver dependency and works
-identically everywhere SDL runs.
+Plain lists, called with `ipairs`. They are the extension seam plugins prefer
+over wrapping `Doc.save`, because unloading is `table.remove` rather than a
+restore-everything dance. See [plugins](../guides/plugins.md#document-hooks).
 
-The cell cache is the key performance trick. The screen is divided into a
-uniform grid of cells (each a fixed number of pixels). Every draw command
-is associated with the cell or cells it touches. The renderer hashes each
-cell's draw commands, and only redraws a cell if its hash changed since the
-last frame. A frame where nothing moves — the cursor is still, no background
-poll just fired — touches almost no cells and writes almost nothing to the
-framebuffer.
+### `reset_syntax`
 
-This means the renderer's cost scales with what changed, not with what's on
-screen. A 4K display with a lot of text but no activity is essentially free.
+Runs on load. Reads the first 128 bytes of line 1, asks `syntax.get(filename, header)`,
+and resets the highlighter only if the answer actually changed — so reloading a
+file whose syntax did not change does not throw away the token cache.
 
-The Lua side calls the renderer through two modules registered at startup:
+## The highlighter
 
-- `renderer` — draw calls: `renderer.draw_rect`, `renderer.draw_text`,
-  `renderer.set_clip_rect`, `renderer.get_size`, font loading
-- `system` — OS calls: `system.get_time`, `system.sleep`, `system.exec`,
-  `system.get_clipboard`, `system.set_clipboard`, file operations, process
-  control
+`data/core/doc/highlighter.lua`. Per document, incremental, in its own thread.
 
-These are the only way Lua talks to C (besides standard Lua libraries).
-Everything else — documents, views, commands, plugins — is pure Lua.
+| | |
+| --- | --- |
+| `first_invalid_line` | the top of the dirty region |
+| `max_wanted_line` | the bottom of what is visible |
+| `lines[i]` | `{ text, tokens, state, init_state }` |
 
----
+The thread walks outward from what is visible, at most 40 lines per pass before
+yielding, and only when `first_invalid_line > max_wanted_line` does it back off
+and wait. That is why opening a very large file is instant.
 
-## The Lua/C boundary
+**A cached line records the state it started in.** If the previous line's end
+state changes, every line after it is stale, and `init_state` is how that is
+detected. Editing line 1 of a file whose line 2 opens a multi-line string
+re-tokenizes everything below — correct, and also why a large paste near the top
+of a big file is the one edit that costs a frame.
+
+[Syntax highlighting](../guides/syntax.md) covers the tokenizer.
+
+## Views
+
+Everything draws through `View:extend()`, and there are three methods that matter
+more than the rest.
+
+```lua
+function MyView:get_name() end          -- the window title and the pane's tab label
+function MyView:update() end            -- layout, scroll, anything cached
+function MyView:draw() end              -- draw only; must not change state
+```
 
-The boundary is defined in `src/api/`. Two libraries are registered when
-the Lua state starts: `system` (`src/api/system.c`) and `renderer`
-(`src/api/renderer.c` plus `src/api/renderer_font.c`).
+**`draw` must not change state.** It runs only when `core.redraw` is set, so a
+view that mutates something while drawing will not do it consistently — the
+change happens on the frames that redraw and not on the ones that do not. Layout
+goes in `update`.
+
+The class test is a separate method, `View:is(T)`, and it walks the metatable
+chain — which is why `"core.views.docview"` works as a predicate string
+(`command.add` `require`s the string and gets that class back), and why
+`CommandView:is(DocView)` is **true**: `CommandView` extends `DocView` in order to
+reuse its scrolling and gutter maths. That inheritance is load-bearing, and it is
+also why every `doc:*` command stays available while a prompt is open.
 
-Adding a function to the C API means:
-
-1. Writing a C function with the signature `static int fname(lua_State *L)`
-2. Pushing and checking arguments with `lua_check*` and `lua_to*`
-3. Pushing return values with `lua_push*`
-4. Adding the function to the registration table in `luaL_Reg` at the bottom
-   of the file
-
-The Lua side calls these like ordinary Lua functions — `system.exec(cmd)`,
-`renderer.draw_rect(x, y, w, h, color)`. There's no binding layer or
-marshaling system.
-
-`src/api/renderer_compat.c` is a thin compatibility shim that translates
-between the SDL2 and SDL3 renderer APIs. It exists so the same Lua API works
-regardless of which SDL version is installed.
-
----
-
-## The document model
-
-`data/core/doc/init.lua` is the text buffer. It represents a file as a table
-of lines, where each line is a string. The document has no concept of bytes
-or encoding — it works in Lua strings (which are byte arrays), and the
-renderer handles Unicode correctly because stb_truetype does.
-
-Key operations:
-
-- `doc:insert(line, col, text)` — insert at a position
-- `doc:remove(line1, col1, line2, col2)` — remove a range
-- `doc:get_text(line1, col1, line2, col2)` — read a range
-- `doc:get_selection()` — return the current selection endpoints
-- `doc:set_selection(l1, c1, l2, c2)` — set the selection
-
-Every mutating operation goes through `doc:raw_insert` and `doc:raw_remove`,
-which record undo entries. Undo is a flat list of entries with a pointer into
-it; `doc:undo()` and `doc:redo()` walk the list.
-
-`data/core/doc/highlighter.lua` is a syntax highlighter that runs as a
-coroutine alongside the document. It tokenizes lines incrementally —
-tokenizing one chunk per frame so it never blocks — and stores the results
-in a cache keyed by line. DocView reads from the cache to know what color
-to draw each run of text.
-
----
-
-## The view tree
-
-The root of the view hierarchy is the `RootView` in
-`data/core/rootview/init.lua`. It manages a binary tree of split nodes,
-where leaf nodes hold tabs, and each tab holds a view.
-
-Every view inherits from `data/core/views/view.lua`:
-
-- `view:update()` — called every frame; update state, set `self.scroll.to`
-  for smooth scrolling
-- `view:draw()` — called every frame after update; call renderer functions to
-  draw the view
-- `view:on_mouse_pressed(button, x, y, clicks)` — mouse events
-- `view:on_key_pressed(key, modifiers)` — only called if the keymap doesn't
-  handle the key first
-
-`DocView` (`data/core/views/docview.lua`) extends this to render a `Doc`:
-it draws the gutter (line numbers), the text (using the highlighter cache),
-the caret, and selections. It also handles mouse input for cursor placement
-and selection dragging.
-
----
-
-## The command and keymap system
-
-Commands are in `data/core/input/command.lua`. Every named action in the
-editor — `doc:save`, `tab:next`, `vim-fmenu:open` — is registered with
-`command.add(predicate, table)`. The predicate is called at runtime; if it
-returns false, the command is inactive. `nil` means always active. A class
-name string means active when a view of that class is focused.
-
-The keymap is in `data/core/input/keymap.lua`. It maps keystroke strings to
-command names (or lists of command names). When a key event fires, the keymap
-walks the list for that stroke and runs the first command whose predicate is
-currently true.
-
-This design means any code — plugin or core — can add commands and keybindings
-without touching existing code. Everything competes on an equal footing.
-
-Default keybindings are loaded from `data/core/keymaps/default.lua`.
-User overrides in `data/user/init.lua` call `keymap.add` and stack on top.
-
----
-
-## Background threads (coroutines)
-
-There are no OS threads in the Lua side. Background tasks are cooperative
-coroutines scheduled by the frame loop.
-
-`core.add_thread(fn)` registers a function. Each frame, the loop calls
-`coroutine.resume` on each registered thread. If the thread yields a number,
-it sleeps that many seconds before being resumed again (the loop tracks the
-resume time). If it errors, the error is logged and the thread is dropped.
-
-This means background tasks must yield frequently. A task that spends 20ms
-in Lua before yielding will drop frames. The project scanner yields after
-scanning each directory entry; the git poller yields between running `git`
-and reading the result.
-
-The coroutine scheduler is simple — there's no priority, no preemption, no
-inter-thread messaging. For the editor's use cases (polling at low frequencies,
-reading a few files) this is plenty.
-
----
-
-## Extension loading
-
-Extensions load in `data/core/init.lua`, after the core modules and after the
-user's `init.lua`, via `data/core/plugins.lua`. That module walks two roots:
-`EXEDIR/data/plugins` — the mandatory set a build bundled from cdin-x — and
-`config.site_dir/plugins`, the site set. For each entry it `dofile`s the entry
-point (`init.lua` for a directory plugin, the file itself for a single-file
-one) and calls `init(core, config)` on the returned table. Every step is
-wrapped in `pcall`.
-
-The two roots have different rules, and the difference is the whole design:
-
-- The **bundled** set loads unconditionally, whatever `config.plugins` says and
-  whatever `--no-plugins` says. It is what a build produced, and a build
-  without it is not an editor that starts. A failure here is logged at error
-  level with the words "mandatory plugin" and names the plugin, then startup
-  continues.
-- The **site** set is selected by `config.plugins`: `nil` for all of them,
-  `false` for none, a table as a whitelist. A failure is logged and skipped.
-
-A bundled plugin wins over a site plugin of the same name, on disk and at
-runtime. `plugins.list()` reports which is which, as `source`.
-
-Before either root is walked, the site directory is **appended** to
-`package.path` (`<site>/?.lua` and `<site>/?/init.lua`) when it exists, so an
-extension's modules are `require`-able by their path. Appended, not prepended:
-a site may extend the editor but may not shadow `core.*` or the bundled
-`X.core.vim.*`, which is what stops a plugin from replacing the runtime it is
-extending.
-
-If the site directory does not exist, nothing is appended and the walk finds
-nothing — which is why the editor is fully usable with no extensions
-installed, and why `Ctrl+P` is unbound rather than bound to a command nobody
-registered.
-
-Plugins are not sandboxed. They run in the same Lua state as the core, with
-access to all the same tables. A plugin can modify anything. This is
-intentional — it's what makes the wrap-and-call extension pattern possible.
-
-If a plugin errors during load, the error is caught, logged, and startup
-continues. The intent is that one broken plugin doesn't take down the editor.
-
-Load order: core → built-in extensions → installed optional extensions →
-user config → `.lite_project.lua`. Later always wins, which is why
-user config can override anything.
-
----
-
-## The search engine
-
-`src/search/find.c` is the C-side text search used by find and replace. It
-exposes one function to Lua: `system.find_text(lines, needle, line, col, opt)`.
-It returns the next match as `(line, start_col, end_col)`, or `nil` if there
-are no more matches.
-
-`data/core/doc/search.lua` wraps this into a Lua API used by DocView and the
-find-replace plugin. `data/core/search.lua` (note: different file) is the
-project-wide grep that the projectsearch plugin drives — it uses
-`system.exec` to call `grep` (or a fallback) rather than the in-process
-search engine, since grepping millions of lines in Lua would be too slow.
+Scrolling is the view's own business. `DocView:get_scrollable_size`,
+`get_line_screen_position`, `scroll_to_line`, `scroll_to_make_visible` and
+`get_visible_line_range` are the set, and a custom scrollable view needs the same
+five.
+
+### `View:extend()`
+
+From `data/core/utils/object.lua`, which is the whole inheritance system:
+
+```lua
+Object:new()      Object:extend()     Object:implement(...)
+Object:is(T)      Object:__tostring() Object:__call(...)
+```
+
+`extend` returns a subclass with `super` pointing at the parent. There is no
+metatable magic beyond that — no `__index` chains to debug, and
+`X.super.new(self)` is the first line of every constructor.
+
+`implement` is for modules that are not classes, and `Object:is` is the
+`instanceof` used everywhere.
+
+## `core.fs`
+
+`data/core/fs.lua` wraps the C filesystem calls, and it is the module a plugin
+should use rather than shelling out or guessing at separators:
+
+| | |
+| --- | --- |
+| paths | `join`, `basename`, `dirname`, `ext`, `stem`, `split`, `normalize`, `abs`, `is_absolute`, `sep` |
+| queries | `exists`, `is_dir`, `is_file`, `stat`, `list` (alias `ls`), `pwd` |
+| changes | `mkdir`, `rm`, `touch`, `copy`, `rename`, `move`, `cd` |
+
+`join` handles the separator; `core.fs.sep` is whatever the C `path` module
+reports. A plugin that builds paths by concatenating `"/"` works on Linux and
+quietly produces a second directory level on Windows.
+
+`list` returns entries with `type` set to `"dir"` or `"file"`, which is the whole
+reason `fs.list` reports it at all: `system.list_dir` returns bare names, and a
+name does not say whether it is a directory. An extension that needs the
+distinction should use `core.fs.list` rather than counting on the other one.
+
+## `core.try` and logging
+
+```lua
+function core.try(fn, ...)   -- returns true on success, false plus a logged error
+```
+
+Installed by `core.logging`. It is the boundary for anything a user action
+triggered: a thread body, an event handler, `command.perform`. `command.perform`
+wraps every call in it, which is why a raising command logs rather than taking
+the frame loop with it. On failure it attaches a de-tabbed `debug.traceback` to
+the log item's `.info`, which is the only way to see *where* a plugin broke.
+
+All three log levels are printf-style and append to the same ring buffer,
+`core.log_items`, capped at `config.max_log_items`. They differ only in the status
+bar:
+
+| | status bar | in the log |
+| --- | --- | --- |
+| `core.log` | an `i` in `style.text` | yes |
+| `core.log_quiet` | nothing | yes |
+| `core.error` | a `!` in `style.accent` | yes |
+
+Every item records `{ text, time = os.time(), at = "src:line" }`, from
+`debug.getinfo`. `log_quiet` is not "quieter" in the log — it is the same entry
+without the transient status-bar message, which is what you want for something
+that happens on every keystroke.
+
+**The Lua log and `cdin-log.txt` are one file.** `core.log` and `core.error`
+write `core.log_items`, which `core:open-log` shows, and `data/core/logging.lua`
+also appends each message — and, for `core.try` failures, the traceback — to the
+C logger's file, `cdin-log.txt` next to the binary, tagged `LUA`. The C logger
+writes its own lines (tagged by level) to the same file, so it reads in the order
+things happened. `CDIN_LUA_LOG=0` turns the Lua half off.
+
+**`core.on_error` is dead code.** `data/core/lifecycle.lua:17` defines it — it
+would write `error.txt` and save every dirty document to `<filename>~` — but
+nothing in the tree calls it. An uncaught raise propagates to the bootstrap's
+`xpcall` (`src/lua/api.c:39-49`), which calls `cdin_log_fatal` → `log_fatal` →
+`cdin-log.txt`, and then `main()` returns and the process exits normally. **There is
+no crash handler, and no `error.txt` is ever written.** Do not rely on either.
+
+## Things that are load-bearing
+
+A short list, because each of these looks like a style choice and is not:
+
+**`package.path` is prepended for `EXEDIR/data` and appended for the site
+directory.** The editor's own modules win; extensions extend rather than replace.
+
+**Globals are an error.** `core.runtime.strict` is the first thing loaded, so a
+stray global in a plugin is caught at load rather than when two plugins collide on
+a name. It fires only on a *missing* key, so the six globals C sets
+(`ARGS`, `VERSION`, `PLATFORM`, `SCALE`, `EXEFILE`, `PATHSEP`) bypass it and can
+be reassigned silently.
+
+**`config.site_path()` is a function, not a field.** Your `init.lua` runs after
+`core.config` was required, so a path computed at load time would be fixed before
+you could change it and the one knob would silently do nothing.
+
+**The default keymap is installed before your config, and your config before the
+plugins.** That single ordering is what makes a plugin able to override a key you
+set and you able to override a key a plugin sets.
+
+**A failing plugin never stops startup.** Bundled is reported at error level, site
+is logged and skipped. An editor that refuses to open is a worse bug than a
+missing feature.
+
+**`data/core` is symlinked into the build and recreated every time.** A link made
+once and then assumed correct is exactly how a stale copy becomes the editor you
+are running.
+
+**Two of the `doc:move-to-*` commands are overwritten by hand.**
+`doc:move-to-previous-char` and `doc:move-to-next-char` collapse a selection
+before moving, which is why the arrows shrink a selection. The generated versions
+are still there for the other fourteen translations.
+
+## Files
+
+| file | holds |
+| --- | --- |
+| [`src/main.c`](../../src/main.c) | `main()` |
+| [`src/lua/api.c`](../../src/lua/api.c) | the globals and the bootstrap string |
+| [`src/ui/renderer.c`](../../src/ui/renderer.c) | drawing, and the caches |
+| [`data/core/loop.lua`](../../data/core/loop.lua) | the frame loop and the scheduler |
+| [`data/core/doc/init.lua`](../../data/core/doc/init.lua) | the document, undo, the hooks |
+| [`data/core/doc/highlighter.lua`](../../data/core/doc/highlighter.lua) | the incremental highlighter |
+| [`data/core/text/`](../../data/core/text) | UTF-8, bidi, shaping |
+| [`data/core/utils/object.lua`](../../data/core/utils/object.lua) | `extend`, `is`, `implement` |
+| [`data/core/fs.lua`](../../data/core/fs.lua) | the filesystem and path layer |
+| [`data/core/logging.lua`](../../data/core/logging.lua) | `core.try` and the three levels |
