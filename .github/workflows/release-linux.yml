@@ -49,7 +49,7 @@ jobs:
           path: ../cdin-x
 
       - name: Cache apt packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cache-apt
         with:
           path: /var/cache/apt/archives
@@ -73,7 +73,7 @@ jobs:
 
       # ── Cache: SDL3 built from source ────────────────────────────────────
       - name: Cache SDL3
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cache-sdl3
         with:
           path: /opt/sdl3
@@ -101,7 +101,7 @@ jobs:
 
       # ── Cache: pip (Pillow) ──────────────────────────────────────────────
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip-pillow-${{ runner.os }}
