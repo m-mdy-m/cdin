@@ -91,9 +91,12 @@ for stroke, commands in pairs(keymap.map) do
   end
 end
 table.sort(dangling)
+local stroke_count = 0
+for _ in pairs(keymap.map) do stroke_count = stroke_count + 1 end
 check(#dangling == 0,
   "every command the keymap names is registered (" ..
-  (#dangling > 0 and table.concat(dangling, ", ") or "86 strokes checked") .. ")")
+  (#dangling > 0 and table.concat(dangling, ", ")
+                     or string.format("%d strokes checked", stroke_count)) .. ")")
 
 -- ── 2. every registered command is reachable, and vice versa ──────────────
 
