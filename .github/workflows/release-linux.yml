@@ -36,14 +36,17 @@ jobs:
 
       # cdin-x is where the mandatory set lives: the vim plugin, the default
       # theme and the fonts. A cdin build bundles it into build/…/data via
-      # scripts/assemble_data.py -> scripts/bundle.py. It is checked out as
-      # a sibling so the default CDINX_DIR (../cdin-x) resolves; the build
-      # itself never fetches anything.
+      # scripts/assemble_data.py -> scripts/bundle.py. It is checked out as a
+      # true sibling — `../cdin-x`, one level above this repo — because that is
+      # what the default CDINX_DIR in mk/bundle.mk resolves to, and it is the
+      # layout a developer has locally. Checking it out at `cdin-x` instead
+      # puts it *inside* the repo, where `../cdin-x` cannot find it and the
+      # bundle step fails. The build itself never fetches anything.
       - name: Checkout cdin-x (mandatory bundle source)
         uses: actions/checkout@v4
         with:
           repository: m-mdy-m/cdin-x
-          path: cdin-x
+          path: ../cdin-x
 
       - name: Cache apt packages
         uses: actions/cache@v4
