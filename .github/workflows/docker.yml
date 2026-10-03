@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # full history: the version comes from `git describe` inside make
           fetch-depth: 0
@@ -28,7 +28,7 @@ jobs:
       # the build context so the Dockerfile can COPY it; the build itself
       # never fetches anything.
       - name: Checkout cdin-x (mandatory bundle source)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: m-mdy-m/cdin-x
           path: cdin-x

@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
       # sibling (`../cdin-x`); it goes inside the workspace and CDINX_DIR points
       # the build at it. The build itself never fetches anything.
       - name: Checkout cdin-x (mandatory bundle source)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: m-mdy-m/cdin-x
           path: cdin-x
