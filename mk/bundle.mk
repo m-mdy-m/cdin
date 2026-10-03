@@ -22,7 +22,6 @@
 #   make         the default goal: bin, then bundle.
 
 CDINX_DIR ?= $(abspath $(CURDIR)/../cdin-x)
-PYTHON ?= python3
 
 .PHONY: bin bundle
 

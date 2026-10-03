@@ -23,6 +23,11 @@ else
 endif
 TEST_CDIN_DIR ?=
 CDIN_DIR ?= $(CURDIR)
+
+# Interpreter for the two build-time Python steps: icon generation (mk/build.mk)
+# and data assembly (mk/bundle.mk). Override with `make PYTHON=python`.
+PYTHON ?= python3
+
 PKG_CONFIG := $(shell command -v pkg-config 2>/dev/null)
 
 ifeq ($(BUILD),debug)

@@ -3,13 +3,21 @@
 
 ICON_INL := src/icon.inl
 
-$(ICON_INL): scripts/gen_icon.py scripts/icon.svg
-	@command -v python3 >/dev/null || { echo '✗ python3 not found (needed to generate $(ICON_INL))'; exit 1; }
-	python3 scripts/gen_icon.py  scripts/icon.svg --out $(ICON_INL) --out-dir scripts/icons
+# gen_icon.py is a thin entry point; the work lives in scripts/_cdin/, so both are
+# prerequisites — otherwise editing the generator would not regenerate icon.inl.
+ICON_GEN := scripts/gen_icon.py scripts/_cdin/gen_icon.py
 
+$(ICON_INL): $(ICON_GEN) scripts/icon.svg
+	@command -v $(PYTHON) >/dev/null 2>&1 || { \
+		echo '✗ $(PYTHON) not found (needed to generate $(ICON_INL))'; exit 1; }
+	$(PYTHON) scripts/gen_icon.py scripts/icon.svg --out-inl $(ICON_INL) --out-dir scripts/icons
+
+# Icons only: no --out-inl, so src/icon.inl is left alone. `make` writes it.
 .PHONY: gen-icons
-gen-icons: scripts/gen_icon.py scripts/icon.svg
-	python3 scripts/gen_icon.py  scripts/icon.svg --no-inl --out-dir scripts/icons
+gen-icons: $(ICON_GEN) scripts/icon.svg
+	@command -v $(PYTHON) >/dev/null 2>&1 || { \
+		echo '✗ $(PYTHON) not found (needed to generate icons)'; exit 1; }
+	$(PYTHON) scripts/gen_icon.py scripts/icon.svg --out-dir scripts/icons
 
 # The `build` target (binary + assembled data/) lives in mk/bundle.mk, which
 # is where the one build input naming an external checkout, CDINX_DIR, is
