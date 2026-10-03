@@ -84,7 +84,7 @@ static FILE *setup_logging(const char *exefile) {
     else dir[0] = '\0';
 
     snprintf(log_path, sizeof(log_path), "%s%s%s", dir, dir[0] ? "/" : "",
-             dir[0] ? "cdin.log" : "./cdin.log");
+             dir[0] ? "cdin-log.txt" : "./cdin-log.txt");
   }
 
   rotate_log(log_path);

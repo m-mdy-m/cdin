@@ -134,7 +134,7 @@ docs/              documentation (you're here)
 ```
 
 There is no `data/core/git/`. Git support moved to
-[cdin-x](https://github.com/m-mdy-m/cdin-x) in 0.2.0-alpha.2, and the runtime
+[cdin-x](https://github.com/m-mdy-m/cdin-x) in 0.2.0-alpha, and the runtime
 reaches it through `core.register_vcs_provider`.
 
 When deciding where a change belongs: if it's optional behavior, it's a
@@ -154,8 +154,8 @@ Open an issue on GitHub with:
 - What happened instead
 - Your platform (OS, distro, SDL version, Lua version — `make info` prints
   this)
-- The contents of `cdin.log` (written next to the binary on each run) and
-  `error.txt` if the editor crashed
+- The contents of `cdin-log.txt` (written next to the binary on each run) —
+  it holds both streams, the C logger's and Lua's, with tracebacks
 
 Check existing issues first. If it's already there, add a comment with your
 reproduction steps — more data points help.
