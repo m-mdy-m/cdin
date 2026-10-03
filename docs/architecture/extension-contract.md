@@ -156,8 +156,26 @@ behind yours. With it, yours replaces the binding outright. This is stable
 behaviour, and the second argument is written at every call site in the tree
 rather than defaulted.
 
-Keystroke spelling: lowercase, modifiers in `ctrl+alt+shift` order joined by `+`,
-arrows as `left`/`right`/`up`/`down`, and `keypad enter` distinct from `return`.
+Keystroke spelling: lowercase, modifiers in `ctrl+alt+altgr+shift` order joined
+by `+`, arrows as `left`/`right`/`up`/`down`, and `keypad enter` distinct from
+`return`.
+
+**That is not a convention, it is the whole matching rule.** A stroke is not
+looked up by meaning: the input layer *builds* the string it will look up —
+every modifier currently held, in that order, then the key's own name — and
+`keymap.map` is indexed by that string with no normalisation, no aliases and no
+case folding. So a stroke that differs in modifier order, in case, or in where
+its `+` signs are is not a near miss; it is a string no key press produces, and
+the binding is dead in the same silent way a binding naming a command nobody
+registered is: `on_key_pressed` misses, returns false, and nothing is written
+anywhere. `["ctrl+s+l"]` and `["ctrl+shift+alt+n"]` were both in shipped
+keymaps.
+
+`keymap.add` therefore records every stroke it cannot build in
+`keymap.unreachable`, with the reason and the spelling that would have worked,
+and `core.init` reports the list once boot is done. It is reported, not
+refused: the binding is already inert, and refusing it would turn a typo in one
+extension into a boot that fails for everybody.
 
 `keymap.remove` detaches only the commands you name, so another plugin bound to
 the same stroke keeps working. **Hand back the same table you added** — a rebuilt

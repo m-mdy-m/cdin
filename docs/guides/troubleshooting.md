@@ -102,13 +102,17 @@ Needed for two things: generating the icon header, and assembling `data/`. The
 assembly script is standard library only, but **icon generation is not** — it
 needs `Pillow`, plus either `cairosvg` or `rsvg-convert` on `PATH`.
 
-`src/icon.inl` is checked in and normally up to date, so you rarely hit this. You
-will after `make distclean`, which deletes it:
+`src/icon.inl` is generated, not checked in, so every fresh clone needs it and
+`make` writes it for you. You will hit this directly after `make distclean`,
+which deletes it:
 
 ```sh
 pip install Pillow cairosvg        # or install librsvg for rsvg-convert
-make gen-icons
+make                                # regenerates src/icon.inl, then bundles
 ```
+
+`make gen-icons` refreshes `scripts/icons/` only and leaves `src/icon.inl`
+alone on purpose — the build is what writes that.
 
 ```sh
 make PYTHON=python      # if it is not called python3
@@ -352,6 +356,40 @@ and `View:is` walks the metatable chain, so `active_view:is(DocView)` is true
 there too. That is exactly what makes the `{ "command:submit", "doc:newline" }`
 chains work — <kbd>Return</kbd> submits, or falls through to a newline, depending
 on whether the first predicate holds.
+
+## A key does nothing at all
+
+Two ways a binding can be dead, and both are silent — a miss in
+`keymap.on_key_pressed` just returns false.
+
+**The stroke is one no key press produces.** The runtime builds the string it
+looks up — `ctrl+`, `alt+`, `altgr+`, `shift+`, then the key's own name — and
+matches it for equality, with no normalisation. `ctrl+shift+alt+n` is therefore
+not a variant of `ctrl+alt+shift+n`: it is a string nothing builds. Every such
+stroke is listed in the log at boot, with the spelling that would have worked:
+
+```text
+keymap: 1 bound stroke no key press can produce, so the binding is dead:
+keymap:   "ctrl+shift+alt+n" -> treeview:new-directory: "alt" is repeated or
+          out of order — modifiers are built ctrl, alt, altgr, shift - write it
+          as "ctrl+alt+shift+n"
+```
+
+**The command is not there.** Either nobody registered the name, or its
+predicate does not hold in the view you are in — a log-view command in a
+document, say. `command.perform` returns false for both. `make test-plugins`
+checks the first against the runtime's own bindings, and `make test-lua` checks
+that every stroke the runtime binds is one a key press can produce; for the
+second cause, run the command from the palette in the view you meant to be in.
+
+**A modifier is not arriving.** Modifier keys are state, not part of the key's
+name: the editor records that <kbd>Shift</kbd> is held and rebuilds the stroke on
+the next key. So <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> arrives as `ctrl+l`
+— `doc:select-lines` — when <kbd>Caps Lock</kbd> is on, because no Shift key-down
+is ever sent; and a modifier whose key-up went missing (usually alt-tabbing away
+while holding one) stays held for every key after it. <kbd>AltGr</kbd> is
+reported as `altgr` and clears `ctrl`, which is deliberate: on the layouts where
+it is <kbd>Ctrl</kbd>+<kbd>Alt</kbd>, the two are the same chord.
 
 ## A key does the wrong thing
 

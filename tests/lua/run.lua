@@ -17,6 +17,10 @@ rawset(_G, "EXEDIR", ".")
 rawset(_G, "EXEFILE", "./cdin")
 rawset(_G, "ARGS", {})
 rawset(_G, "PATHSEP", package.config:sub(1, 1))
+-- The C logger's file path, read by data/core/logging.lua at require time and
+-- meaning "file logging is off" when empty. core.runtime.strict makes reading
+-- an undefined global a hard error, so any test that pulls in core needs this.
+rawset(_G, "LOGFILE", "")
 
 local T = require "harness"
 

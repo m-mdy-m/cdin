@@ -160,10 +160,8 @@ function core.init()
     core.log("plugin loading failed; continuing with core only")
   end
 
-  -- A theme named by the persisted session may live in a root that only
-  -- exists once a plugin has registered it (an extension's themes), so the
-  -- one applied at style.lua load time may have fallen back. Now that the
-  -- plugins are in, re-apply it if it resolves to something real.
+  keymap.report_unreachable(core)
+
   core.try(function()
     if not config.theme then return end
     if config.theme == style.theme_name then return end

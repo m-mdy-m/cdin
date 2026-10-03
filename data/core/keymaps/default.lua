@@ -107,10 +107,8 @@ return {
   {
     ["ctrl+c"] = "log:copy-selection",
     ["ctrl+a"] = "log:select-all",
-    -- Two streams, one key each: the editor's own log_items, and the C
-    -- logger's file, which is where boot failures live.
-    ["ctrl+s+l"]      = "log:switch-source",
-    ["ctrl+r"]  = "log:reload",
+    ["f2"]     = "log:switch-source",
+    ["ctrl+r"] = "log:reload",
   }
 ,
 }

@@ -183,7 +183,7 @@ make test-site-dir    # the one duplicated constant, vs cdin-x
 | suite | asserts |
 | --- | --- |
 | `test-plugins` | every command a binding names actually exists, **with zero plugins installed**; the palette gets a working submit and suggest; `ctrl+n` maps correctly and the seven commands the runtime moved away from are absent; `ctrl+p` / `ctrl+shift+p` / `ctrl+o` are unbound; `command.perform` on an unknown name does not raise. Then the loader and theme registry over `scripts/fixtures/`, across site-present × site-absent × `config.plugins` = `nil` / `false` / whitelist |
-| `test-lua` | the text pipeline (UTF-8, bidi, shaper), `Doc` editing, and the theme registry — including that a failed `apply` leaves `style` completely untouched |
+| `test-lua` | the text pipeline (UTF-8, bidi, shaper), `Doc` editing, and the theme registry — including that a failed `apply` leaves `style` completely untouched; and the keystroke rule, that every stroke the runtime binds is one `keymap.canonical_stroke` says a key press can produce |
 | `test-workflows` | cdin-x's workflow plugins register their commands; `ctrl+p`, `ctrl+shift+p`, `ctrl+o` and `ctrl+shift+o` **each have exactly one command bound**; the **source text** of `data/core/keymaps/default.lua` names none of them; every registered predicate is callable; all seven workflow commands survive `enter → suggest → submit`; unloading `palette`, `finder` and `modules` detaches commands *and* strokes |
 | `test-site-dir` | cdin's `config.site_dirname` and cdin-x's copy of it are the same string, and cdin-x reads `config.site_path()` rather than hardcoding a path |
 
