@@ -4,14 +4,28 @@ Every command the runtime registers, and every key it binds. Both are tables you
 can copy from: a keystroke here is the string you would put in `keymap.add`, and
 a command name is the string you would put in `command.perform`.
 
-**What is not in here is as important as what is.** The command palette, find
-file, open file and open folder are *not* runtime commands. They are plugins, in
-[cdin-x](https://github.com/m-mdy-m/cdin-x), and they own their own keystrokes.
-That is why <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> and
-<kbd>Ctrl</kbd>+<kbd>P</kbd> are unbound here: an editor with no extensions
-should have no dead keys, and an editor with them should get those keys from the
-plugin that actually implements them. A full list of what cdin-x adds is in its
-[plugin index](https://github.com/m-mdy-m/cdin-x/blob/main/docs/plugins/README.md).
+**What is not in here is as important as what is.** Every workflow is a plugin in
+[cdin-x](https://github.com/m-mdy-m/cdin-x), and every plugin owns its own
+keystrokes. Only three extensions are in a build — vim, the manager, the `default`
+theme — so on a fresh build the four strokes below do nothing at all:
+
+| stroke | extension that owns it |
+| --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | `palette` — run any command by name |
+| <kbd>Ctrl</kbd>+<kbd>P</kbd> | `finder` — fuzzy-match the project's files |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | `finder` — open a path |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> | `finder` — open a folder |
+
+That is the intent rather than an omission: an editor with no extensions should
+have no dead keys, and an editor with them should get those keys from the plugin
+that actually implements them. Install them from the manager and they appear with
+no restart. [Extensions](extensions.md) lists every optional extension and the
+keys it adds; cdin-x's [plugin index](https://github.com/m-mdy-m/cdin-x/blob/main/docs/plugins/README.md)
+has one page each.
+
+Two strokes *are* bound here despite belonging to that half, because they are the
+runtime's own: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> for the manager and
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> for the log.
 
 ## The model
 
@@ -99,13 +113,14 @@ reach for the shell.
 | | `doc:upper-case` / `doc:lower-case` | operate on the selection |
 
 Vim mode binds bare <kbd>z</kbd> and <kbd>y</kbd> to the same two commands. Those
-are **not** runtime bindings and do not appear in the table above — see
-[vim mode](vim-keybindings.md).
+are **not** runtime bindings and do not appear in the table above — they belong to
+[the vim plugin](https://github.com/m-mdy-m/cdin-x/blob/main/docs/plugins/vim.md).
 
 **`doc:delete` is not a generated command.** It combines two behaviours — clearing
 a run of whitespace at the end of a line, then deleting forward one character — so
 it is written by hand rather than coming from the translation table. `Delete` is
-bound to it, *not* to a `doc:delete-to-next-char` (which does not exist).
+bound to it and to nothing else; `doc:delete-to-next-char` exists, is available to
+a keymap, and has no default binding.
 
 **`doc:toggle-line-comments` needs a syntax definition.** It reads
 `doc.syntax.comment` and returns without doing anything if there is none — so on
@@ -205,7 +220,6 @@ path is a workflow, and workflows live in plugins.
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> | `core:open-log` | the log view — see [The log](#the-log) |
 | | `core:quit` | asks before discarding unsaved changes |
 | | `core:force-quit` | does not ask |
-| | `core:open-log` | the log view |
 
 **`core:new-doc` stays in the runtime** even though opening files does not. A new
 empty document needs no extension, and the vim integrations and every plugin
@@ -219,8 +233,11 @@ wrapping `core:quit` skips its own confirmation, which is why the pair exists. S
 
 ## Panes and splits
 
-Available unless the active pane has a locked size, which is how the plugin
-manager panel stays full-width while it is open.
+Available unless the active pane has a locked size — which is what a panel that
+opened itself as a locked pane (`node:split(side, view, true)`, as cdin-x's tree
+and its manager panel both do) gets while it holds focus. The bindings go quiet
+rather than fighting over a pane whose width the user cannot change from the
+document side.
 
 | key | command | does |
 | --- | --- | --- |
@@ -303,14 +320,17 @@ route to it and no error either.
 | key | command | does |
 | --- | --- | --- |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> | `core:open-log` | the log view, in the active pane |
-| <kbd>Ctrl</kbd>+<kbd>C</kbd> | `log:copy-selection` | copies the selected log lines to the clipboard |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> | `log:copy-selection` | the selected lines, or the whole visible log with no selection |
 | <kbd>Ctrl</kbd>+<kbd>A</kbd> | `log:select-all` | selects the whole log |
 | <kbd>F2</kbd> | `log:switch-source` | switches between the two streams |
 | <kbd>Ctrl</kbd>+<kbd>R</kbd> | `log:reload` | re-reads the current one |
 
 `<kbd>Ctrl</kbd>+<kbd>C</kbd>` and <kbd>Ctrl</kbd>+<kbd>A</kbd> are bound in
 this view *in addition to* their document bindings, and the log wins because it
-is the active view. This is the predicate doing its job, not an override.
+is the active view. That is not an override: the log's four bindings are a second
+layer of the default keymap, added after the first, and `keymap.add` prepends —
+so <kbd>Ctrl</kbd>+<kbd>C</kbd> resolves to `{ "log:copy-selection",
+"doc:copy" }` and falls through to the document when this view is not active.
 
 ### Two streams, and which one you want
 
@@ -319,12 +339,15 @@ is the active view. This is the predicate doing its job, not an override.
 | **editor** | every `core.log` / `core.error`, with tracebacks | `core.log_items`, the last `config.max_log_items` of them |
 | **native** | C-level diagnostics and boot failures | the C logger's file, next to the binary |
 
-**A plugin error only ever appears in the editor stream.** No Lua output
-reaches the file, so do not go looking there for a plugin traceback — and the
-file is the only place a crash *before* the editor existed is written, which is
-why it is worth a keystroke. <kbd>F2</kbd> switches; the header names the file
-and its line count, and <kbd>Ctrl</kbd>+<kbd>R</kbd> re-reads it, because a file
-being appended to while you read it is not a snapshot.
+**Both streams reach the file.** The editor stream is mirrored into it, tagged
+`LUA`, with the traceback — `CDIN_LUA_LOG=0` turns that off, and it is on by
+default. So the file holds a plugin traceback as well as the C lines, in the
+order things happened, while the view is the faster way to read the same thing.
+`<kbd>F2</kbd>` switches; the header names the source and its size, and
+<kbd>Ctrl</kbd>+<kbd>R</kbd> re-reads it, because a file being appended to while
+you read it is not a snapshot. Re-reading the *editor* stream is a re-snapshot of
+the buffer rather than a re-read, and it logs a `log reloaded` line, so the thing
+you are reading grows by one entry when you ask it to refresh.
 
 The file is bounded and readable by default: `CDIN_LOG_LEVEL` sets the console
 level, `CDIN_LOG_FILE_LEVEL` the file's, `CDIN_LOG_FILE` the path, and a log
@@ -355,29 +378,41 @@ name, and no provider is registered by default, so they are no-ops too. They ope
 whatever the registered provider wants to show, or nothing.
 
 **None of the four is bound to a key in the runtime.** They are reachable from
-the palette — which is itself a plugin, so on a bare editor, from anywhere.
+the palette — which is itself a plugin, so on a bare editor they are reachable
+from nowhere at all. Installing the finder is what gives them a keystroke.
 
-On the empty view itself:
+On the empty view itself, one key works:
 
 | key | does |
 | --- | --- |
-| <kbd>↑</kbd> / <kbd>↓</kbd> | navigate recent items |
-| <kbd>Tab</kbd> | switch between files and directories |
-| <kbd>Return</kbd> | open the selected item |
-| <kbd>Esc</kbd> | clear the selection |
 | <kbd>Ctrl</kbd>+<kbd>N</kbd> | new document |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | *printed on the screen; does nothing* |
+| <kbd>Tab</kbd> | *printed on the screen; does nothing* |
+| <kbd>Return</kbd> | *printed on the screen; does nothing* |
+| <kbd>Esc</kbd> | *printed on the screen; does nothing* |
 
-Those five are the whole core-owned quick reference printed on that screen, and
-they are deliberately short. The palette, find file, open file and open folder
-are *not* listed, because printing a keystroke that does nothing on an editor
-with no extensions is a lie the user has to debug. Installed plugins append
-their own entries through `core.register_help_shortcuts`, so the list on screen
-is always exactly as long as what actually works.
+That is a known gap rather than a design, and it is worth being precise about.
+The empty view *implements* `on_key_pressed` and handles all four of those keys
+there — but nothing in the runtime ever calls a view's `on_key_pressed`. The
+keyboard path is `events.lua` → `keymap.on_key_pressed` and nothing else, so a
+key only ever reaches a command by name. Every command those four strokes name
+(`command:select-next`, `command:complete`, `command:submit`, `command:escape`)
+has a predicate that requires an open prompt, and the empty view has none, so
+each falls through and does nothing. Clicking an item with the mouse does work,
+because `on_mouse_pressed` is dispatched.
+
+The list is deliberately short in the first place — no palette row, no find-file
+row, because printing a keystroke that does nothing is a lie the user has to
+debug — and installed plugins append their own entries through
+`core.register_help_shortcuts`, so what the screen claims is always exactly as
+long as what the runtime owns. Four of those five claims are currently wrong; the
+fix is a two-line dispatch in `events.lua`, not a redesign.
 
 ## Plugins
 
-Always available. These three are commands, not a manager: there is no plugin
-manager in *this* repository.
+Always available. These three load and unload plugins by name for one session;
+they are not how you manage extensions — the manager is, and it is in
+[every build](extensions.md).
 
 | command | does |
 | --- | --- |
@@ -399,11 +434,15 @@ manager, which is the panel you actually browse: it lists, searches, groups by
 category, enables, disables, installs and removes, and it is in every build
 because it is `essential` in
 [cdin-x](https://github.com/m-mdy-m/cdin-x). <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>
-opens it (<kbd>M</kbd> in vim normal mode), and it keeps working with no cdin-x
-installed — the catalog is then just the set the build ships, which is a truthful
-answer rather than an empty panel. See
-[plugins](../guides/plugins.md#the-manager) for what it can install.
+opens it (<kbd>Shift</kbd>+<kbd>M</kbd> in vim normal mode, when cdin-x's
+`vim-plugin-manager` is installed), and it needs no cdin-x checkout: it downloads
+the catalog index and each extension you pick over HTTPS.
 
+**The panel is the only way to get the four workflow keys.** These three commands
+work on what the *loader* can see — the two roots and nothing else — so they
+cannot install `palette` or `finder` and then have it load, because what the
+manager installs lives in a store the loader does not read. See
+[extensions](extensions.md) for the keys, the catalog and where everything lands.
 
 **Nothing here persists.** There is no registry, no manifest and no saved
 state: what you load this way is gone at exit, and the only thing that survives

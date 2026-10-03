@@ -20,8 +20,8 @@ make run
 ```
 
 **A fresh clone of cdin alone cannot `make`.** `make` assembles `data/`, and the
-mandatory set — vim mode, the default theme, the fonts — comes from cdin-x, which
-must be a sibling checkout or be named with `CDINX_DIR`. `make bin` compiles the
+mandatory set — vim mode, the extension manager, the default theme, the fonts —
+comes from cdin-x, which must be a sibling checkout or be named with `CDINX_DIR`. `make bin` compiles the
 binary alone and needs neither. [Building from source](building.md) has the whole
 story.
 
@@ -33,7 +33,7 @@ You can pass files and a directory:
 
 ```sh
 cdin notes.md src/          # open some files, work in src/
-cdin --no-plugins notes.md  # site plugins off; vim and the default theme stay
+cdin --no-plugins notes.md  # site plugins off; vim and the manager stay
 cdin -u NONE notes.md       # the same thing, vim's spelling
 ```
 
@@ -43,9 +43,14 @@ it. With no directory, the last one you used is restored — cdin-x's session
 plugin writes it, and with no session file it falls back to the executable's own
 directory.
 
-`--no-plugins` turns off **site** plugins only. Vim mode, the default theme and
-the fonts are part of the build and always load. See
-[configuration](configuration.md#plugins) for why that is not configurable.
+Careful with `-u`: it swallows the *next* argument unconditionally, so
+`cdin -u notes.md` opens nothing and you get an empty editor.
+
+`--no-plugins` turns off **site** plugins only — the directory a cdin-x checkout
+and your own plugins live in. Vim mode, the manager, the default theme and the
+fonts are part of the build and always load, and what you installed *from the
+panel* is in neither place, so it keeps loading too. See
+[configuration](configuration.md#plugins) for the whole boundary.
 
 ## First launch
 
@@ -54,17 +59,23 @@ reference underneath.
 
 | key | does |
 | --- | --- |
-| <kbd>↑</kbd> / <kbd>↓</kbd> | move through the recent items |
-| <kbd>Tab</kbd> | switch between files and directories |
-| <kbd>Return</kbd> | open the selected one |
-| <kbd>Esc</kbd> | clear the selection |
 | <kbd>Ctrl</kbd>+<kbd>N</kbd> | a new empty document |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | move through the recent items — *printed, but not wired yet* |
+| <kbd>Tab</kbd> | switch between files and directories — *printed, but not wired yet* |
+| <kbd>Return</kbd> | open the selected one — *printed, but not wired yet* |
+| <kbd>Esc</kbd> | clear the selection — *printed, but not wired yet* |
 
-That is the entire list, and it is short on purpose. There is no command palette
-row, no "find file" row, no "open folder" row — **those features are not part of
-this editor**, so listing them would print keystrokes that do nothing. Install the
-extensions that provide them and their entries appear here, appended, so the list
-on screen is always exactly as long as what actually works.
+Clicking a recent item opens it. The four struck-through rows are a known gap,
+not a design: the empty view handles those keys in an `on_key_pressed` that
+nothing in the runtime calls, and the commands those strokes name all need an open
+prompt. [Commands](commands.md#the-empty-view) has the mechanism; it is a
+two-line dispatch and it is the one thing on this screen that lies to you.
+
+There is no command palette row, no "find file" row, no "open folder" row —
+**those features are not part of this editor**, so listing them would print
+keystrokes that do nothing. Install the extensions that provide them and their
+entries appear here, appended, so the list on screen stays exactly as long as
+what the runtime owns.
 
 With no document open, <kbd>Ctrl</kbd>+<kbd>N</kbd> is the whole editor. It works
 with nothing installed, which is the test that the two halves of this project are
@@ -76,7 +87,7 @@ really separate.
 
 | | |
 | --- | --- |
-| **vim mode** | modal editing and the `:` line. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd> turns it off |
+| **vim mode** | modal editing and the `:` line. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd> toggles it for the session — both the key and the setting belong to the vim plugin, not to the runtime |
 | **the extension manager** | the panel that lists, searches, installs and removes extensions. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> |
 | **the `default` theme** | |
 | **the fonts** | the text pipeline has nothing to render with otherwise |
@@ -87,28 +98,48 @@ offers is still optional; what is not optional is the ability to ask. With no
 cdin-x installed it lists exactly what the build carries, which is a truthful
 answer rather than an empty panel.
 
-**Not in the build, because they are workflows rather than mechanics:**
+**Not in the build, because they are workflows rather than mechanics.** None of
+these keystrokes works until you install the thing that owns it:
 
-the command palette (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>), find file
-(<kbd>Ctrl</kbd>+<kbd>P</kbd>), open file (<kbd>Ctrl</kbd>+<kbd>O</kbd>), open
-folder, the project tree, tabs, find-and-replace, project-wide search, git, and
-the other nine themes.
+| | binds | for |
+| --- | --- | --- |
+| **command palette** | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | run any command by name |
+| **finder** | <kbd>Ctrl</kbd>+<kbd>P</kbd>, <kbd>Ctrl</kbd>+<kbd>O</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> | find a file, open a path, open a folder |
+| **project tree** | <kbd>Ctrl</kbd>+<kbd>\\</kbd>, <kbd>F3</kbd> | show and focus it |
+| **tabs** | <kbd>Ctrl</kbd>+<kbd>Tab</kbd>, <kbd>Ctrl</kbd>+<kbd>T</kbd> | switch, create |
+| **find and replace** | <kbd>Ctrl</kbd>+<kbd>F</kbd> | in the document |
+| **project-wide search** | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | across files |
+| **session restore** | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> | recent files |
+| **git** | *no keys* | status in the tree and the status bar |
+| **syntax highlighting** | *no keys* | one extension per language, six to start with |
+| **themes** | *no keys* | nine more beyond `default` |
 
-All of that is [cdin-x](https://github.com/m-mdy-m/cdin-x), and you install it
-once:
+Plus autocomplete, the vim integrations, and cdin-x's `optional/` trio.
 
-```sh
-git clone https://github.com/m-mdy-m/cdin-x
-cd cdin-x
-make link
-```
+**Splits and panes are the exception, and they are the runtime's.**
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd>/<kbd>L</kbd>/<kbd>I</kbd>/<kbd>K</kbd>
+splits, <kbd>Alt</kbd>+<kbd>J</kbd>/<kbd>L</kbd>/<kbd>I</kbd>/<kbd>K</kbd> moves
+between panes, and <kbd>Ctrl</kbd>+<kbd>W</kbd> closes a view — because laying out
+a window needs no extension. cdin-x's `window` extension adds an alternative set
+(<kbd>Alt</kbd>+<kbd>h/j/k/l</kbd>, <kbd>Ctrl</kbd>+<kbd>\\</kbd>) and, where the
+two overlap, it wins: <kbd>Alt</kbd>+<kbd>J</kbd> will do what `window` says.
 
-That writes three directories into cdin's site directory and nothing else.
-<kbd>Shift</kbd>+<kbd>M</kbd> then opens the extension manager, and from there you
-install the rest from inside the editor.
+All of it is [cdin-x](https://github.com/m-mdy-m/cdin-x), and you get it from
+inside the editor. Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>, move to
+what you want, press <kbd>Space</kbd>. The manager downloads that one extension —
+not the repository — and loads it without a restart. [Extensions](extensions.md)
+has every key, what each one collides with, what is downloaded, and where it
+goes.
+
+You need a cdin-x checkout to *build* cdin, and not to use it. Cloning one and
+running `make link` is for working on cdin-x itself: it puts the checkout into
+your site directory so your edits are live.
 
 **If you only want one thing**, it is the command palette — it runs every command
-in this reference by name, which is the fastest way to learn what exists.
+in this reference by name, which is the fastest way to learn what exists. Find
+`palette` in the panel and press <kbd>Space</kbd>. `finder` is the second: three
+keys for the three ways of getting a file open, and the empty view delegates to it
+by name, so installing it is what makes "open file" on the start screen work.
 
 ## The parts you will use every day
 
@@ -166,11 +197,8 @@ you gets the last word on a keystroke.
 
 ## When something does not work
 
-Run `core:open-log` — from cdin-x's command palette, or by binding it yourself:
-
-```lua
-keymap.add { ["ctrl+shift+l"] = "core:open-log" }
-```
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>, which is `core:open-log`. The
+runtime binds it itself, so it works in a build with nothing installed.
 
 Everything the log view shows is also written to `cdin-log.txt` next to the
 binary, together with the C logger's own lines, tracebacks included. That one
@@ -186,9 +214,7 @@ otherwise, and a short list of `make` targets that do not work.
 | --- | --- |
 | [Commands](commands.md) | every command and key, as a table |
 | [Configuration](configuration.md) | every `config` key |
-| [Themes](themes.md) | every colour, and writing your own |
-| [Syntax highlighting](syntax.md) | how a language gets coloured |
+| [Extensions](extensions.md) | what a build contains, the panel, installing, where things land |
 | [Plugins](plugins.md) | the loader, and writing one |
-| [Vim mode](vim-keybindings.md) | what the runtime contributes |
 | [Architecture](../architecture/overview.md) | if you are about to change something |
 | [Extension contract](../architecture/extension-contract.md) | if you are about to change what is guaranteed |

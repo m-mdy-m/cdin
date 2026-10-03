@@ -9,8 +9,8 @@ make info
 It prints the platform, compiler, detected Lua version, every flag and the output
 path. Most build problems are answered by one of those lines.
 
-Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>. **That is the only place
-plugin errors appear**: the in-editor view over `core.log_items`, which is what
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>. That is the fastest place to
+read a plugin error: the in-editor view over `core.log_items`, which is what
 `core.log` / `core.error` write.
 
 **Everything is also in one text file**, `cdin-log.txt` next to the binary: the
@@ -41,7 +41,7 @@ effect, you are almost certainly running a stale copy — see
 
 ## Make targets that do not work
 
-Four of the advertised targets are broken. Knowing which saves a confusing
+Five of the advertised targets are broken. Knowing which saves a confusing
 afternoon:
 
 | target | what actually happens |
@@ -121,15 +121,22 @@ make PYTHON=python      # if it is not called python3
 ## `make` says it needs a cdin-x checkout
 
 Expected, and it is the one place the two repositories meet. The message names
-the problem directly:
+the path it probed, which is the part worth reading:
 
 ```
-cdin needs cdin-x to produce a runnable editor
-(it provides the mandatory vim plugin, default theme and fonts).
+cdin needs cdin-x to produce a runnable editor — it provides the mandatory
+  set: the vim plugin, the extension manager, the default theme and the fonts.
+
+  Looked for /path/to/cdin/cdin-x/scripts/bundle.py and it is not there.
+
+  CDINX_DIR is currently /path/to/cdin/cdin-x, which defaults to a sibling of
+  this checkout. cdin-x has to sit next to cdin, not inside it: `cdin/cdin-x`
+  is one directory too deep for `../cdin-x` to find.
 ```
 
-The mandatory set lives in cdin-x, and a cdin without it is not an editor, so a
-fresh clone of this repository alone cannot produce a runnable editor.
+The mandatory set — vim mode, the extension manager, the default theme and the
+fonts — lives in cdin-x, and a cdin without it is not an editor, so a fresh clone of
+this repository alone cannot produce a runnable editor.
 
 ```sh
 git clone https://github.com/m-mdy-m/cdin-x ../cdin-x
@@ -137,18 +144,24 @@ make                                   # it looks there by default
 make CDINX_DIR=/somewhere/else         # or say where
 ```
 
+**The default is `../cdin-x` — a sibling, not a subdirectory.** `cdin/cdin-x` is
+one level too deep and is the mistake CI makes when it checks cdin-x out inside
+the checkout. If the path in the message ends in `cdin/cdin-x`, that is the
+problem.
+
 **`make bin` needs none of this.** It compiles the binary and stops, which is what
 you want when you are only touching C.
 
 ## The bundler refuses to write
 
-Four failures, all deliberate — it fails rather than working around a problem:
+Five failures, all deliberate — it fails rather than working around a problem:
 
 | message | meaning |
 | --- | --- |
-| no essential plugin | cdin-x has no `essential = true` plugin under `X/core/`. `vim` should be it |
+| no essential plugin | cdin-x has no `essential = true` plugin under `X/core/`. `vim` and `manager` should be it |
 | not exactly one essential theme | a build has to know which theme to start with. Zero or two is unanswerable |
 | `fonts/` missing or empty | the text pipeline has nothing to render with |
+| a `bundle_with` path is missing | a bundled plugin declared support files — the manager declares `cdinx` — that are not in the checkout, or that point outside it. Bundling without them would give an editor that starts and then does nothing |
 | output is a symlink or junction | see below |
 
 **A symlink or junction is refused rather than followed.** This one is a Windows
@@ -159,15 +172,20 @@ covers all reparse points, not just the kind it recognises.
 
 If you hit it, delete the output directory and let the build recreate it.
 
-## `--no-plugins` did not turn vim off
+## `--no-plugins` did not turn the extensions off
 
-Working as intended. `--no-plugins` and `config.plugins = false` mean **no *site*
-plugins**. The bundled set is mandatory and always loads, because a cdin without
-vim mode is not an editor and a debugging flag is not a policy.
+Working as intended, but the boundary is worth stating precisely.
+`--no-plugins` and `config.plugins = false` select the **site directory** — where
+a cdin-x checkout (`make link`) and your own plugins live. The bundled set is
+mandatory and always loads, because a cdin without vim mode is not an editor and
+a debugging flag is not a policy.
 
-The corollary is the one that surprises people: **cdin-x is a site plugin**, so
-both of those switch off the command palette, the finders, the tree, tabs, search
-and git. See [configuration](configuration.md#plugins).
+What you installed **from the panel** is in neither place: the manager keeps its
+own store under `<data_home>/cdin/extensions/X`, loads it itself, and never reads
+`config.plugins`. Those extensions survive `--no-plugins`. To switch one off, press
+<kbd>Space</kbd> on it in the panel — that choice persists in
+`<data_home>/cdin/extensions.lua` — or delete the store. See
+[configuration](configuration.md#plugins).
 
 ## Warnings after a change to `src/`
 
@@ -234,15 +252,22 @@ In rough order of likelihood:
 
 **`config.plugins` excludes it.** `nil` means all site plugins, `false` means
 none, and a table is a whitelist. If you set a whitelist, a plugin you installed
-afterwards is not in it.
+into the site directory afterwards is not in it.
 
-**It is in the wrong root.** There are two: `EXEDIR/data/plugins` is bundled and
-always loads, `config.site_path()/plugins` is site and selected by
-`config.plugins`. To see where the editor is looking:
+**It went somewhere the loader does not look.** There are two roots
+`core.plugins` knows: `EXEDIR/data/plugins`, which is bundled and always loads,
+and `config.site_path()/plugins`, which is site and selected by `config.plugins`.
+To see where that is:
 
 ```lua
 require("core.config").site_path()
 ```
+
+**You installed it from the panel.** Then it is in neither root: the manager's
+store, `<data_home>/cdin/extensions/X`, loaded by the manager and by nothing
+else. It does not show up in `core:list-plugins` and `config.plugins` has no say
+in it. The panel's *Installed* section is the place to look, and the usual reason
+it is not running is that it is disabled there.
 
 **A bundled plugin of the same name won.** The scan is bundled-first and
 first-seen-wins, so a name is never loaded twice. `core:list-plugins` shows the
@@ -251,23 +276,90 @@ source of each.
 **Its entry point did not return a table**, or its `init` raised. Both are in the
 log.
 
-## The command palette does not open
+## The empty view's shortcuts do nothing
 
-<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> is **not a runtime binding.** The
-palette is a plugin in cdin-x. With nothing installed, that key does nothing and
-that is correct — an editor with no extensions should have no dead keys.
+Four of the five rows printed on the start screen — <kbd>↑</kbd> <kbd>↓</kbd>,
+<kbd>Tab</kbd>, <kbd>Return</kbd>, <kbd>Esc</kbd> — do nothing in 0.2.0.
+<kbd>Ctrl</kbd>+<kbd>N</kbd> works, and clicking a recent item works.
 
-```sh
-git clone https://github.com/m-mdy-m/cdin-x && cd cdin-x && make link
-```
+The empty view handles those keys in an `EmptyView:on_key_pressed`, and no code
+path ever calls it: a key press goes to `keymap.on_key_pressed`, and a command
+only runs if its predicate holds. Every command those strokes name
+(`command:select-next`, `command:complete`, `command:submit`, `command:escape`)
+requires an open prompt, and the empty view has none.
 
-Then <kbd>Shift</kbd>+<kbd>M</kbd> opens the manager and <kbd>Space</kbd> on the
-palette installs it. If the manager itself does not open, the entry plugin did not
-load — check the log.
+Nothing to configure and nothing to install — it is a missing dispatch in
+`data/core/events.lua`, tracked in the changelog. Until it is fixed, use the mouse
+or <kbd>Ctrl</kbd>+<kbd>N</kbd>.
+
+## The command palette, or find file, does not open
+
+Four keystrokes are unbound on any build you have not extended, and that is
+correct rather than broken:
+
+| key | needs |
+| --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | the `palette` extension |
+| <kbd>Ctrl</kbd>+<kbd>P</kbd> | the `finder` extension |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | the `finder` extension |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> | the `finder` extension |
+
+An editor with no extensions should have no dead keys, so the runtime binds none
+of them. Install from the manager and they work immediately.
+
+**If you did install one and the key still does nothing**, check the order: the
+manager loads what it installed, and `keymap.add` prepends, so the stroke should
+be live. If it is not, the extension is disabled in the panel or its `init()`
+raised — the panel's *Installed* section says which, and the log has the reason.
+
+**If a key does the wrong thing** rather than nothing, two extensions want it and
+the later one won. <kbd>Alt</kbd>+<kbd>J</kbd> is the common one: the runtime's
+`root:switch-to-right` and cdin-x's `window:focus-down` both claim it.
+[Extensions](extensions.md#what-is-not-in-the-build-and-what-each-one-binds) has
+the collision table.
+
+Open the manager with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>, move to
+`palette` and press <kbd>Space</kbd>. It is installed and live without a restart.
+
+**If the panel does not open either**, the bundled manager did not load. A failing
+bundled plugin is reported at error level, so check the log
+(<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>) for `mandatory plugin manager:`.
+
+And the same applies to the other three: <kbd>Ctrl</kbd>+<kbd>P</kbd>,
+<kbd>Ctrl</kbd>+<kbd>O</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>
+all belong to the `finder` extension, so on a build with nothing installed they
+are unbound rather than broken. `find file`, `open file` and `open folder` are one
+plugin.
+
+## The extension panel is empty, or cannot install
+
+The panel always lists what the build carries, under **In the editor**. What is
+missing is the *Available* section, and that comes from a catalog index the manager
+downloads: one file, `X/manifest.lua`.
+
+**Press <kbd>?</kbd>** — it writes to the log where the catalog is meant to be, whether
+it is on disk, and the state of the last download. Then:
+
+- **`not downloaded` and the download failed.** There is no network, or none of
+  `curl`, `wget` (or PowerShell on Windows) is installed. The manager uses exactly
+  those three, in that order, and the `curl` path gives up after 120 seconds.
+  <kbd>Ctrl</kbd>+<kbd>R</kbd> tries again.
+- **The catalog came from the wrong place.** `config.registry_url` and the
+  `CDIN_X_BRANCH` environment variable decide it, and `config.registry_raw_url` wins
+  over both if you set it.
+- **An install fails part-way.** Files are downloaded into a staging directory and
+  moved into place only when all of them arrived, so a failed install leaves nothing
+  half-installed. Try again; the log has the reason.
+- **An extension you installed is gone after a restart.** It is in
+  `<data_home>/cdin/extensions/X`. If it is not loading, it may be *disabled* —
+  that choice persists in `<data_home>/cdin/extensions.lua` — or `config.plugins`
+  may exclude it, if it was installed into the site directory instead.
+
+Nothing here involves git, and a cdin-x checkout is not needed.
 
 ## A theme did not apply
 
-Three things can be true at once, and the order matters:
+Four things can be true at once, and the order matters:
 
 **The theme is not in a root the registry knows.** Roots are searched in order:
 `config.user_dir/themes`, then `EXEDIR/data/themes`, then anything a plugin added
@@ -277,6 +369,13 @@ returns exactly what is visible.
 **It resolves to a file but the name does not match.** The directory name is the
 theme's name. `<root>/MyTheme/theme.lua` is `MyTheme`. The `name` field *inside*
 the file is only a label for `style.theme_name`, not a lookup key.
+
+**You installed it from the panel.** Themes are written to the manager's store,
+`<data_home>/cdin/extensions/X/themes/<name>/theme.lua`, and the registry is never
+pointed at that directory — the manager only registers the build's own theme
+directory and a cdin-x checkout in the site directory. So a panel-installed theme
+is listed but unreachable by name, and `config.theme` cannot find it. Copy the
+directory into `config.user_dir .. "/themes"`, which is the first root searched.
 
 **`config.theme` names an extension theme and startup applied nothing.**
 `config.theme` is applied at `style.lua` load time, long before any plugin runs, so
@@ -288,7 +387,8 @@ name you think it is.
 A theme that applies but is missing colours is a different problem, and the usual
 answer is that it is a hand-written theme without the `vim_*` keys — the runtime
 has no fallbacks for those, and they render **opaque white** rather than
-disappearing. See [themes](themes.md#vim-mode).
+disappearing. [Adding a theme](https://github.com/m-mdy-m/cdin-x/blob/main/docs/building/a-theme.md) lists every key, the
+six `vim_*` ones included.
 
 ## `data/` is not next to the binary
 
@@ -421,7 +521,11 @@ ran twice.
 
 ```sh
 make debug          # -O0 -g3
-make debug-san      # plus sanitizers
+
+# and NOT this: `make debug-san` sets SANITIZE=1, which no makefile reads.
+# It is identical to `make debug` and always has been. To build with
+# sanitizers, pass the flags yourself:
+make debug CFLAGS="-O0 -g3 -fsanitize=address,undefined" LDFLAGS="-fsanitize=address,undefined"
 ```
 
 `cdin-log.txt` next to the binary has every message at the default log level.
