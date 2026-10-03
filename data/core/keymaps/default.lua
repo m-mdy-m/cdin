@@ -5,8 +5,8 @@ return {
   -- user-facing workflows — the command palette, find file, open file, open
   -- folder — are not here: they are optional plugins that own their own
   -- keystrokes, so an editor with no extensions has no dead keys, and an
-  -- editor with them gets ctrl+shift+p, ctrl+p and ctrl+o from the plugin
-  -- that implements them.
+  -- editor with them gets ctrl+shift+p from `palette` and ctrl+p, ctrl+o and
+  -- ctrl+shift+o from `finder` — both in cdin-x, neither in a build.
   {
     ["ctrl+n"] = "core:new-doc",
     ["alt+return"] = "core:toggle-fullscreen",
@@ -60,8 +60,10 @@ return {
     ["ctrl+shift+return"] = "doc:newline-above",
     ["ctrl+j"] = "doc:join-lines",
     ["ctrl+a"] = "doc:select-all",
-    -- find-replace plugin prepends "find-replace:select-next" to this
-    -- stroke via keymap.add() at load time; see data/plugins/findreplace/init.lua.
+    -- cdin-x's `search` extension prepends "find-replace:select-next" to
+    -- this stroke via keymap.add() at load time, so it wins while a match is
+    -- selected and this one takes it otherwise. Do not pass `overwrite` here:
+    -- it replaces the whole chain, not one entry.
     ["ctrl+d"] = "doc:select-word",
     ["ctrl+l"] = "doc:select-lines",
     ["ctrl+/"] = "doc:toggle-line-comments",
