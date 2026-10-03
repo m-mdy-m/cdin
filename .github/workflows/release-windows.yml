@@ -42,17 +42,20 @@ jobs:
 
       # cdin-x is where the mandatory set lives: the vim plugin, the default
       # theme and the fonts. A cdin build bundles it into build/…/data via
-      # scripts/assemble_data.py -> scripts/bundle.py. It is checked out as a
-      # true sibling — `../cdin-x`, one level above this repo — because that is
-      # what the default CDINX_DIR in mk/bundle.mk resolves to, and it is the
-      # layout a developer has locally. Checking it out at `cdin-x` instead
-      # puts it *inside* the repo, where `../cdin-x` cannot find it and the
-      # bundle step fails. The build itself never fetches anything.
+      # scripts/assemble_data.py -> scripts/bundle.py. actions/checkout refuses
+      # any `path` outside GITHUB_WORKSPACE, so it cannot be checked out as a
+      # sibling (`../cdin-x`); it goes inside the workspace and CDINX_DIR points
+      # the build at it. The build itself never fetches anything.
       - name: Checkout cdin-x (mandatory bundle source)
         uses: actions/checkout@v4
         with:
           repository: m-mdy-m/cdin-x
-          path: ../cdin-x
+          path: cdin-x
+
+      # mk/bundle.mk uses `CDINX_DIR ?=`, so the environment value is picked up
+      # by every later `make` step without changing the make command lines.
+      - name: Point the build at cdin-x
+        run: echo "CDINX_DIR=${GITHUB_WORKSPACE//\\//}/cdin-x" >> "$GITHUB_ENV"
 
       # msys2/setup-msys2 has built-in cache support via cache: true
       - name: Set up MSYS2

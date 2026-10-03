@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [0.2.0-alpha] — 2026-10-03
 
-cdin is now the editor **runtime**. The extension set a build ships is assembled at build time from a sibling [cdin-x](https://github.com/m-mdy-m/cdin-x) checkout.
+cdin is now the editor **runtime**. The extension set a build ships is assembled at build time from a [cdin-x](https://github.com/m-mdy-m/cdin-x) checkout.
 
 ### ⚠️ BREAKING CHANGES
 
@@ -26,7 +26,7 @@ cdin is now the editor **runtime**. The extension set a build ships is assembled
 - `ctrl+p`, `ctrl+shift+p` and `ctrl+o` are no longer bound by the runtime. `ctrl+n` stays.
 - The empty view's shortcut help is no longer hardcoded; extensions contribute rows via `core.register_help_shortcuts`.
 - The empty view delegates open-file to `core:open-file` through `command.perform` (silent no-op when no plugin registers it).
-- The release workflows and the Dockerfile package the assembled `build/…/data`, and check cdin-x out as a sibling.
+- The release workflows and the Dockerfile package the assembled `build/…/data`, and check cdin-x out inside the workspace, passing its location as `CDINX_DIR`.
 - The contract is documented in [`docs/architecture/extension-contract.md`](docs/architecture/extension-contract.md).
 
 #### Removed from the runtime
@@ -193,7 +193,7 @@ Unreferenced symbols, none on a live path:
 ### Build, packaging & CI
 
 - `make` = `bin` + `bundle`; `make CDINX_DIR=/path` points the bundle at another checkout.
-- The three release workflows check cdin-x out at `path: ../cdin-x`. `docker.yml` checks it out at `./cdin-x` and the `Dockerfile` copies it to `/cdin-x`.
+- The three release workflows check cdin-x out at `./cdin-x` inside the workspace (`actions/checkout` refuses a `path` outside `GITHUB_WORKSPACE`, so a `../cdin-x` sibling is not possible) and export `CDINX_DIR` to the build through `GITHUB_ENV`. `docker.yml` checks it out at `./cdin-x` and the `Dockerfile` copies it to `/cdin-x`.
 - The release workflows and the `Dockerfile` package the assembled `build/…/data`. No `CDINX_DIR` is baked into the image.
 - Trailing-newline fixes in the release workflows and the Dockerfile.
 
