@@ -51,8 +51,8 @@ make run                    # …and launch it
 ```
 
 **A fresh clone does not build with `make` alone.** It needs a cdin-x checkout,
-because the mandatory set — vim mode, the default theme, the fonts — lives there
-and a cdin without them is not an editor. The failure message says so and names
+because the mandatory set — vim mode, the extension manager, the default theme, the
+fonts — lives there and a cdin without them is not an editor. The failure message says so and names
 the variable.
 
 That split is the point, not an inconvenience. The cost is one line in a build
@@ -89,7 +89,7 @@ problem turns out to need.
 
 ### Targets that do not work
 
-Four targets are advertised and broken. They are recorded as known issues in
+Five targets are advertised and broken. They are recorded as known issues in
 `CHANGELOG.md`, and none is on a path you need:
 
 | target | what happens |
@@ -118,12 +118,17 @@ build/linux-release/
 ├── cdin
 └── data/
     ├── core/        a link to this checkout's data/core — not a copy
-    ├── plugins/     the mandatory set
+    ├── plugins/     vim.lua, manager.lua — one-line shims
+    ├── X/core/      the vim and manager plugins, verbatim
+    ├── cdinx/       the manager's own modules, via bundle_with
     ├── themes/      default/
-    ├── fonts/
-    ├── X/           the extension catalog
-    └── BUNDLE.lua
+    ├── fonts/       the three the build requires, plus fallback and emoji
+    └── BUNDLE.lua   an index: which plugins, which theme, from which cdin-x
 ```
+
+Six top-level entries, and `data/core` is the seventh thing in the directory but
+not one of them — the bundler refuses to write into a `data/` that is itself a
+symlink, so it never touches the link the assembly step made.
 
 `data/core` is a **symlink to the source tree**, recreated on every build, with a
 copy as a fallback on filesystems that cannot do it. That is why editing
@@ -147,17 +152,21 @@ restart.
 2. **Run cdin-x's bundler**, `<CDINX_DIR>/scripts/bundle.py --out <build>/data`,
    in the same interpreter.
 
-Everything else in `data/` comes from cdin-x's `scripts/bundle.py`: the vim
-plugin, the default theme, the fonts, a one-line shim per bundled plugin, and a
-`BUNDLE.lua` index. That script is cdin-x's, and its own contract is documented
-in [its README](https://github.com/m-mdy-m/cdin-x/blob/main/scripts/README.md) —
-but the four ways it refuses to continue are worth knowing here, because they are
+Everything else in `data/` comes from cdin-x's `scripts/bundle.py`: the vim plugin
+and the manager, the support paths a plugin declares with `bundle_with` (the
+manager's `cdinx/`), the default theme, the fonts, a one-line shim per bundled
+plugin, and a `BUNDLE.lua` index. The bundler clears the top-level directories it
+owns on every run, so a file deleted from cdin-x does not survive in later builds.
+That script is cdin-x's, and the reasoning behind it is in
+[its CONTRIBUTING.md](https://github.com/m-mdy-m/cdin-x/blob/main/CONTRIBUTING.md) —
+but the five ways it refuses to continue are worth knowing here, because they are
 the failure modes of *this* build:
 
 - no essential plugin under `X/core/`
 - not exactly one essential theme — a build has to know which one to start with,
   so zero and two are both unanswerable
 - a missing or empty `fonts/`
+- a `bundle_with` path that does not exist, or that escapes the cdin-x checkout
 - an output directory that is a symlink or junction, which it refuses rather than
   writing through, because a junction does not report itself as one through the
   obvious API and a check written for POSIX passes right over it
@@ -201,7 +210,11 @@ is visible from one repository alone — one needs cdin-x present to know what i
 should have bound. Run it whenever you touch `data/core/keymaps/`, the loader, or
 anything a plugin might also be registering.
 
-`make check` is separate: it is lint and style, not tests.
+**`test-site-dir` is the smallest and the one people skip.** One string, in two
+repositories: cdin's `config.site_dirname` and cdin-x's copy of it. They are the
+same word by hand and nothing makes them stay that way, and every path in both
+halves hangs off it. It needs no build, no editor and no Lua data tree — only
+`lua` and `CDINX_DIR`.
 
 ## CI
 
@@ -221,9 +234,12 @@ make            # and make debug — both must build clean, -Wall -Wextra
 make test-plugins
 make test-lua
 make test-workflows
+make test-site-dir
 ```
 
-Note there is no `make check` in that list, because it does not work.
+Note there is no `make check` in that list, because it does not work, and no
+`make size`, because it does not either. What stands in for a lint gate is the
+compiler: `-Wall -Wextra`, and no new warnings.
 
 Then run the editor and exercise what you changed.
 
