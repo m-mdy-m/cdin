@@ -26,8 +26,7 @@ Vim-style modal editing is built in and on by default. Every buffer opens in
 Normal mode, and a coloured pill in the status bar shows which mode you are in.
 If you've used vim the basics transfer directly. The full key set is documented in
 [cdin-x](https://github.com/m-mdy-m/cdin-x/blob/main/docs/plugins/vim.md), where
-the plugin lives; [Vim mode](docs/guides/vim-keybindings.md) covers the half this
-repository owns.
+the plugin lives.
 
 ## Philosophy
 
@@ -38,8 +37,8 @@ before touching any of it.
 
 Features belong in plugins. The core does the minimum that every editor needs.
 Anything optional is an extension, read and written in its own repository
-([cdin-x](https://github.com/m-mdy-m/cdin-x)) and installed into your own
-site directory, so none of it needs the core to change.
+([cdin-x](https://github.com/m-mdy-m/cdin-x)) and installed from inside the
+editor, so none of it needs the core to change.
 
 Startup time and memory use matter. The renderer only redraws what actually
 changed. Background tasks are coroutines, not threads. An idle cdin draws
@@ -52,31 +51,40 @@ mandatory bundle, and it is enough to be a usable editor:
 
 - Modal editing (Normal / Insert / Visual) built on the vim model
 - Ex command line (`:w`, `:q`, `:e`, `:new`, `:cd`, `:!cmd`, and more)
-- Syntax highlighting
+- The extension manager (`Ctrl+Shift+M`): browse, search, install and remove
+  everything below from inside the editor
 - A default theme
 - File creation and editing
 
 These come from [cdin-x](https://github.com/m-mdy-m/cdin-x) and are optional:
 
-- Project tree with git status markers
-- Multi-tab management and split panes
-- Project-wide search, autocomplete, session restore
+- Project tree with git status markers (`Ctrl+\`, `F3`)
+- Multi-tab management (`Ctrl+Tab`, `Ctrl+T`)
+- Find and replace (`Ctrl+F`), project-wide search (`Ctrl+Shift+F`), autocomplete
+- Session restore (`Ctrl+Shift+R`)
 - The command palette (`Ctrl+Shift+P`), fuzzy file finder (`Ctrl+P`) and the
   open-file / open-folder prompts (`Ctrl+O`, `Ctrl+Shift+O`)
+- Syntax highlighting — the mechanism is the runtime's, every language definition
+  is an extension
 - Themes beyond the default one
 
-Install them with `make link` in a cdin-x checkout. Without them the editor is
-a plain text editor with vim keys — deliberately usable, not crippled, and no
-keystroke does nothing. The mechanisms those workflows are built on
-(`core.command_view`, the command and keymap registries, the project scanner)
-are part of the runtime and are always there.
+None of those keystrokes does anything until you install the extension that owns
+it. Splits and panes are *not* on that list: `Alt+Shift+J/L/I/K` and the pane
+commands are the runtime's, because laying out a window needs no extension.
+
+Install them from the manager: it downloads the one extension you pick, not the
+repository. Without them the editor is a plain text editor with vim keys —
+deliberately usable, not crippled, and no keystroke does nothing. The mechanisms
+those workflows are built on (`core.command_view`, the command and keymap
+registries, the project scanner) are part of the runtime and are always there.
 
 Configurable through your own `init.lua` — plain Lua, no DSL.
 
 ## Quick start
 
 **`make` needs a cdin-x checkout**, because the mandatory set a runnable editor
-requires — vim mode, the default theme, the fonts — lives there.
+requires — vim mode, the extension manager, the default theme, the fonts — lives
+there.
 
 ```sh
 git clone https://github.com/m-mdy-m/cdin-x    # a sibling of cdin
@@ -116,9 +124,8 @@ Start at [docs/](docs/README.md) — it has the reading order.
   registers and every key it binds
 - [Configuration](docs/guides/configuration.md) — every `config` key, and the
   one that decides where your plugins live
-- [Themes](docs/guides/themes.md) — every colour, and writing your own
-- [Syntax Highlighting](docs/guides/syntax.md) — how a language gets coloured,
-  and writing a definition
+- [Extensions](docs/guides/extensions.md) — what a build contains, the manager
+  panel, installing, and where everything lands
 - [Troubleshooting](docs/guides/troubleshooting.md) — build and runtime failures
 
 **Making things**
@@ -134,14 +141,14 @@ Start at [docs/](docs/README.md) — it has the reading order.
 - [Architecture Overview](docs/architecture/overview.md) — the C/Lua split, the
   boot order, the frame loop
 - [Internals](docs/architecture/internals.md) — the text pipeline, the document,
-  the highlighter
+  the highlighter and the tokenizer
 - [Extension Contract](docs/architecture/extension-contract.md) — the whole of
   what cdin guarantees an extension
 
 **Extensions themselves** — the command palette, find file, the project tree,
 tabs, search, git, the themes, and vim mode — are documented in
 [cdin-x](https://github.com/m-mdy-m/cdin-x), which is where the code for them
-lives.
+lives — including how to write a theme, a language definition or a plugin.
 
 ## Scripts
 
