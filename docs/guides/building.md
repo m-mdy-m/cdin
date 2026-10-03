@@ -104,7 +104,7 @@ Four targets are advertised and broken. They are recorded as known issues in
 on C is the compiler's, at `-Wall -Wextra` without `-Werror`; note that
 `-Wno-unused-parameter` is also on, so a clean build means "no warning other than
 unused parameters". `make help` additionally still claims that plugins and themes
-ship inside `data/`, which has been untrue since 0.2.0-alpha.2.
+ship inside `data/`, which has been untrue since 0.2.0-alpha.
 
 ## What `make` actually produces
 

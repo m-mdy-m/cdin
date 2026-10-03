@@ -55,7 +55,7 @@ afternoon:
 These are known and recorded in `CHANGELOG.md`. None of them is on any path you
 need: the build is `make`, and the tests are the four `test-*` targets. `make
 help` also still claims plugins and themes ship inside `data/`, which has not been
-true since 0.2.0-alpha.2.
+true since 0.2.0-alpha.
 
 **There is no lint or style checker in this repository today.** `-Wall -Wextra` is
 the only automated check on C, and it is not `-Werror`; note that
