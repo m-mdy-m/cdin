@@ -52,7 +52,7 @@ jobs:
         run: echo "CDINX_DIR=${GITHUB_WORKSPACE//\\//}/cdin-x" >> "$GITHUB_ENV"
 
       - name: Cache Homebrew packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cache-brew
         with:
           path: |
@@ -73,7 +73,7 @@ jobs:
 
       # ── Cache: SDL3 built from source ────────────────────────────────────
       - name: Cache SDL3
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cache-sdl3
         with:
           path: /opt/sdl3
@@ -100,7 +100,7 @@ jobs:
 
       # ── Cache: pip (Pillow) ──────────────────────────────────────────────
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/Library/Caches/pip
           key: pip-pillow-macos-15

@@ -79,7 +79,7 @@ jobs:
 
       # ── Cache: SDL3 zip download + extracted headers/libs ────────────────
       - name: Cache SDL3 (MinGW)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cache-sdl3
         with:
           path: /tmp/sdl3
