@@ -55,6 +55,7 @@ jobs:
       # mk/bundle.mk uses `CDINX_DIR ?=`, so the environment value is picked up
       # by every later `make` step without changing the make command lines.
       - name: Point the build at cdin-x
+        shell: bash
         run: echo "CDINX_DIR=${GITHUB_WORKSPACE//\\//}/cdin-x" >> "$GITHUB_ENV"
 
       # msys2/setup-msys2 has built-in cache support via cache: true
