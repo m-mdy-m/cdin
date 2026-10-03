@@ -11,10 +11,10 @@ dependency order, a UI for it — is
 [cdin-x](https://github.com/m-mdy-m/cdin-x), which is free to be as large as it
 needs to be.
 
-**And a build now ships that half**, marked `essential` next to vim, so the panel
-is reachable in every editor rather than only in one that was set up by hand.
-Which of the two you are talking about matters: `data/core/` owns what *loads*,
-cdin-x owns what is *installed*. [The manager](#the-manager) below.
+**And a build ships that half**, marked `essential` next to vim, so the panel is
+reachable in every editor rather than only in one that was set up by hand. Which
+of the two you are talking about matters: `data/core/` owns what *loads*, cdin-x
+owns what is *installed*. [Extensions](extensions.md) is the user's view of it.
 
 ## Two roots, and the difference decides everything
 
@@ -35,7 +35,9 @@ an editor that refuses to open is a worse bug than a missing feature.
 
 **A bundled plugin always wins over a site plugin of the same name** — on disk and
 at runtime. The scan is bundled-first and first-seen-wins, so a name is never
-loaded twice from two places.
+loaded twice from two places. The loser is skipped **without a log line**, which
+makes this the quietest of the failure modes here: if you shadow a bundled name
+while developing, your version simply never runs.
 
 ## What counts as a plugin
 
@@ -105,12 +107,13 @@ exit.
 
 ## Requiring your own files
 
-The site directory is added to `package.path` as `site/?.lua` and
-`site/?/init.lua`, so inside a plugin:
+The **site directory itself** is added to `package.path`, as `site/?.lua` and
+`site/?/init.lua` — not `site/plugins`, so a plugin's own files are addressed
+through the `plugins.` prefix:
 
 ```lua
-require("my-plugin.commands")     -- → <site>/plugins/my-plugin/commands.lua
-require("my-plugin.util")         -- → <site>/plugins/my-plugin/util/init.lua
+require("plugins.my-plugin.commands")   -- → <site>/plugins/my-plugin/commands.lua
+require("plugins.my-plugin.util")       -- → <site>/plugins/my-plugin/util/init.lua
 ```
 
 **The roots are appended, never prepended.** A site plugin may extend the editor;
@@ -118,10 +121,13 @@ it may not shadow the core it extends, nor the bundled modules the runtime loads
 first. That is why a plugin that wants to replace a `core.*` behaviour has to do
 it through one of the seams below rather than by putting a file in the way.
 
-`require`-ing a *plugin's module* from your `init.lua` works, because your file
-runs before the plugins and the site path is already extended. Its `init()` side
-effects have not run at that point — you are loading code, not starting a
-plugin.
+**Your `init.lua` runs before that happens, so you cannot `require` a site
+plugin's module from it.** The loader extends `package.path` as the first thing
+`load_all()` does, and `load_all()` is step 11 of the boot order — your file is
+step 9. Anything you want from a site plugin has to happen in that plugin's own
+`init()`, or in a `core.add_thread` you start from a command. What you *can* do
+in `init.lua` is set configuration and bind keys, which is what almost everything
+there is.
 
 ## The seams
 
@@ -272,31 +278,28 @@ build: see below.
 ## The manager
 
 Not a runtime command, and not a plugin you have to install. It is marked
-`essential` in [cdin-x](https://github.com/m-mdy-m/cdin-x), so `make` bundles it
-the way it bundles vim, and the panel is a keystroke away in any build:
+`essential` in [cdin-x](https://github.com/m-mdy-m/cdin-x), so `make` bundles it the
+way it bundles vim, and the panel is a keystroke away
+(<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>) in any build.
 
-| key | does |
-| --- | --- |
-| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> | open / close the extension panel |
-| <kbd>M</kbd> | the same, in vim normal mode |
-| <kbd>J</kbd> / <kbd>K</kbd> | move |
-| <kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>F</kbd> | search; type to filter |
-| <kbd>Space</kbd> / <kbd>Return</kbd> | enable or disable |
-| <kbd>I</kbd> / <kbd>U</kbd> | install / remove |
-| <kbd>D</kbd> | details |
-| <kbd>R</kbd> | rescan |
+The keys, what the panel downloads, and where installed extensions end up are in
+[extensions](extensions.md). Four facts matter here because they are about the
+loader:
 
-It lists what the build carries, what is installed, and what the catalog offers,
-grouped by category, and it filters as you type. **What it can install depends
-on what is on disk**: with only a build present it lists the set the build ships
-and nothing else, because installing means copying files that have to exist
-somewhere. Install cdin-x and the whole catalog is there.
-
-Two things about it worth knowing, because they are deliberate. The extensions
-the build ships show as **in editor**: present, listed, and not the manager's to
-remove. And enable/disable *does* persist — in cdin-x's own state file, keyed by
-name, so the panel's idea of what is on survives a restart without the runtime
-growing a registry of its own.
+- **What the manager installs is not in either of the loader's roots.** It keeps
+  its own store, makes it `require`able itself, and loads it itself — without
+  reading `config.plugins`. So `config.plugins = false` and `--no-plugins` do
+  **not** switch off what you installed from the panel; they switch off the site
+  directory. `core:list-plugins` reports the two roots; the panel reports
+  everything.
+- **The extensions the build ships show as *in editor*:** present, listed, and not
+  the manager's to remove.
+- **Enable and disable persist** — in the manager's own state file, keyed by name —
+  so the panel's idea of what is on survives a restart without the runtime growing
+  a registry of its own.
+- **Nothing it installed is a site plugin,** so nothing here is reachable through
+  `config.plugins = { … }` either. The whitelist selects the site directory and
+  nothing else.
 
 ## Installing your own
 
@@ -311,15 +314,16 @@ require("core.config").site_path()
 [configuration](configuration.md#where-things-live). Your plugin can be loaded by
 name while it is still being written, which is the whole development loop.
 
-For a package manager, an in-app UI, dependency resolution or anything that
-survives a restart, that is cdin-x, and you want it rather than a second
+For installing from a catalog, an in-app UI, dependency resolution or anything that
+survives a restart, that is the manager, and you want it rather than a second
 implementation here.
 
 ## The two things that are not yours
 
 **The bundled set.** The loader knows nothing about where it came from. Whatever
 produced it is not this repository's business; only the build knows, and it knows
-it as a path — `CDINX_DIR`. A build never fetches anything.
+it as a path — `CDINX_DIR`. A build never fetches anything; the manager, at
+run time, downloads only what you ask it to install.
 
 **The site directory's name.** `config.site_dirname` is the editor's to choose,
 and cdin-x reads `config.site_path()` rather than computing a path of its own.
