@@ -41,9 +41,19 @@ WORKDIR /src
 COPY . .
 # cdin-x, checked out by docker.yml into ./cdin-x before the build. It is
 # the source of the mandatory bundle: the vim plugin, the default theme and
-# the fonts. Placed at /src/cdin-x so the default CDINX_DIR (../cdin-x,
-# relative to /src) resolves with no extra configuration.
-COPY cdin-x/ /src/cdin-x/
+# the fonts.
+#
+# It has to land at /cdin-x, not /src/cdin-x. The repo root here is /src, and
+# the default CDINX_DIR in mk/bundle.mk is $(abspath $(CURDIR)/../cdin-x) —
+# one level *above* the repo, because locally cdin and cdin-x are siblings.
+# So from /src that resolves to /cdin-x. Copying it to /src/cdin-x put it
+# inside the repo, where the default cannot see it, and the bundle step failed
+# with "cdin needs cdin-x to produce a runnable editor".
+#
+# It cannot simply be checked out as a sibling the way the release workflows
+# do, because docker.yml has to place it inside the build context for COPY to
+# reach it at all.
+COPY cdin-x/ /cdin-x/
 
 # ── Icon assets — same recipe as release-linux.yml (rsvg-convert + Pillow) ──
 RUN pip3 install --quiet Pillow && \
