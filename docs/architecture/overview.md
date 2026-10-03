@@ -15,11 +15,16 @@ call "the editor" is Lua in `data/core/`.
 |                documents, views, commands,   |
 |                keymap, syntax, style         |
 +---------------------------------------------+
-|  data/plugins/   bundled extensions          |
+|  data/plugins/   bundled: vim, the manager   |
+|  data/X/         those two plugins, verbatim |
+|  data/cdinx/     the manager's own modules   |
 |  data/themes/    the default theme            |
-|  data/fonts/     the three fonts              |
+|  data/fonts/     the bundled fonts            |
 +---------------------------------------------+
 ```
+
+Everything below `data/core/` is **build output**, assembled from a cdin-x
+checkout by `scripts/assemble_data.py`. The source tree has none of it.
 
 The split is not a layering argument, it is a **capability** argument. The C
 layer has no idea what a document is, so it cannot grow a bug about documents. It
@@ -35,7 +40,8 @@ invisible until two plugins pick the same name.
 
 ```
 cdin     the runtime        data/core/ only; knows nothing about any extension
-cdin-x   the ecosystem      the mandatory set a build bundles, plus everything
+cdin-x   the ecosystem      the mandatory set a build bundles (vim, the manager,
+                            the default theme, the fonts), plus everything
                             optional that users install
 ```
 
@@ -154,6 +160,10 @@ root_node
 `get_locked_size`. A plugin that opens a pane — cdin-x's treeview and its
 manager panel both do — calls `node:split(dir, view, true)` on the active node
 and becomes part of the same tree rather than a layer above it.
+`RootView:attach_side_view` is the better interface and is the documented one;
+both cdin-x panels still split the active node, which is fine while there is one
+panel and a conflict the day there are two. See
+[side panels](extension-contract.md#side-panels).
 
 **A node holds a list of views.** That is what `root:switch-to-pane-view-N` and
 `root:move-pane-view-*` reach, and it is why those names say *pane view*: the

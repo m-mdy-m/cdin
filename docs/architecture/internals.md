@@ -32,11 +32,11 @@ registered **eagerly**, two are **lazy preloads**:
 
 | module | on it |
 | --- | --- |
-| `system` | events, cursor, window, clipboard, time, `sleep`, `chdir`, `list_dir`, `absolute_path`, `get_file_info`, `exec`, `popen`, `fuzzy_match`, `set_hit_regions`, `show_confirm_dialog` |
+| `system` | `poll_event`, `wait_event`, cursor, window (title, mode, focus, minimize, maximize), `set_hit_regions`, `show_confirm_dialog`, clipboard, `get_time`, `sleep`, `chdir`, `list_dir`, `absolute_path`, `get_file_info`, `exec`, `popen`, `fuzzy_match` |
 | `renderer` | `show_debug`, `get_size`, `begin_frame`, `end_frame`, `set_clip_rect`, `draw_rect`, `draw_text`, plus the `renderer.font` sub-table (`load`, `set_tab_width`, `get_width`, `get_height`, `add_fallback`, `__gc`) |
 | `search` | the C substring search behind `doc/search.lua`, and `fuzzy_match` |
 | `fs` | `mkdir_all`, `remove_all`, `copy_all`, `stat`, `list_dir` — reached through `core.fs` |
-| `path` | `absolute`, `join`, `basename`, `dirname`, `ext`, `stem`, `split`, `normalize`, `is_absolute` — reached through `core.fs` |
+| `path` | `absolute`, `join`, `basename`, `dirname`, `ext`, `stem`, `split`, `normalize`, `is_absolute`, and `sep` as a field — `core.fs` re-exports the first four and `sep`; the rest are reachable only as `require "path"` |
 
 **There is no `core` table from the C layer.** `core` is the Lua runtime module
 (`data/core/init.lua`), installed by the bootstrap. Hit regions are
@@ -212,7 +212,51 @@ detected. Editing line 1 of a file whose line 2 opens a multi-line string
 re-tokenizes everything below — correct, and also why a large paste near the top
 of a big file is the one edit that costs a frame.
 
-[Syntax highlighting](../guides/syntax.md) covers the tokenizer.
+## Syntax highlighting
+
+`core.syntax` is a registry and `core.syntax.tokenizer` is a walker; the
+highlighter above is what drives it. **The runtime ships no language
+definitions.** Every language is an extension that calls `syntax.add`, so with
+nothing installed every file is plain text and `doc:toggle-line-comments` has no
+comment marker to read. The *format* of a definition is cdin-x's documentation —
+[adding a syntax definition](https://github.com/m-mdy-m/cdin-x/blob/main/docs/building/a-syntax-definition.md) — and what
+follows is the half that belongs to the runtime.
+
+**`add` appends; lookup walks the list backwards.** The last definition that
+claims a filename wins. There is no way to insert at a position and no `remove`,
+so a definition added from an extension's `init()` lasts for the session. The
+filename is tried before the shebang.
+
+**Patterns are tried in order at each position, first match wins, each anchored
+at the current position.** If none match, one character is consumed as `normal`.
+A delimited span is `{ open, close }` or `{ open, close, escape }`, and the escape
+is checked by counting the backslashes before a candidate close and testing for an
+odd number — which is the case most delimiters get wrong.
+
+**The state is one level deep.** A delimited span sets a single `state`, the index
+of the pattern that opened it, and the next line starts in whatever state the
+previous one ended in. That is what makes multi-line strings and block comments
+work at all. It is **not a stack**: a `"` inside a block comment does not nest a
+string. A language that needs nesting needs a different walker, and that is the
+honest limit of the design.
+
+**Whitespace is absorbed.** Adjacent tokens merge when they share a type *or when
+the previous one is only whitespace*, and merging overwrites the type. The run of
+spaces before a keyword is tokenized as part of the keyword, so leading whitespace
+cannot be coloured on its own.
+
+**A `type` with no matching `style.syntax` key is not uniformly rescued.** One of
+the three draw paths in `docview.lua` falls back to `normal`; the other two hand
+the missing colour to the renderer, which draws opaque white. A typo in a
+definition can therefore render as ordinary text, as white, or as a
+partly-coloured line, depending on which span it lands in.
+
+| file | holds |
+| --- | --- |
+| [`data/core/syntax/syntax.lua`](../../data/core/syntax/syntax.lua) | `add`, `get`, the backwards lookup |
+| [`data/core/syntax/tokenizer.lua`](../../data/core/syntax/tokenizer.lua) | the walker, the state machine, token merging |
+| [`data/core/doc/highlighter.lua`](../../data/core/doc/highlighter.lua) | the per-document cache and its thread |
+| [`data/core/utils/common.lua`](../../data/core/utils/common.lua) | `match_pattern`, shared with the project scan |
 
 ## Views
 
@@ -229,6 +273,14 @@ function MyView:draw() end              -- draw only; must not change state
 view that mutates something while drawing will not do it consistently — the
 change happens on the frames that redraw and not on the ones that do not. Layout
 goes in `update`.
+
+**Keys do not arrive here.** `data/core/events.lua` routes a key press to
+`keymap.on_key_pressed` and to nothing else; there is no fallback that hands it
+to the active view, and `View` does not define `on_key_pressed`. So a view
+responds to a keystroke in exactly two ways: through a command it registered and
+bound, or through a wrapper on `keymap.on_key_pressed`. `EmptyView` implements
+`on_key_pressed` and is the exception that proves the rule — it is unreachable,
+and the four shortcuts it advertises do nothing.
 
 The class test is a separate method, `View:is(T)`, and it walks the metatable
 chain — which is why `"core.views.docview"` works as a predicate string
@@ -267,6 +319,12 @@ should use rather than shelling out or guessing at separators:
 | paths | `join`, `basename`, `dirname`, `abs`, `sep` |
 | queries | `exists`, `is_dir`, `is_file`, `stat`, `list` (alias `ls`), `pwd` |
 | changes | `mkdir`, `rm`, `touch`, `copy`, `rename`, `move`, `cd` |
+
+**`ext`, `stem`, `split`, `normalize` and `is_absolute` are not re-exported.** The
+native `path` module has all five and nothing in the tree calls them, so they were
+dropped from this wrapper rather than left as a second way to do the same thing.
+A plugin that wants one requires `path` directly — which is a native module, so it
+is not part of what this document promises to stay.
 
 `join` handles the separator; `core.fs.sep` is whatever the C `path` module
 reports. A plugin that builds paths by concatenating `"/"` works on Linux and

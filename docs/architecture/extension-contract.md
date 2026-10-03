@@ -13,8 +13,8 @@ Two repositories, one boundary:
 - **cdin** is the editor runtime. Its `data/` contains only `core/`. It knows
   nothing about any extension.
 - **cdin-x** is the extension ecosystem. It provides the mandatory set a build
-  bundles — vim mode, the default theme, the fonts — and the optional workflows
-  users install.
+  bundles — vim mode, the extension manager, the default theme, the fonts — and
+  the optional workflows users install.
 
 ## The plugin protocol
 
@@ -55,6 +55,13 @@ mechanism to skip a bundled plugin, by design.
 
 **A bundled plugin always wins over a site plugin of the same name** — on disk and
 at runtime. The scan is bundled-first and first-seen-wins.
+
+**Two roots is the whole of what the loader knows.** The extension manager keeps a
+third place of its own — a store of extensions the user installed from its panel —
+and the runtime has no idea it exists. The manager finds, orders and loads what it
+installed by itself, and makes it `require`able with its own `package.searchers`
+entry placed *after* the standard searcher, so a bundled copy still wins. Nothing
+in `data/core/` may name that store, and nothing here promises it will exist.
 
 **Entry points are loaded in sorted order by name.** Reproducible, and *not*
 dependency order. If a plugin needs something another plugin registered, it must
@@ -262,8 +269,9 @@ validation. A `type` with no matching style key is **not** uniformly rescued: on
 of the three draw paths in `docview.lua` falls back to `normal`, the other two
 pass the missing colour to the renderer and get opaque white. Define every `type`
 your definitions emit.
-[Syntax highlighting](../guides/syntax.md) has the format, the tokenizer and the
-honest limits — including that the delimiter state is one level deep, not a stack.
+[Internals](internals.md#syntax-highlighting) has the tokenizer and the honest
+limits — including that the delimiter state is one level deep, not a stack. How to
+write a definition is cdin-x's: [adding a syntax definition](https://github.com/m-mdy-m/cdin-x/blob/main/docs/building/a-syntax-definition.md).
 
 ## The prompt
 
@@ -332,6 +340,12 @@ nothing is not something to leave behind.
 
 **These three functions are the whole of the pane-tree interface.** Reaching into
 `node.views`, `node.divider` or `rootview/node.lua` is still not guaranteed.
+
+**cdin-x's own panels do not use them yet.** Its tree and its manager panel both
+call `node:split(side, view, true)` on the *active* node, which is the conflict
+described above; both are single-panel today, so nothing has gone wrong yet. An
+extension written from this page should use `attach_side_view`, and an extension
+written from cdin-x's source will notice the difference.
 
 ## Providers
 
@@ -452,11 +466,17 @@ config.user_dir         -- where init.lua and your themes are
 config.data_home
 config.site_dirname     -- "site" by default
 config.plugins
+config.data_dir         -- EXEDIR/data: where a build's bundled set lives
+config.fonts_dir        -- EXEDIR/data/fonts
 ```
 
 `config.site_path()` is a **function, not a field.** `~/.config/cdin/user/init.lua`
 runs after `core.config` was required, so a path computed at load time would be
 fixed before you could change it and the one knob would silently do nothing.
+
+`config.data_dir` exists so an extension can answer "what does this editor already
+ship?" — the one thing it cannot know is where its own data directory is. Treat it
+as optional: an installed extension set has none, and the manager does exactly that.
 
 `config.site_dirname` is the editor's to choose — `"site"` is what vim and
 neovim call exactly this directory (`:h site-dir`) — and every consumer follows it:
@@ -471,9 +491,13 @@ extension needs to know about paths.
 | --- | --- |
 | `EXEDIR` | the executable's directory — where `data/` is |
 | `EXEFILE`, `PATHSEP`, `PLATFORM`, `VERSION`, `ARGS`, `SCALE` | |
-| `system.*` | events, clipboard, time, `chdir`, `list_dir`, `absolute_path`, `get_file_info`, `exec`, `popen`, `fuzzy_match`, dialogs |
+| `system.*` | events, window, clipboard, time, `chdir`, `list_dir`, `absolute_path`, `get_file_info`, `exec`, `popen`, `fuzzy_match`, hit regions, `show_confirm_dialog` |
 | `renderer.*` | fonts, text, rectangles, clipping, the frame |
 | `core.fs`, `core.style`, `core.themes`, `core.syntax`, `core.utils.common`, `core.utils.object` | |
+
+The native `fs` and `path` modules are reachable as `require "fs"` and
+`require "path"`, and `core.fs` is the wrapper over them. Prefer the wrapper: it
+is the documented surface, and it is a smaller one.
 
 **`SCALE` is the display content scale, and it is `1.0` on every non-Windows
 platform** — `utils_get_scale()` returns a real value only on Windows. Everything
@@ -529,10 +553,10 @@ for all of them:
 | `node.views`, `node.active_view`, `node.divider`, `rootview/node.lua` internals | the pane tree's shape; use `attach_side_view` / `detach_view` |
 | `DocView.translate` and the translation table | a module detail, not an interface |
 | `core._status_pills`, `core._help_shortcut_groups` | documented as the removal path, and still internals |
-| `core.project` | use `core.set_project_dir` |
+| `core.project` | does not exist; it is a local in `core/init.lua`. Use `core.project_dir` and `core.set_project_dir` |
+| `View:on_key_pressed` | **defined by nothing.** No dispatch path calls it, so a key never reaches a view this way — bind a command, or wrap `keymap.on_key_pressed` |
 | `core.window_title`, `core.frame_start` | frame-loop internals |
 | `config.symbol_pattern` | **is** read, by cdin-x — but it is cdin-x's word pattern, not a core guarantee |
-| `core.project` | does not exist; it is a local in `core/init.lua`. Use `core.set_project_dir` |
 | any module under `core.views.*` except the ones named above | |
 | the aggregator modules `core.views`, `core.utils`, `core.input`, `core.runtime` | **removed.** require the leaf: `core.views.view`, `core.utils.common`, `core.input.command`, `core.runtime.strict` |
 
@@ -549,8 +573,12 @@ The runtime references two of them — `empty-view:open-file` and
 `empty-view:open-folder` delegate by name — which is why the delegation is safe:
 `command.perform` on an unregistered name returns `false` and does nothing, so
 those two are no-ops on a bare editor rather than errors. The empty view's
-shortcut list is correspondingly short, and printed entries are only ever ones
-that work.
+shortcut list is correspondingly short, and it holds no palette row, no find-file
+row and no open-folder row — only what the runtime owns. (Four of the five entries
+it does own are printed without being reachable; see
+[the empty view](../guides/commands.md#the-empty-view). The rule the list follows
+is right even where the wiring is not: *do not advertise a keystroke that does
+nothing*.)
 
 **The line the runtime draws** is stated in `data/core/commands/core.lua` and is
 worth repeating here because it is the criterion everything else follows from:
