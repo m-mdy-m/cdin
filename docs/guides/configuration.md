@@ -38,20 +38,21 @@ The order is fixed, and two details in it are load-bearing:
 2. command.add_defaults()   every runtime command and binding
 3. your init.lua            ← you are here
 4. config.plugins = false   if --no-plugins was passed
-5. bundled plugins          unconditional: vim, always
+5. bundled plugins          unconditional: vim and the manager, always
 6. site plugins             whatever your config.plugins selected
 7. .lite_project.lua        the project module, if there is one
 ```
 
-**Your file runs before the plugins.** Two consequences, both of which people
-rely on without noticing:
+**Your file runs before the plugins.** Two consequences, one of which people rely
+on without noticing and one of which bites them:
 
 - A key you set is one a plugin **can** override. Because `keymap.add` prepends,
   a plugin loading after you *will* come first — so to beat a plugin you need
   `keymap.add(map, true)`, not a second `keymap.add`.
-- `require`-ing a plugin's *module* from here works — the site directory is on
-  `package.path` by then — but its `init()` side effects have not run yet. You
-  are loading code, not starting a plugin.
+- You **cannot** `require` a site plugin's module from here. The loader extends
+  `package.path` as the first statement of step 6, and you are at step 3. Setting
+  configuration and binding keys is what your file is for; anything that needs a
+  site plugin's code has to happen in that plugin.
 
 The alternative — running your config last — would make cdin-x's palette
 impossible to rebind, because nothing could come after it. That is the whole
@@ -87,6 +88,14 @@ win over your personal ones, and a plugin is a third thing again.
 | `config.site_dirname` | `"site"` | the site directory's **name**, under `data_home` |
 | `config.site_dir` | unset | a full path, which overrides `site_dirname` entirely |
 | `config.fonts_dir` | `EXEDIR/data/fonts` | bundled with the binary; do not repoint it |
+| `config.data_dir` | `EXEDIR/data` | where a build's bundled set lives. Read by extensions; do not repoint it |
+
+**One directory is not under `data_home`, and it is worth knowing which.**
+`session.lua` — the last directory and the persisted theme, read before anything
+else loads — is at `${XDG_DATA_HOME:-~/.local/share}/cdin/session.lua` on POSIX
+but at `%APPDATA%\cdin\session.lua` on Windows, where `data_home` is
+`%LOCALAPPDATA%`. Nothing in the runtime writes that file: cdin only reads it,
+and cdin-x's session plugin is what puts it there.
 
 **One knob, and every consumer follows it.** `config.site_dirname` decides where
 installed extensions live, and the plugin loader, the theme registry and cdin-x
@@ -115,8 +124,8 @@ config.plugins = { "vim-tab", "search" }   -- only these
 Anything other than `nil`, `false` or a list of names is treated as `nil`.
 
 **This selects the *site* set only, and it has no effect on the bundled set.**
-The bundled set is the mandatory one a build copies in — vim mode, the default
-theme, the fonts — and it loads whatever this says, including `false`. That is
+The bundled set is the mandatory one a build copies in — vim mode, the extension
+manager, the default theme, the fonts — and it loads whatever this says, including `false`. That is
 why `--no-plugins` cannot turn vim off: a cdin without vim is not an editor, and
 a debugging flag is not a policy.
 
@@ -124,13 +133,17 @@ So `config.plugins = false` means *"the bare editor"*, not *"the editor with
 nothing"*. The bundled set still loads, and the editor still starts, renders,
 edits and answers <kbd>Ctrl</kbd>+<kbd>N</kbd>.
 
-Note the corollary: **cdin-x is a site plugin**, so `config.plugins = false` and
-`--no-plugins` both switch off the palette, the finders, the tree, tabs, search
-and git. If you are wondering why an extension you installed vanished, this is
-usually the answer.
+Note the corollary, and it is the one that surprises people: **a cdin-x checkout
+installed into the site directory is a site plugin**, so `config.plugins = false`
+and `--no-plugins` both switch off the palette, the finders, the tree, tabs,
+search and git. If you are wondering why an extension you installed from the
+panel vanished, this is *not* the answer — the manager keeps those in a store of
+its own and never reads `config.plugins`. Disable it in the panel instead; that
+choice persists.
 
 There is a whitelist form for when you want most of it but not all of it. Names
-are the directory names under `plugins/`, not manifest names.
+are the directory names under `plugins/`, not manifest names, and the whitelist
+applies to the site directory alone.
 
 ## Themes
 
@@ -151,7 +164,10 @@ rather than left as a knob that does nothing.
 Prefer changing themes at runtime — cdin-x's theme switcher does this, and it
 writes `config.theme` — over editing `config.theme` and restarting.
 
-See [themes](themes.md) for the format and the full colour list.
+Themes are cdin-x's: the format and the full colour list are in
+[adding a theme](https://github.com/m-mdy-m/cdin-x/blob/main/docs/building/a-theme.md). The runtime's half — the roots a theme
+is looked up in, and `themes.apply` — is in
+[the extension contract](../architecture/extension-contract.md#themes).
 
 ## Text
 
@@ -232,10 +248,22 @@ plugin and cannot drift from it:
 
 | key | owner |
 | --- | --- |
-| `config.vim_mode_enabled` | cdin-x's `vim` plugin |
+| `config.vim_mode_enabled` | cdin-x's `vim` plugin, which also binds <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd> to it |
 | `config.session_restore` | cdin-x's `session` plugin |
-| `config.session_restore_dir`, `config.session_restore_theme` | owned by cdin-x's `session`, but the **runtime defaults both to `true`** at boot (`data/core/init.lua:7-8`) and reads the persisted theme before anything else loads |
+| `config.session_restore_dir`, `config.session_restore_theme` | owned by cdin-x's `session`, but the **runtime defaults both to `true`** at boot (`data/core/init.lua:6-7`) and reads the persisted theme before anything else loads |
 | `config.site_dir` set by cdin-x | cdin-x's manager, to the same value you set |
+| `config.extension_dir` | the manager: where extensions installed from the panel are copied. Default `<data_home>/cdin/extensions/X` |
+| `config.registry_dir` | the manager: where the catalog index is kept. Default `<data_home>/cdin/registry/cdin-x`; the `CDIN_X_REGISTRY` environment variable overrides it |
+| `config.registry_url`, `config.registry_raw_url` | the manager: where the catalog is downloaded from. The raw URL is derived from the first; `CDIN_X_BRANCH` picks the branch |
+| `config.state_file` | the manager: which extensions you disabled. Default `<data_home>/cdin/extensions.lua` |
+| `config.pluginmanager_size`, `config.pluginmanager_min` | the manager's panel: its width, `460 * SCALE`, and its narrowest, `300 * SCALE` |
+| `config.bundle_dir` | the manager: defaults to `config.data_dir`, and is `nil` for an extension set that is not sitting beside a build |
+
+Every one of those is written onto the same `config` table you `require`, so
+`config.foo` in your own file reads them — but only **after** the manager has
+loaded, which is step 5 of the order above, after your file has already run. Set
+one and the manager's `or` default leaves your value alone; read one and you are
+reading whatever was there when you ran.
 
 **A key a plugin declares in its manifest is a declaration, not an application.**
 Nothing copies it onto `config` for you. If a plugin documents a default, set it
