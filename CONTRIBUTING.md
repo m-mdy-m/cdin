@@ -111,27 +111,34 @@ data/core/views/          DocView, CommandView, StatusView, TitleBar, LogView, V
 data/core/input/          command registry and keymap
 data/core/syntax/         the syntax registry and the tokenizer
 data/core/text/           UTF-8, bidi, shaping
-data/core/runtime/        strict (globals are errors) and temp filenames
+data/core/runtime/        strict (globals are errors)
 data/core/utils/          Object (class system), common utilities
 
 build/<platform>-<build>/data/   BUILD OUTPUT, not source:
   core/       a symlink to data/core (a copy where symlinks are unavailable)
-  plugins/    the mandatory set a build bundled from cdin-x
-  X/          cdin-x's plugin modules for that bundle
+  plugins/    one-line shims for the mandatory plugins — vim, manager
+  X/          those two plugins, verbatim, from cdin-x
+  cdinx/      the manager's own modules, carried by its bundle_with
   themes/     the mandatory theme a build bundled from cdin-x
   fonts/      the fonts a build bundled from cdin-x
-  BUNDLE.lua  what the bundle contains
+  BUNDLE.lua  an index of what the bundle contains
 
 ~/.config/cdin/user/     user configuration (init.lua) and user themes
-<data_home>/cdin/        data_home itself: session.lua, site/, extensions/, registry/
-<data_home>/cdin/site/   installed extensions (cdin-x)
+<data_home>/cdin/        site/, extensions/X/, registry/cdin-x/, extensions.lua
+<data_home>/cdin/site/   a cdin-x checkout or your own plugins
 
-mk/                Makefile fragments — platform, version, flags, build,
-                    install, and bundle (the only place CDINX_DIR is read)
-scripts/           data assembly, icon generation, and the Lua test suites
+mk/                Makefile fragments — platform, version, config, build,
+                    install, and bundle. CDINX_DIR is defaulted in bundle.mk
+                    and passed to the scripts; nothing else reads it.
+scripts/           data assembly, icon generation, and four Lua test suites
 tests/lua/         the unit + integration suite
 docs/              documentation (you're here)
 ```
+
+**The mandatory set is four things**, not three: vim, the extension manager, the
+`default` theme, and the fonts. Three carry `essential = true` in cdin-x —
+`vim`, `manager`, and the theme — and the fonts are not a plugin at all, which is
+why the bundler checks them separately and fails on an empty `fonts/`.
 
 There is no `data/core/git/`. Git support moved to
 [cdin-x](https://github.com/m-mdy-m/cdin-x) in 0.2.0-alpha, and the runtime
@@ -203,23 +210,53 @@ before writing code.
    silencing a warning rather than fixing its root cause, explain why in a
    comment.
 
-4. Run the editor and exercise what you changed, and include a note in your PR
+   `make` needs a cdin-x checkout beside this one; `make CDINX_DIR=…` if it is
+   elsewhere. `make bin` compiles the binary alone and needs nothing.
+
+4. Run the test suites. All four need only `lua` — no build, no editor:
+
+   ```sh
+   make test-plugins     # keymap integrity and the loader
+   make test-lua         # unit + integration, in tests/lua/
+   make test-workflows   # the cdin-x workflows; needs CDINX_DIR
+   make test-site-dir    # the one duplicated constant, vs cdin-x
+   ```
+
+   Which one to run depends on what you touched, and `AGENTS.md` says which is
+   which. `test-workflows` is the one that cannot be replaced: it is the only
+   suite that reads cdin-x, and a stale runtime binding and a duplicated plugin
+   binding are both invisible from this repository alone.
+
+   `make check` and `make size` do not work — they call `scripts/check.py` and
+   `scripts/bench.py`, which do not exist. `make test` and `make bench` are
+   `.PHONY` entries with no rule, and `make debug-san` sets a variable nothing
+   reads. There is no lint or style checker here; the compiler is it.
+
+5. Run the editor and exercise what you changed, and include a note in your PR
    about what you tested and how. The suites do not replace that.
 
-5. Update the docs if your change affects:
+6. Update the docs if your change affects:
    - Commands or keybindings → [docs/guides/commands.md](docs/guides/commands.md)
    - Configuration options → [docs/guides/configuration.md](docs/guides/configuration.md)
-   - Themes or colours → [docs/guides/themes.md](docs/guides/themes.md)
-   - Syntax highlighting → [docs/guides/syntax.md](docs/guides/syntax.md)
+   - What a build contains, or installing extensions → [docs/guides/extensions.md](docs/guides/extensions.md)
    - Plugin behavior or an extension seam → [docs/guides/plugins.md](docs/guides/plugins.md)
+   - Build targets, `CDINX_DIR` or the test suites → [docs/guides/building.md](docs/guides/building.md)
+   - A specific failure → [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md)
    - The architecture → [docs/architecture/overview.md](docs/architecture/overview.md)
+   - The highlighter or the tokenizer → [docs/architecture/internals.md](docs/architecture/internals.md)
    - **What cdin guarantees an extension** → [docs/architecture/extension-contract.md](docs/architecture/extension-contract.md)
 
    That last one is the one to think hardest about. If cdin-x could plausibly
    have depended on the change, it is a breaking change, not a documentation
    update — see the closing section of that page.
 
-6. Add a line to the `[Unreleased]` section of `CHANGELOG.md` if the change
+   **Themes, syntax definitions and vim mode are cdin-x's**, and so are their
+   pages. A change to the theme *registry*, the tokenizer or the loader belongs
+   here; a change to a theme, a language definition or a key in vim mode belongs
+   in [cdin-x](https://github.com/m-mdy-m/cdin-x), which has its own
+   `CONTRIBUTING.md` and the same rule about updating docs when behaviour moves.
+
+7. Add a line to the `[Unreleased]` section of `CHANGELOG.md` if the change
    is user-visible:
 
    ```
@@ -227,7 +264,11 @@ before writing code.
    - Fixed treeview git polling blocking the frame loop on slow filesystems
    ```
 
-7. Open a pull request with a clear description of what you changed and why.
+   A documentation fix counts. So does a bug you found while documenting — write
+   what the code does, and say so in the entry when the docs were the thing that
+   was wrong.
+
+8. Open a pull request with a clear description of what you changed and why.
    Link to the issue it addresses if there is one.
 
 ---
@@ -290,12 +331,15 @@ body is for explaining the reasoning, not restating the diff.
 
 ## Lua plugin patterns
 
-Three things tie the editor together, and every plugin uses them.
+Four things tie the editor together, and every extension uses them.
 
-**Commands** are named actions registered with `command.add(predicate, table)`.
-The predicate controls when the command is valid. `nil` means always; a class
-name means only when a view of that type is focused. The command palette, the
-keymap, and other plugins all refer to commands by name.
+**Commands** are named actions registered with `command.add(predicate, table,
+overwrite)`. The predicate controls when the command is valid: `nil` means
+always, a module path string means "that module's returned function says so", and
+a class table means "the active view is an instance of it". The command palette,
+the keymap, and other extensions all refer to commands by name — which is what
+lets a binding, a menu entry and an ex-command reach the same thing without
+holding a reference to a module they did not load.
 
 ```lua
 local command = require "core.input.command"
@@ -319,8 +363,9 @@ core.add_thread(function()
 end)
 ```
 
-**Wrapping** is how plugins extend core behavior. There's no event or hook
-system. Replace a function and call the original:
+**Wrapping** is how extensions extend core behavior, and it is the last resort —
+there is no event or hook system. Replace a function, call the original, and put
+it back in `unload`:
 
 ```lua
 local Doc = require "core.doc"
@@ -331,7 +376,19 @@ function Doc:save(...)
   _save(self, ...)
   -- after save
 end
+
+function M.unload()
+  Doc.save = _save
+end
 ```
+
+Before reaching for it, check the three that are not wrapping: the document hook
+lists `Doc._before_save` / `_after_save` / `_after_load`, the provider
+registries (`core.register_status_pill`, `core.register_vcs_provider`,
+`core.register_recent_provider`, `core.register_help_shortcuts`), and
+`core.command_view` for prompts. A wrapper is in the path of every call including
+the ones you did not want to touch, and a wrapper that leaks runs again on the
+next load.
 
 A minimal plugin that adds a command and a keybinding:
 
@@ -351,7 +408,27 @@ keymap.add {
 }
 ```
 
-Drop it in `<site>/plugins/` and restart. See [docs/guides/plugins.md](docs/guides/plugins.md) for more.
+Drop it in `<site>/plugins/` — as a directory with an `init.lua` or a single
+`.lua` file — and restart, or run `core:load-plugin my-plugin` for the session
+without one.
+
+**Keys** are bound by name, not by function, and that is the fourth thing:
+
+```lua
+keymap.add { ["ctrl+shift+g"] = "my-plugin:greet" }
+```
+
+A value may be a **list**, which is a fallback chain: each command is tried in
+order and the first whose predicate holds runs. **Without `overwrite`,
+`keymap.add` prepends**, so a later `add` wins and the old chain stays alive
+behind it — which is why a plugin can override a key you set in `init.lua`, and
+why you need `keymap.add(map, true)` to override one a plugin set. Note that
+`keymap.add` is for keys and `command.add` for commands; a keystroke never holds
+a function.
+
+See [docs/guides/plugins.md](docs/guides/plugins.md) for the loader's rules, and
+[the extension contract](docs/architecture/extension-contract.md) for the whole
+of what is guaranteed.
 
 ---
 

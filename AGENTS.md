@@ -17,7 +17,7 @@ Guidance for agents working on cdin — a C + Lua text editor (fork of lite). Th
 
 The one coupling between this repo and cdin-x is a build input: the variable `CDINX_DIR`, read only in `mk/bundle.mk`, `scripts/assemble_data.py` and `scripts/_cdin/*.py`. Nothing under `src/` or `data/` refers to cdin-x, and a build never fetches anything.
 
-A **build** is not self-sufficient on its own: `make` compiles the binary *and* bundles the mandatory set (the vim plugin, the default theme, the fonts) from a cdin-x checkout, because an editor without them cannot start. `make bin` compiles the binary only and needs no cdin-x.
+A **build** is not self-sufficient on its own: `make` compiles the binary *and* bundles the mandatory set (the vim plugin, the extension manager, the default theme, the fonts) from a cdin-x checkout, because an editor without them cannot start. `make bin` compiles the binary only and needs no cdin-x.
 
 The contract cdin provides and cdin-x may rely on is written down in `docs/architecture/extension-contract.md`. Read it before changing anything about `config.site_dir`, the plugin loader or the theme registry.
 
@@ -30,11 +30,21 @@ A plugin is a directory with an `init.lua`, or a single `.lua` file. There are t
 
 `data/core/plugins.lua` `dofile`s each entry point and calls `init(core, config)`. Failures are caught and logged — a failing *bundled* plugin is reported at error level and the rest still load; a failing site plugin is logged and skipped. The editor always starts.
 
-**Nothing in `data/core/` may depend on a site plugin.** With no cdin-x installed the editor must start, render, edit and respond to `ctrl+n`. That is why the user-facing workflows — command palette, find file, open file, open folder, the module pickers — are not runtime commands, and why `ctrl+p`, `ctrl+shift+p` and `ctrl+o` are not bound here. `ctrl+n` is: a new document needs no extension.
+**Nothing in `data/core/` may depend on a site plugin.** With no cdin-x installed the editor must start, render, edit and respond to `ctrl+n`. That is why the user-facing workflows — command palette, find file, open file, open folder, the module pickers — are not runtime commands, and why `ctrl+p`, `ctrl+shift+p`, `ctrl+o` and `ctrl+shift+o` are not bound here. `ctrl+n` is: a new document needs no extension.
 
-`config.plugins` is read from `~/.config/cdin/user/init.lua`, which therefore runs *before* the plugins. Two consequences: a plugin's commands and keymaps are registered after user config, so a plugin can overwrite a keymap set in `init.lua` but not the reverse; and `require`-ing a plugin's *module* from `init.lua` works (the site roots are on `package.path`) while its `init()` side effects are not there yet. The `--no-plugins` flag sets `config.plugins = false`, which now means "no **site** plugins" — the mandatory bundle still loads, because a cdin without vim is not an editor.
+Only three extensions carry `essential = true` in cdin-x — `vim`, `manager`, and the `default` theme — and only those three plus the fonts reach a build. So a fresh build has exactly two cdin-x keystrokes: `ctrl+shift+m` for the manager, `ctrl+shift+l` for the log. Everything else in `docs/guides/commands.md` is the runtime's, and everything in `docs/guides/extensions.md` is an extension's.
+
+`config.plugins` is read from `~/.config/cdin/user/init.lua`, which therefore runs *before* the plugins. Two consequences: a plugin's commands and keymaps are registered after user config, so a plugin can overwrite a keymap set in `init.lua` but not the reverse; and `init.lua` **cannot** `require` a site plugin's module, because the loader extends `package.path` as the first statement of `load_all()` — which is step 11 of the boot order, and `init.lua` is step 9. The `--no-plugins` flag sets `config.plugins = false`, which means "no **site** plugins" — the mandatory bundle still loads, because a cdin without vim is not an editor. What the *manager* installed is in neither root: it keeps its own store under `<data_home>/cdin/extensions/X`, loads it itself, and never reads `config.plugins`, so `--no-plugins` does not switch it off.
 
 `core:load-plugin` / `core:unload-plugin` / `core:list-plugins` (`data/core/commands/plugin.lua`) change the site set at runtime. Nothing about that persists.
+
+## Keys
+
+The runtime owns its own bindings and nothing else does. `ctrl+p`, `ctrl+shift+p`, `ctrl+o` and `ctrl+shift+o` are unbound here on purpose: `palette` owns the first, and cdin-x's `finder` — which is `essential = false` and in no build — owns the other three.
+
+Expect collisions with cdin-x, and do not resolve one by moving a runtime key. The current set is tabulated in `docs/guides/extensions.md`: `alt+j/k/l` (`window`), `ctrl+d` (`search`), `ctrl+r` (`treeview`), `ctrl+shift+d` (`session`), `f2` (`treeview`). `keymap.add` prepends, so where both bindings are unconditional cdin-x wins — a fact to document, not a bug to fix by renaming a core stroke. Strokes gated on a predicate (`escape`, `tab`, `return`, `ctrl+c`, `ctrl+a`) are the design working: each falls through when its own view is not active.
+
+A new binding has to pass the line in `data/core/commands/core.lua`: *could this work without any input from the user?* `ctrl+n` can; anything that prompts for a path cannot and belongs in a plugin. `make test-workflows` is the suite that catches a genuine duplicate.
 
 ## Build & run
 
@@ -82,7 +92,10 @@ changes require rebuilding.
 2. `make test-plugins` — the Lua data-layer tests. Needs only `lua`; no build, no editor, and **no cdin-x**. `scripts/test_commands.lua` covers keymap integrity with zero plugins (every command a binding names must exist, the palette must get a working submit and suggest, and the runtime must own exactly the bindings it is supposed to). `scripts/test_lua.lua` covers the loader and the theme registry over `scripts/fixtures/`, across site-present/site-absent × `config.plugins` = nil / false / whitelist. Both build their tree from the fixtures, so a test can never be satisfied by what happens to be on disk. Run it after touching anything under `data/core/plugins.lua`, `data/core/themes.lua`, `data/core/commands/`, `data/core/keymaps/`, `data/core/rootview/empty_view.lua` or `scripts/`.
 3. `make test-lua` — the unit + integration suite in `tests/lua/` (text pipeline, `Doc`, theme registry). Plain `lua`, no build, no editor, no cdin-x. The theme tests need a tree holding `data/themes/<name>/theme.lua`, so the target asks `scripts/test_lua.lua` to build the fixture tree it already builds and points at that. Run it after touching anything under `data/core/text/`, `data/core/doc/`, `data/core/themes.lua` or `data/core/style.lua`.
 4. `make test-workflows` — the other half of the split, and the only test that reads cdin-x. Needs `lua` and `CDINX_DIR`; no build, no editor. `scripts/test_workflows.lua` uses the cdin-x checkout as the site directory and asserts that the workflow plugins register their commands, that `ctrl+p` / `ctrl+shift+p` / `ctrl+o` / `ctrl+shift+o` each have exactly one command bound, that `data/core/keymaps/default.lua` names none of them, and that unloading `palette`, `finder` and `modules` through the manager detaches both. Run it whenever a keybinding, the loader, or anything under `data/core/keymaps/` changes — a stale runtime binding and a duplicated plugin binding are the two failures it exists to catch, and neither is visible from one repository alone.
-5. Run the editor and manually exercise what you changed; note what you tested in the PR.
+5. `make test-site-dir` — the smallest suite and the one people skip. `lua` plus `CDINX_DIR`; no build, no editor, no data tree. `scripts/test_site_dir.lua` asserts that `config.site_path()` is lazy (your `init.lua` runs after `core.config` was required), that `config.site_dir` beats `site_dirname`, that cdin-x's `install.py` declares the same `SITE_DIRNAME` this repository uses, and that `cdinx/config.lua` calls `config.site_path()` instead of hardcoding the name. One duplicated string, two repositories, nothing keeping them equal but this.
+6. Run the editor and manually exercise what you changed; note what you tested in the PR.
+
+`make check` and `make size` do not work — they call `scripts/check.py` and `scripts/bench.py`, which do not exist. `make test` and `make bench` are `.PHONY` entries with no rule, and `make debug-san` sets a variable nothing reads. `make help` still claims plugins and themes ship inside `data/`. Do not document any of them as working.
 
 ## Lua conventions
 
@@ -95,6 +108,6 @@ changes require rebuilding.
 ## PR expectations
 
 - One topic per PR. Branches named `fix/*` or `feature/*`.
-- Update docs when behavior changes: keybindings/commands → `docs/guides/commands.md`, config → `docs/guides/configuration.md`, vim → `docs/guides/vim-keybindings.md`, plugins → `docs/guides/plugins.md`, themes → `docs/guides/themes.md`, architecture → `docs/architecture/overview.md`.
+- Update docs when behavior changes: keybindings/commands → `docs/guides/commands.md`, config → `docs/guides/configuration.md`, the loader and writing a plugin → `docs/guides/plugins.md`, what a build contains and the manager → `docs/guides/extensions.md`, the highlighter and tokenizer → `docs/architecture/internals.md`, architecture → `docs/architecture/overview.md`. Vim mode, themes and syntax definitions are cdin-x's: document them there, not here.
 - Add user-visible changes under `[Unreleased]` in `CHANGELOG.md`.
 - Commits follow conventional style: `feat(scope): ...`, `fix(scope): ...`, imperative, <72 chars.
