@@ -35,9 +35,16 @@ import sys
 from pathlib import Path
 
 MISSING_CDIN_X = (
-    "cdin needs cdin-x to produce a runnable editor "
-    "(it provides the mandatory vim plugin, default theme and fonts).\n"
-    "  Clone cdin-x next to cdin, or pass CDINX_DIR=/path/to/cdin-x.\n"
+    "cdin needs cdin-x to produce a runnable editor — it provides the mandatory\n"
+    "  set: the vim plugin, the extension manager, the default theme and the fonts.\n"
+    "\n"
+    "  Looked for {path}/scripts/bundle.py and it is not there.\n"
+    "\n"
+    "  CDINX_DIR is currently {cdinx}, which defaults to a sibling of this\n"
+    "  checkout. cdin-x has to sit next to cdin, not inside it: `cdin/cdin-x`\n"
+    "  is one directory too deep for `../cdin-x` to find.\n"
+    "\n"
+    "  Fix it with `make CDINX_DIR=/path/to/cdin-x`, or move the checkout.\n"
     "  `make bin` compiles the binary only and needs no cdin-x."
 )
 
@@ -113,7 +120,10 @@ def mirror_core(src_core: Path, dst_core: Path) -> None:
 def run_bundler(cdinx: Path, out_data: Path) -> None:
     bundler = cdinx / "scripts" / "bundle.py"
     if not bundler.is_file():
-        die(MISSING_CDIN_X)
+        # Name the directory that was actually probed. "cdin needs cdin-x" on
+        # its own is a shrug: the usual cause is a cdin-x that is present but
+        # one level too deep, and only the resolved path tells you that.
+        die(MISSING_CDIN_X.format(path=cdinx, cdinx=cdinx))
 
     # The same interpreter, so a venv or a py launcher cannot end up bundling
     # with a different Python than the one running this script.
