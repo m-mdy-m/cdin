@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:26.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SDL_VERSION=3.2.14
@@ -77,7 +77,7 @@ RUN PKG_CONFIG_PATH=/opt/sdl3/lib/pkgconfig \
 # Runtime
 # ═══════════════════════════════════════════════════════════════════════════
 
-FROM ubuntu:22.04
+FROM ubuntu:26.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
