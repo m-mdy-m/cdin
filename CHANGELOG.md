@@ -7,131 +7,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.2.0-alpha] — 2026-10-03
 
-### Added
+The headline is a repository boundary. cdin is now the editor **runtime**,
+and the extension set a build ships is assembled from a sibling
+[cdin-x](https://github.com/m-mdy-m/cdin-x) checkout at build time.
+Everything else in this release — the loader rewrite, the new extension
+points, four test targets that can only be written once the boundary is
+enforced — exists to make that boundary hold and to keep it from drifting
+back.
 
-- **One text file holds the whole log.** The C logger's file is now
-  `cdin-log.txt` (was `cdin.log`; the rotated copy is `cdin-log.txt.1`), and the
-  Lua stream is mirrored into it by default, tagged `LUA`, with `core.try`
-  tracebacks. Before, the mirror was opt-in (`CDIN_LUA_LOG=1`) and wrote the
-  message but never the traceback, because the traceback is attached after the
-  line is logged. `CDIN_LUA_LOG=0` turns the mirror off. The file is opened once
-  per run in line-buffered append mode instead of once per message.
-- **`Ctrl+Shift+L` opens the log.** `core:open-log` had no binding, which made
-  the log unreachable in exactly the build it matters most: the command palette
-  is a plugin, so a bare editor had no route to it and no error either. The log
-  view is the runtime's own view, so the stroke is the runtime's.
-- **The log view has two sources and a key for each.** <kbd>F2</kbd> switches
-  between the editor's `core.log_items` (every `core.log` / `core.error`, with
-  tracebacks) and the C logger's file, and <kbd>Ctrl</kbd>+<kbd>R</kbd>
-  re-reads the current one. The header names the file and its size, because
-  "the log is somewhere" is not an answer and the file is next to the binary,
-  which is not where anyone looks.
-- **`cdin.log` is bounded and quiet.** The file was opened at `LOG_TRACE`, so a
-  day of editing produced 3.4 MB of per-frame renderer traces and nothing
-  useful; it is now `LOG_DEBUG`, and past 4 MB the previous run is rotated to
-  `cdin.log.1` at startup rather than the file growing forever. `CDIN_LOG_LEVEL`,
-  `CDIN_LOG_FILE_LEVEL` and `CDIN_LOG_FILE` override the level and the path.
-- **`CDIN_LUA_LOG=1` mirrors the Lua stream into that file.** Off by default:
-  the two streams are deliberately separate and a bug report wants the file to
-  hold what the file is for. It exists for the one situation with no other way
-  out — a Lua error during startup, when the log view cannot be opened yet.
-- **`config.data_dir` is published.** An extension can only answer "what does
-  this editor already ship?" if the editor says so, and an extension cannot
-  know where its own data directory is. cdin-x reads this to see the set a
-  build carries.
-- **`RootView:attach_side_view(view, side, opts)` and
-  `RootView:detach_view(view)`.** A side panel's whole interface, and the reason
-  two extensions can both own an edge. Splitting the *active* node — which is
-  what both cdin-x panels did — makes the layout depend on load order and on
-  where the user last clicked: the second panel to load splits itself out of the
-  first one, so the file tree ended up between the document and the extension
-  panel. `attach_side_view` targets the edge of the layout instead, is idempotent
-  across enable cycles, and does not steal focus; `detach_view` gives the space
-  back on `unload`, so a disabled extension no longer leaves an unclosable empty
-  column. Documented under *Side panels* in the extension contract.
-
-### Changed
-
-- **The extension manager ships with every build.** It is marked `essential` in
-  cdin-x, the same marker vim carries, so `make` bundles it and the panel is
-  reachable in a build with nothing installed — <kbd>Ctrl</Shift>+<kbd>M</kbd>,
-  or <kbd>M</kbd> in vim normal mode. Everything it *offers* stays optional;
-  what is not optional is the ability to ask what is installed. See cdin-x's
-  changelog for the panel itself.
-- **`core.quit` asks the loop to stop instead of calling `os.exit()`.** Quitting
-  runs with the frame loop on the stack — a keymap, a command, a submit callback
-  — and `os.exit()` from there put `atexit(SDL_Quit)` in the middle of SDL's own
-  event dispatch. The process survived it: window destroyed, event loop gone,
-  every key dead, nothing drawn, and no way out from inside. `:qa!`, the title
-  bar's close button and the window manager's close all went through this, so
-  all three froze the editor instead of closing it. `core.run()` now returns when
-  the quit is requested and `main()` unwinds the window in order. Extensions that
-  wrap `core.quit` are unaffected as long as their wrapper is synchronous,
-  because a thread scheduled at exit is a thread that will now never run.
-
-### Fixed
-
-- **A keystroke that named a command nobody registered.** `make test-plugins`
-  and `make test-workflows` cover this; both pass.
-- **The second of two side panels was given the whole window.**
-  `calc_split_sizes` placed the divider using the first locked child's size and
-  handed the remainder to the other, so it only ever honoured *one* locked pane
-  per split. That is correct until two panels are side by side — the file tree
-  and the extension panel — and then the second one, which had asked for 460px,
-  filled everything the first had not claimed and pushed the document off the
-  screen. Each locked child now gets the width it asked for.
-- **A pane collapsing next to a locked pane raised instead of collapsing.**
-  `Node:collapse` is now shared by closing a node's last view and by
-  `remove_view`, and it clears the lock before installing the empty view —
-  `add_view` refuses a locked node, so that branch could only ever assert.
-
-### Documentation
-
-- **`docs/` rewritten.** Twelve pages and a new `docs/README.md` index, with a
-  reading order. The old set had no index, duplicated the extension
-  documentation, and could not be navigated.
-- **The runtime/cdin-x boundary is now stated everywhere.** Every page used to
-  tell users to press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> and to run
-  `core:open-user-module` — neither of which the runtime owns. Both are cdin-x
-  plugins. The command reference now says so explicitly and explains why the
-  runtime leaves those keys unbound.
-- **`docs/guides/configuration.md` no longer inverts the load order.** It
-  claimed the user config "loads last, after the core and all extensions". It
-  loads *before* plugins, which is what makes a plugin able to override a key you
-  set and you able to override a key a plugin sets.
-- **`docs/guides/vim-keybindings.md` no longer describes files that do not
-  exist.** It listed `vimode.lua`, `ex.lua`, `fmenu.lua` and `shell.lua`; vim
-  mode is `X/core/vim/` in cdin-x, and there is no `fmenu.lua`. It also pointed
-  at `data/user/init.lua`, which is not a path cdin reads.
-- **New: `docs/guides/syntax.md`.** The highlighter, the tokenizer and the
-  definition format are in this repository and no page covered them.
-- **UTF-8 corruption removed from `docs/`.** Six pages had em-dashes and
-  box-drawing characters mangled into replacement characters, including the whole
-  architecture diagram.
-- `docs/architecture/extension-contract.md` rewritten as the normative list of
-  what cdin guarantees, with an explicit **not guaranteed** section — including
-  the functions cdin-x wraps today (`keymap.on_key_pressed`, the `RootView`
-  methods, `StatusView.get_items`) and the commands that belong to cdin-x.
-- `docs/guides/building.md` no longer claims SDL2 is auto-detected and
-  supported. `mk/config.mk` still has the path, but `mk/build.mk` hard-requires
-  `SDL3/SDL.h`, so an SDL2-only machine selects SDL2 and then fails. The page
-  now says SDL3 is required and why.
-
----
-
-## [0.2.0-alpha.2] — 2026-09-30
-
-15 commits, 114 files changed, +4,464 / −6,883. **Zero C changes** — every line
-is Lua, Python, Make or Markdown.
-
-The headline is a repository boundary. cdin is now the editor **runtime**, and
-the extension set a build ships is assembled from a sibling
-[cdin-x](https://github.com/m-mdy-m/cdin-x) checkout at build time. Everything
-else in this release — the loader rewrite, the new extension points, four test
-targets that can only be written once the boundary is enforced — exists to make
-that boundary hold and to keep it from drifting back.
+Two smaller arcs sit on top of it. The two log streams became one file the
+editor can open, a keystroke the input layer cannot produce is now reported at
+boot instead of silently doing nothing, and the documentation was checked against
+the code in both trees rather than against itself — which is where the third arc
+came from. Several pages had been quietly wrong about the boundary: they counted
+three things where four cross it, told you to clone a repository to install an
+extension, and claimed keystrokes that no build has ever bound. That pass is under
+**Documentation** below, and the two bugs it found rather than merely recorded are
+the stroke count in `test_commands.lua` and the error message that now prints the
+`CDINX_DIR` it probed.
 
 ### ⚠️ BREAKING CHANGES
 
@@ -235,8 +130,6 @@ the three dead-binding causes under **Fixed**) came out of it and is kept.
 
 ### Removed from the runtime
 
-#### Dead code, by audit
-
 Every symbol below was defined in `data/core/` and had **no reference anywhere** —
 not in core, not in `src/`, not in the tests, not in the docs as a feature, and
 not in cdin-x. Removed because a knob that does nothing is worse than no knob:
@@ -264,19 +157,19 @@ behaviour change.
 
 `data/core/` used to contain things that are workflows, not mechanics:
 
-| Deleted | Lines | Where it is now |
-|---------|-------|-----------------|
-| `data/plugins/` — 44 entries: `core/*`, `languages/*`, `optional/*`, `tab/`, `treeview/`, `vim/`, `window/` | 5,788 | built output only, assembled from cdin-x |
-| `data/themes/*.lua` — `default`, `dracula`, `nord`, `solarized-dark`, `solarized-light`, `monokai`, `github-light`, `gruvbox-dark`, `tokyo-night`, `catppuccin-mocha` | 240 | `cdin-x/X/themes/<name>/theme.lua`; one is bundled: `default` |
-| `data/fonts/` — `font.ttf`, `monospace.ttf`, `icons.ttf`, `fallback.ttf`, `emoji.ttf` + 2 licences | 4,480 KB | `cdin-x/fonts/`, copied to `data/fonts` next to the binary |
-| `data/user/init.lua` — the 67-line default user config | 67 | not bundled; `config.user_dir/init.lua` is read if present |
-| `data/core/git/` — `init`, `exec`, `status`, `commands` | 356 | a git plugin in cdin-x, registered through `core.register_vcs_provider` |
-| `data/core/commands/findreplace.lua` | 207 | a `find-replace` plugin in cdin-x; it prepends `find-replace:select-next` onto `ctrl+d` at load time |
-| `data/core/search.lua` | 80 | cdin-x, or the C `search` API directly |
-| `data/core/session_bootstrap.lua` | 41 | `data/core/preboot.lua` (39 lines, rewritten — same job, no session-plugin dependency) |
-| `core.load_plugins()` from `data/core/lifecycle.lua` | 43 | `core.plugins.load_all()` in the new `data/core/plugins.lua` |
-| `config.optional_plugins` | — | gone with the loader that read it |
-| `command.names_of` | `data/core/input/command.lua` | advertised in the contract; no extension adopted it |
+| Deleted | Where it is now |
+|---------|-----------------|
+| `data/plugins/` — `core/*`, `languages/*`, `optional/*`, `tab/`, `treeview/`, `vim/`, `window/` | built output only, assembled from cdin-x |
+| `data/themes/*.lua` — `default`, `dracula`, `nord`, `solarized-dark`, `solarized-light`, `monokai`, `github-light`, `gruvbox-dark`, `tokyo-night`, `catppuccin-mocha` | `cdin-x/X/themes/<name>/theme.lua`; one is bundled: `default` |
+| `data/fonts/` — `font.ttf`, `monospace.ttf`, `icons.ttf`, `fallback.ttf`, `emoji.ttf` + 2 licences | `cdin-x/fonts/`, copied to `data/fonts` next to the binary |
+| `data/user/init.lua` — the default user config | not bundled; `config.user_dir/init.lua` is read if present |
+| `data/core/git/` — `init`, `exec`, `status`, `commands` | a git plugin in cdin-x, registered through `core.register_vcs_provider` |
+| `data/core/commands/findreplace.lua` | a `find-replace` plugin in cdin-x; it prepends `find-replace:select-next` onto `ctrl+d` at load time |
+| `data/core/search.lua` | cdin-x, or the C `search` API directly |
+| `data/core/session_bootstrap.lua` | `data/core/preboot.lua` (rewritten — same job, no session-plugin dependency) |
+| `core.load_plugins()` from `data/core/lifecycle.lua` | `core.plugins.load_all()` in the new `data/core/plugins.lua` |
+| `config.optional_plugins` | gone with the loader that read it |
+| `command.names_of` from `data/core/input/command.lua` | advertised in the contract; no extension adopted it |
 
 `autoupdate` is gone for good rather than moved: it fetched and self-replaced
 the editor over the network. Updating cdin is the user's job, as it is for
@@ -324,7 +217,7 @@ written against another build still gets an editor.
 
 #### The loader, with two roots and different rules for each
 
-`data/core/plugins.lua` is new (208 lines):
+`data/core/plugins.lua` is new:
 
 - `EXEDIR/data/plugins` is **bundled**: part of the build output, **mandatory**.
   Every entry loads, always, whatever `config.plugins` or `--no-plugins` say.
@@ -430,7 +323,7 @@ rather than merely empty.
   submodule or sibling lookup at runtime — a build takes a directory and reads
   files out of it. The `build:` recipe moved here from `mk/build.mk`, which now
   owns compilation only.
-- **`scripts/assemble_data.py`** is new (177 lines; stdlib only, Python 3.8+, no
+- **`scripts/assemble_data.py`** is new (stdlib only, Python 3.8+, no
   network) and produces the build output's `data/`:
   - `data/core` — a symlink to the source tree, **recreated on every run**,
     falling back to a copy on a platform that gives no symlink. Not
@@ -461,7 +354,7 @@ rather than merely empty.
 | `make test-workflows` | **cdin-x**, via `CDINX_DIR` | `scripts/test_workflows.lua` |
 | `make test-site-dir` | **cdin-x**, via `CDINX_DIR` | `scripts/test_site_dir.lua` |
 
-- `scripts/_stub_env.lua` (427 lines) is the pure-Lua stand-in for the C `fs` /
+- `scripts/_stub_env.lua` is the pure-Lua stand-in for the C `fs` /
   `path` / `system` modules, which is what lets the data layer run under a plain
   `lua` with no build and no editor.
 - `scripts/test_lua.lua` runs the loader and the theme registry eight times —
@@ -486,6 +379,50 @@ rather than merely empty.
   — and `make test-lua` reuses the tree `scripts/test_lua.lua` already builds
   rather than growing a second copy of the fixture-copying code.
 
+#### The log is one file, and the editor can open it
+
+- **One text file holds the whole log.** The C logger's file is now
+  `cdin-log.txt` (was `cdin.log`; the rotated copy is `cdin-log.txt.1`), and the
+  Lua stream is mirrored into it by default, tagged `LUA`, with `core.try`
+  tracebacks. Before, the mirror was opt-in (`CDIN_LUA_LOG=1`) and wrote the
+  message but never the traceback, because the traceback is attached after the
+  line is logged. `CDIN_LUA_LOG=0` turns the mirror off. The file is opened once
+  per run in line-buffered append mode instead of once per message.
+- **`Ctrl+Shift+L` opens the log.** `core:open-log` had no binding, which made
+  the log unreachable in exactly the build it matters most: the command palette
+  is a plugin, so a bare editor had no route to it and no error either. The log
+  view is the runtime's own view, so the stroke is the runtime's.
+- **The log view has two sources and a key for each.** <kbd>F2</kbd> switches
+  between the editor's `core.log_items` (every `core.log` / `core.error`, with
+  tracebacks) and the C logger's file, and <kbd>Ctrl</kbd>+<kbd>R</kbd>
+  re-reads the current one. The header names the file and its size, because
+  "the log is somewhere" is not an answer and the file is next to the binary,
+  which is not where anyone looks.
+- **`cdin-log.txt` is bounded and quiet.** The file was opened at `LOG_TRACE`, so
+  a day of editing produced 3.4 MB of per-frame renderer traces and nothing
+  useful; it is now `LOG_DEBUG`, and past 4 MB the previous run is rotated to
+  `cdin-log.txt.1` at startup rather than the file growing forever.
+  `CDIN_LOG_LEVEL`, `CDIN_LOG_FILE_LEVEL` and `CDIN_LOG_FILE` override the level
+  and the path.
+- **`CDIN_LUA_LOG=1` mirrors the Lua stream into that file.** Off by default:
+  the two streams are deliberately separate and a bug report wants the file to
+  hold what the file is for. It exists for the one situation with no other way
+  out — a Lua error during startup, when the log view cannot be opened yet.
+- **`config.data_dir` is published.** An extension can only answer "what does
+  this editor already ship?" if the editor says so, and an extension cannot
+  know where its own data directory is. cdin-x reads this to see the set a
+  build carries.
+- **`RootView:attach_side_view(view, side, opts)` and
+  `RootView:detach_view(view)`.** A side panel's whole interface, and the reason
+  two extensions can both own an edge. Splitting the *active* node — which is
+  what both cdin-x panels did — makes the layout depend on load order and on
+  where the user last clicked: the second panel to load splits itself out of the
+  first one, so the file tree ended up between the document and the extension
+  panel. `attach_side_view` targets the edge of the layout instead, is idempotent
+  across enable cycles, and does not steal focus; `detach_view` gives the space
+  back on `unload`, so a disabled extension no longer leaves an unclosable empty
+  column. Documented under *Side panels* in the extension contract.
+
 #### Documentation
 
 - **`docs/architecture/extension-contract.md`** is the whole of what cdin
@@ -495,10 +432,11 @@ rather than merely empty.
   extension owns, the plugin lifecycle, the optional workflows, and the one known
   limitation.
 - `docs/architecture/overview.md` and `docs/architecture/internals.md`
-  rewritten for the split; `docs/guides/plugins.md` (323 lines changed),
-  `themes.md`, `configuration.md`, `commands.md`, `building.md`,
-  `getting-started.md` and `troubleshooting.md` updated; `README.md`,
-  `CONTRIBUTING.md` and `AGENTS.md` updated.
+  rewritten for the split; `docs/guides/plugins.md`, `configuration.md`,
+  `commands.md`, `building.md`, `getting-started.md` and `troubleshooting.md`
+  updated; `README.md`, `CONTRIBUTING.md` and `AGENTS.md` updated.
+  *(The sync above removed `themes.md`, `syntax.md` and `vim-keybindings.md` and
+  added `extensions.md`; the list is the state at the split.)*
 
 ### Changed
 
@@ -509,7 +447,7 @@ rather than merely empty.
   config runs *before* the plugins because `config.plugins` is user-owned. A
   plugin-loading failure no longer force-opens the log view; it logs and
   continues.
-- **The runtime keymap went from 152 bindings to 84.** Every group a plugin used
+- **The runtime keymap went from 152 bindings to 85.** Every group a plugin used
   to own is gone from `data/core/keymaps/default.lua` — treeview, tab, window,
   autocomplete, session, project-search and find-replace — along with the
   empty-view `ctrl+o` / `ctrl+shift+o` entries. `ctrl+d` keeps `doc:select-word`;
@@ -554,7 +492,39 @@ rather than merely empty.
   theme — with no dependency on a session plugin, and a `recent` →
   `recent_files` migration for older state files.
 
+- **The extension manager ships with every build.** It is marked `essential` in
+  cdin-x, the same marker vim carries, so `make` bundles it and the panel is
+  reachable in a build with nothing installed — <kbd>Ctrl</Shift>+<kbd>M</kbd>,
+  or <kbd>M</kbd> in vim normal mode. Everything it *offers* stays optional;
+  what is not optional is the ability to ask what is installed. See cdin-x's
+  changelog for the panel itself.
+- **`core.quit` asks the loop to stop instead of calling `os.exit()`.** Quitting
+  runs with the frame loop on the stack — a keymap, a command, a submit callback
+  — and `os.exit()` from there put `atexit(SDL_Quit)` in the middle of SDL's own
+  event dispatch. The process survived it: window destroyed, event loop gone,
+  every key dead, nothing drawn, and no way out from inside. `:qa!`, the title
+  bar's close button and the window manager's close all went through this, so
+  all three froze the editor instead of closing it. `core.run()` now returns when
+  the quit is requested and `main()` unwinds the window in order. Extensions that
+  wrap `core.quit` are unaffected as long as their wrapper is synchronous,
+  because a thread scheduled at exit is a thread that will now never run.
+
 ### Fixed
+
+- **The "cdin needs cdin-x" error never said where it looked.** It named the
+  problem and stopped, so the one thing that identifies the actual cause — the
+  resolved `CDINX_DIR` — was nowhere in the output. That is exactly the failure
+  CI hit: the Docker build had cdin-x present and readable, one directory too
+  deep for `../cdin-x` to resolve, and the log could not distinguish that from a
+  missing checkout. The message now prints the path it probed and says the
+  default is a *sibling*, not a subdirectory. It also lists the extension
+  manager, which is part of the mandatory set and was missing from the list.
+
+- **`scripts/test_commands.lua` reported a hardcoded stroke count.** The success
+  line said "86 strokes checked" as a string literal, so it went on claiming a
+  number the test no longer computed — it was 85, and it drifted silently every
+  time a binding was added or removed. It is now counted from `keymap.map`, which
+  is what the message was always claiming to be about.
 
 - **Dead core keybindings, three separate causes, all invisible at runtime** — the
   key press was consumed, nothing ran, and nothing errored:
@@ -613,6 +583,187 @@ rather than merely empty.
   `scripts/cdin.py build` now passes the flags the Makefile actually reads
   (`BUILD=`, not the `BUILD_TYPE=` that nothing read) plus `CDINX_DIR=`.
 
+- **`log:switch-source` was bound to a keystroke nobody can type.** The log
+  view's layer had `["ctrl+s+l"]`, and a stroke is a string the input layer
+  *builds* — `ctrl+`, `alt+`, `altgr+`, `shift+`, then the key's own name —
+  which `keymap.map` then matches for equality, with no normalisation. There
+  is no stroke with two key names in it, so switching between the editor's log
+  and the native one had no working key at all, while `docs/guides/commands.md`
+  and the view's own header (`f2 native log`) both said F2. It is bound to `f2`
+  now. F2 was free in the runtime; an extension that binds it globally can
+  still take it, which is what cdin-x's treeview did — hence
+  `treeview:toggle-key`, a command that exists only so that one keystroke can
+  decline while the log is open, leaving `treeview:toggle` itself available.
+- **A keystroke nothing could press passed every check.** Both failures above
+  are silent: `keymap.on_key_pressed` misses, returns false, and nothing is
+  written anywhere. So `keymap.add` now records every stroke it cannot build
+  (`keymap.unreachable`, with the reason and the spelling that would have
+  worked), and `core.init` reports the list once boot is done and every plugin
+  has registered. Nothing is refused — a binding nobody can press is already
+  inert, and refusing it would turn a typo in one plugin's keymap into a boot
+  that fails for everybody. Covered by `make test-lua`, whose new
+  `tests/lua/unit/keymap_stroke_test.lua` pins the rule itself: which spellings
+  the input layer can build, why the others cannot, and that the suggestion
+  handed back is the string `on_key_pressed` really looks up.
+- **`make` could not generate the icon header.** `mk/build.mk` still called
+  `gen_icon.py` with the flags that existed before the generator moved into
+  `scripts/_cdin/`: `--out`, plus `--no-inl` for `make gen-icons`. Neither
+  exists now, and because `argparse` accepts unambiguous abbreviations,
+  `--out` was read as a prefix of `--out-dir`, `--out-ico` and `--out-inl`
+  and rejected as *ambiguous*. Every fresh clone hit it, because
+  `src/icon.inl` is generated and `make` has to produce it. CI never did:
+  the release workflows write the header themselves first, with the current
+  flags, so the rule had nothing left to run. Both invocations now use
+  `--out-inl` / no `.inl`, the rule also depends on the generator that
+  actually does the work, and the interpreter comes from `PYTHON` like the
+  rest of the build does — so the documented `make PYTHON=python` now covers
+  icon generation too, which it did not.
+- **A keystroke that named a command nobody registered.** `make test-plugins`
+  and `make test-workflows` cover this; both pass.
+- **The second of two side panels was given the whole window.**
+  `calc_split_sizes` placed the divider using the first locked child's size and
+  handed the remainder to the other, so it only ever honoured *one* locked pane
+  per split. That is correct until two panels are side by side — the file tree
+  and the extension panel — and then the second one, which had asked for 460px,
+  filled everything the first had not claimed and pushed the document off the
+  screen. Each locked child now gets the width it asked for.
+- **A pane collapsing next to a locked pane raised instead of collapsing.**
+  `Node:collapse` is now shared by closing a node's last view and by
+  `remove_view`, and it clears the lock before installing the empty view —
+  `add_view` refuses a locked node, so that branch could only ever assert.
+
+### Documentation
+
+- **The documentation is synced against both repositories.** Every claim was
+  checked against the code in both trees rather than against the previous page,
+  and a page that disagreed with the code was the bug. The split is now described
+  the same way everywhere: **four** things cross the line — vim, the extension
+  manager, the `default` theme, the fonts — not three. Three carry
+  `essential = true` in cdin-x and only those three plus the fonts reach a build.
+
+- **`docs/guides/extensions.md` is new**, and holds the arrangement in one place:
+  what a build contains, what each optional extension binds, the
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> panel, what installing actually
+  downloads, and where everything lands on disk.
+
+- **`themes.md`, `syntax.md` and `vim-keybindings.md` are gone.** All three
+  described extensions, and all three belong to the repository the extensions
+  live in — an extension's documentation should change when its code does. They
+  are replaced by pointers to cdin-x's `a-theme.md`, `a-syntax-definition.md` and
+  `plugins/vim.md`. The runtime's half — the theme registry, the tokenizer, the
+  loader — is still documented here.
+
+- **Installing extensions does not clone anything, and the docs said it did.**
+  Getting started told you to clone cdin-x and run `make link`; `plugins.md` said
+  a build installs nothing. The manager fetches one index file
+  (`X/manifest.lua`) and then exactly the files of the extension you picked, over
+  HTTPS with `curl` / `wget` / PowerShell, into a staging directory. You need a
+  cdin-x checkout to *build* cdin and to work on cdin-x — not to use it.
+
+- **Every optional extension now has its keys, and what it collides with.**
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> was listed beside
+  <kbd>Ctrl</kbd>+<kbd>O</kbd> as though the pair were a unit, and both belong to
+  cdin-x's `finder` — which is `essential = false` and in no build. So on a fresh
+  build all four of those keys are unbound, and a build's entire cdin-x keystroke
+  inventory is two: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> and
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>. Two tables now exist — one per
+  extension, one for the strokes where two extensions want the same key:
+  <kbd>Alt</kbd>+<kbd>J</kbd>/<kbd>K</kbd>/<kbd>L</kbd>, <kbd>Ctrl</kbd>+<kbd>D</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> and
+  <kbd>F2</kbd>. Three of those cost something real; the predicate-gated ones are
+  the design working and are called out as such.
+
+- **`Ctrl+Shift+M` and `Ctrl+Shift+L` are bound by the runtime's own bundle.** Both
+  were documented as things to bind yourself. The log had no binding at all, which
+  made it unreachable in a bare editor — the palette is a plugin, so with nothing
+  installed there was no route to it and no error either.
+  <kbd>Shift</kbd>+<kbd>M</kbd> still needs cdin-x's `vim-plugin-manager`
+  integration, because a global capital `M` is also how you type an `M`.
+
+- **`--no-plugins` and `config.plugins = false` do less than the docs claimed.**
+  They select the *site* directory. The mandatory set is unaffected, and what the
+  manager installed is in neither root — it keeps its own store under
+  `<data_home>/cdin/extensions/X`, loads it itself, and never reads
+  `config.plugins` — so those extensions survive the flag too. That is the case
+  people actually hit.
+
+- **Your `init.lua` cannot `require` a site plugin's module.** The loader extends
+  `package.path` as the first statement of `load_all()`, which is step 11 of the
+  boot order; your file is step 9. Three pages said the opposite, and the
+  `require` example had the wrong prefix — the site *root* is added, not
+  `site/plugins`, so the path is `plugins.<name>.…`.
+
+- **The Lua log is not absent from `cdin-log.txt`.** `commands.md` said no Lua
+  output reaches the file. It is mirrored in, tagged `LUA`, tracebacks included,
+  unless `CDIN_LUA_LOG=0`.
+
+- **`doc:delete-to-next-char` exists.** `commands.md` said it did not, three
+  lines after saying all sixteen `delete-to` commands exist. It is generated and
+  simply unbound.
+
+- **Panel details that were guesses.** The manager's keys are lowercase,
+  <kbd>Esc</kbd> is the only way out and there is no <kbd>q</kbd>, the catalog
+  index is ~18 KiB rather than ~16, the title-bar counts show *matches* while a
+  search is running rather than totals, and <kbd>Return</kbd> enables or disables
+  rather than opening a submenu. The two precedence rules do not agree with each
+  other either: the runtime loader takes the first name it sees (bundled beats
+  site), the manager takes the last root it scanned (a site checkout beats the
+  bundle).
+
+- **A theme installed from the panel is not registered as a theme root.** It is
+  written to the store and listed, but `themes.add_root` is only ever called for
+  the build's own theme directory and a cdin-x checkout in the site directory —
+  not the store. So it does not reach the theme switcher and `config.theme` cannot
+  find it by name. Documented as the gap it is, with the workaround.
+
+- **`make test-site-dir` is documented where it belongs.** It existed and was in
+  no page's list. It is the smallest suite and the easiest to skip, and it is the
+  only thing keeping cdin's `config.site_dirname` and cdin-x's copy of it the same
+  word.
+
+- **`make check` is not "lint and style".** `building.md` called it that in one
+  sentence while calling it broken in three others. It runs
+  `scripts/check.py`, which does not exist. **There is no lint or style checker in
+  this repository** — the compiler is it, at `-Wall -Wextra` without `-Werror`.
+
+- **`make debug-san` is not a sanitizer build.** It sets `SANITIZE=1`, which no
+  makefile reads, so it is `make debug` with extra steps. Troubleshooting's closing
+  section recommended it; it now says so and shows the flags to pass.
+
+- **`docs/` rewritten.** Eleven pages and a new `docs/README.md` index, with a
+  reading order. The old set had no index, duplicated the extension
+  documentation, and could not be navigated.
+- **The runtime/cdin-x boundary is now stated everywhere.** Every page used to
+  tell users to press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> and to run
+  `core:open-user-module` — neither of which the runtime owns. Both are cdin-x
+  plugins. The command reference now says so explicitly and explains why the
+  runtime leaves those keys unbound.
+- **`docs/guides/configuration.md` no longer inverts the load order.** It
+  claimed the user config "loads last, after the core and all extensions". It
+  loads *before* plugins, which is what makes a plugin able to override a key you
+  set and you able to override a key a plugin sets.
+- **`docs/guides/vim-keybindings.md` no longer describes files that do not
+  exist.** It listed `vimode.lua`, `ex.lua`, `fmenu.lua` and `shell.lua`; vim
+  mode is `X/core/vim/` in cdin-x, and there is no `fmenu.lua`. It also pointed
+  at `data/user/init.lua`, which is not a path cdin reads. *(Removed entirely in
+  the sync above; the pointers to cdin-x's `plugins/vim.md` replace it.)*
+- **New: `docs/guides/syntax.md`.** The highlighter, the tokenizer and the
+  definition format are in this repository and no page covered them. *(Removed
+  in the sync above: the tokenizer and the registry are the runtime's and are
+  documented in `internals.md`; writing a definition is cdin-x's, and that half
+  moved out with it.)*
+- **UTF-8 corruption removed from `docs/`.** Six pages had em-dashes and
+  box-drawing characters mangled into replacement characters, including the whole
+  architecture diagram.
+- `docs/architecture/extension-contract.md` rewritten as the normative list of
+  what cdin guarantees, with an explicit **not guaranteed** section — including
+  the functions cdin-x wraps today (`keymap.on_key_pressed`, the `RootView`
+  methods, `StatusView.get_items`) and the commands that belong to cdin-x.
+- `docs/guides/building.md` no longer claims SDL2 is auto-detected and
+  supported. `mk/config.mk` still has the path, but `mk/build.mk` hard-requires
+  `SDL3/SDL.h`, so an SDL2-only machine selects SDL2 and then fails. The page
+  now says SDL3 is required and why.
+
 ### Build, packaging & CI
 
 - `make` = `bin` + `bundle`; `make bin` = binary only, no cdin-x;
@@ -620,21 +771,23 @@ rather than merely empty.
   another checkout. `make help` still says "a plain `make` is all you need —
   plugins and themes ship inside `data/`", which is no longer true; the line is
   corrected below in the known issues rather than silently left to mislead.
-- The three release workflows and `docker.yml` check cdin-x out as a **sibling**
-  so the default `CDINX_DIR` resolves, and package the **assembled**
-  `build/…/data` — the tree sitting next to the binary they just built —
-  instead of the source `data/`. A release without the bundle cannot start, so
-  shipping the source tree was always wrong; it just did not matter while the
-  source tree *was* the whole editor.
-- `Dockerfile` copies `cdin-x/` into `/src/cdin-x` — checked out by `docker.yml`
-  into the build context — so `CDINX_DIR=../cdin-x` resolves with no extra
-  configuration, and copies the assembled `data/` into the image. No `CDINX_DIR`
+- The three release workflows check cdin-x out at `path: ../cdin-x` — a true
+  sibling, one level above the repo — which is what the default `CDINX_DIR`
+  (`$(abspath $(CURDIR)/../cdin-x)`) resolves to. `docker.yml` cannot do that:
+  `COPY` only reaches inside the build context, so it checks cdin-x out at
+  `./cdin-x` and the `Dockerfile` copies it to `/cdin-x`, the sibling position
+  the default expects. All four package the **assembled** `build/…/data` — the
+  tree sitting next to the binary they just built — instead of the source
+  `data/`. A release without the bundle cannot start, so shipping the source
+  tree was always wrong; it just did not matter while the source tree *was* the
+  whole editor.
+- **`Dockerfile` copies the assembled `data/` into the image.** No `CDINX_DIR`
   is baked into the image: the bundle is resolved at image build time.
 - Trailing-newline fixes in the three release workflows and the Dockerfile.
 
 ### Migration
 
-From `0.2.0-alpha.1`, or from a build of the short-lived self-contained layout:
+From `0.1.3`, which is the last published release:
 
 | You had | Do this |
 |---------|---------|
@@ -644,10 +797,33 @@ From `0.2.0-alpha.1`, or from a build of the short-lived self-contained layout:
 | `config.optional_plugins.<name> = false` | gone — it selected plugins from a directory that no longer exists |
 | a keymap naming `find-replace:*`, `tab:*`, `window:*`, `treeview:*`, `session:*`, `project-search:*`, `autocomplete:*`, `core:find-command`, `core:find-file`, `core:open-file`, `core:open-folder`, `core:reload-module`, `core:open-*-module` | bind it only if the matching cdin-x plugin is installed — `core:load-plugin` it, or add it to `config.plugins` |
 | `core.git.*` | `core.vcs_provider.status.*`, via `core.register_vcs_provider` |
-| `require "plugins.<name>"` across extensions | `require "X.core.<name>"`; the runtime appends the site directory to `package.path`, it does not rewrite names |
+| `require "plugins.<name>"` across extensions | `require "X.core.<name>"`; the runtime appends the **site root** to `package.path`, so an extension's own modules are `require "plugins.<name>.…"` — the `plugins.` prefix is not stripped |
+| a `require` of a site plugin's module from `init.lua` | move it into that plugin's `init()`, or into a command. The loader extends `package.path` as the first statement of `load_all()`, which runs *after* your file |
 | `config.site_dir = "<path>"` | still works; `config.site_dirname` is the new knob if you only want to rename the directory under the data home |
 
 ### Known issues and limitations
+
+- **Four of the five shortcuts on the start screen do nothing.**
+  <kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Tab</kbd>, <kbd>Return</kbd> and <kbd>Esc</kbd>
+  are printed by the empty view and unreachable;
+  <kbd>Ctrl</kbd>+<kbd>N</kbd> and clicking a recent item are what actually work.
+  `EmptyView:on_key_pressed` handles all four, and no code path calls it:
+  `events.lua` routes a key press to `keymap.on_key_pressed` and to nothing else,
+  so a key only ever reaches a command by name — and every command those strokes
+  name requires an open prompt, which the empty view has none of. **Not fixed in
+  this release**: it is a missing dispatch in `data/core/events.lua`, not a
+  documentation problem. It is recorded here because the screen printing a
+  keystroke that does nothing is the one thing that should not happen, and three
+  pages plus the extension contract were rewritten to stop claiming otherwise.
+
+- **Three keystrokes change meaning once particular extensions are installed.**
+  <kbd>Ctrl</kbd>+<kbd>R</kbd> stops reloading the log (`treeview:rename-key`),
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> stops duplicating a line
+  (`session:open-recent-dirs`), and <kbd>F2</kbd> stops switching the log's
+  stream (`treeview:toggle-key`). `keymap.add` prepends, so the extension loaded
+  later wins. There is no runtime binding to move; the fix is to rebind in
+  `init.lua`, which runs before every plugin. Tabulated in
+  `docs/guides/extensions.md`.
 
 - **The mandatory bundle must be self-contained.** Every `require "X.…"` inside
   an essential plugin has to resolve inside its own subtree, because the bundle
@@ -665,743 +841,57 @@ From `0.2.0-alpha.1`, or from a build of the short-lived self-contained layout:
   compatibility surface: an integration that uses its documented extension
   points works across the gap; one that reaches into a vim module's internals
   does not.
-- **`make check` and `make size` are still broken** — both call scripts that do
-  not exist (`scripts/check.py`, `scripts/bench.py`) — and `test` / `bench` are
-  still listed in `.PHONY` and in `make help`, which also still claims plugins
-  and themes ship inside `data/`. Carried over from `0.1.0-beta.7`; unchanged
-  here.
+- **Five advertised make targets are broken**: `check` and `size` call scripts
+  that do not exist (`scripts/check.py`, `scripts/bench.py`), `test` and `bench`
+  are `.PHONY` entries with no rule, and `debug-san` sets `SANITIZE=1`, which no
+  makefile reads — so it is `make debug` with extra steps. `make help` also still
+  claims plugins and themes ship inside `data/`. All documented as broken now
+  rather than advertised. Carried over from `0.1.0-beta.7`.
 - **C-level test tiers (unit / integration / e2e) still do not exist.** Everything
   tested in this release is the Lua data layer, under a plain `lua`.
 
 ### Stability
 
-- **Zero C changes.** 114 files, all Lua, Python, Make or Markdown. `src/` is
-  untouched: `src/lua/api.c` already puts `EXEDIR/data/?.lua` and
-  `EXEDIR/data/?/init.lua` on `package.path`, and that is still enough.
+- **The C layer grew, and stayed small.** Five files under `src/` are touched:
+  `src/core/logger.{c,h}` (a second file handle for the Lua mirror),
+  `src/fs/ops.c` (`mkdir_all` no longer reports "Permission denied" for every
+  absolute path on Windows — `C:` is a root to skip, not a directory to
+  create), `src/lua/api.c` (publishes the log path to Lua as `LOGFILE`, so the
+  log view can name the file instead of leaving the user to guess) and
+  `src/main.c` (log level from the environment, size-bounded rotation at
+  startup, and `core.quit` asking the loop to stop so `main()` unwinds the
+  window in order rather than `os.exit()` from inside SDL's event dispatch).
+- **`package.path` needs no help.** `src/lua/api.c` already put
+  `EXEDIR/data/?.lua` and `EXEDIR/data/?/init.lua` on it, and the loader only
+  ever appends — so moving the extension set to a sibling checkout cost no C.
 - The alpha cycle continues. The loader, `config.plugins`, `config.site_dirname`
   and the extension points above are written down in
   `docs/architecture/extension-contract.md`, and a change to any of them will be
   a breaking change.
+- **The contract was audited in the same pass, and three of its claims were
+  wrong.** `View:on_key_pressed` is listed nowhere and now carries an explicit
+  row — defined by nothing, no dispatch path calls it. `core.project` appeared
+  twice in the *not guaranteed* table, once saying to use `set_project_dir` and
+  once saying it does not exist. And the side-panel section told extensions to
+  attach to an edge rather than the active node, while both cdin-x panels still
+  split the active node — the exact conflict that section warns about, so it now
+  says so. It is harmless with one panel and a fight the day there are two.
+- **Not verified by a test run.** No `lua` and no C compiler were available where
+  this pass was done, so `make` and the four suites could not be executed. Every
+  claim above was checked by reading the source in both trees — file and line —
+  and the two code fixes are each one line of intent. A run of `make && make
+  debug` plus the four suites is still owed before this is tagged.
 
+### Theme authoring, in cdin-x
 
-## [0.2.0-alpha.1] — 2026-09-26
-
-### ⚠️ BREAKING CHANGES
-
-This release introduces a **fundamental architectural restructuring** of the cdin editor. The repository boundary between `cdin` (editor runtime) and `cdin-x` (extension ecosystem) has been enforced for the first time.
-
----
-
-### Architecture — Extension Ecosystem Split
-
-**The single largest change in cdin's history.** All plugin, theme, and font assets have been extracted from the `cdin` repository into the separate `cdin-x` repository. This enforces a clean separation between the editor host and the extension ecosystem.
-
-#### What changed
-
-- **Removed from `cdin`**: `data/plugins/`, `data/themes/`, `data/fonts/`, `data/user/` — all deleted
-- **cdin-x owns everything**: All built-in extensions, themes, language syntax definitions, and bundled fonts now live exclusively in `cdin-x/`
-- **`cdin` now contains only**: `src/` (C host), `data/core/` (Lua runtime), `data/init.lua` (entry point), build system, docs
-- **`cdin-x` contains**: `core/` (extension manager), `X/` (extension catalog), `fonts/` (bundled fonts), `scripts/`, `docs/`
-
-#### Directory mapping
-
-| Old location | New location |
-|---|---|
-| `cdin/data/plugins/core/` | `cdin-x/X/core/` |
-| `cdin/data/plugins/languages/` | `cdin-x/X/languages/` |
-| `cdin/data/plugins/optional/` | `cdin-x/X/optional/` |
-| `cdin/data/plugins/vim/` | `cdin-x/X/core/vim/` |
-| `cdin/data/plugins/treeview/` | `cdin-x/X/core/treeview/` |
-| `cdin/data/plugins/tab/` | `cdin-x/X/core/tab/` |
-| `cdin/data/plugins/window/` | `cdin-x/X/core/window/` |
-| `cdin/data/themes/*.lua` | `cdin-x/X/themes/<name>/theme.lua` |
-| `cdin/data/fonts/*` | `cdin-x/fonts/` |
-| `cdin/data/user/init.lua` | `~/.config/cdin/user/init.lua` |
-
-#### Extension lifecycle
-
-- **Built-in extensions** (vim, treeview, tab, window, core, autocomplete, autoreload, autoupdate, projectsearch, session, trimwhitespace): Always present, cannot be disabled or removed
-- **Optional extensions** (theme_switcher, unicode_inspect, rtl_toggle, language packs, community themes): Installed per-user via cdin-x extension manager
-- **Extension installation**: `scripts/install.sh /path/to/cdin` copies runtime + built-ins from cdin-x into cdin
-- **User config**: Follows platform conventions (`~/.config/cdin/user/init.lua` on Linux/macOS, `%APPDATA%/cdin/user/init.lua` on Windows)
-
-#### Runtime bootstrapping
-
-- `src/lua/api.c` bootstrap now adds `data/core/x/`, `data/X/`, and `data/X/core/` to `package.path`
-- `data/core/init.lua` bootstraps via `require "core.x"` → `cdin_x.bootstrap()` instead of scanning `data/plugins/`
-- `data/core/lifecycle.lua` `load_plugins()` now delegates entirely to the cdin-x extension manager
-- If cdin-x is unavailable, the editor still starts with core runtime only (graceful degradation)
-
-#### Theme system
-
-- `data/core/themes.lua` now loads themes from `data/core/x/X/themes/<name>/theme.lua` via `dofile`
-- Falls back to legacy `require "themes.<name>"` for backward compatibility
-- `data/core/style.lua` uses `config.fonts_dir` instead of hardcoded `EXEDIR .. "/data/fonts"`
-
-#### Font system
-
-- Fonts moved to `cdin-x/fonts/` (font.ttf, monospace.ttf, icons.ttf, fallback.ttf, emoji.ttf + LICENSE files)
-- `scripts/install.sh` copies fonts to `cdin/data/fonts/` during installation
-- `data/core/style.lua` references `config.fonts_dir` which points to the installed font directory
-
-#### Build & Install
-
-- `cdin-x/scripts/install.sh` now creates `data/fonts/` and copies fonts in addition to runtime + extensions
-- `cdin-x/scripts/validate.lua` validates that font files exist in `fonts/`
-- Development symlinks created: `data/X` → `cdin-x/X`, `data/core/x` → `cdin-x/core`, `data/fonts` → `cdin-x/fonts`
-
-### 🎨 Theme System Simplified
-
-- Themes are now **single-file**: each theme is just `theme.lua` — no `init.lua`, `manifest.lua`, or `README.md` needed
-- `cdin-x/X/themes/<name>/theme.lua` is the only file required to define a theme
-- `data/core/themes.lua` auto-discovers themes by scanning `data/core/x/X/themes/` for `theme.lua` files
-- `cdin-x/scripts/new-plugin.lua` creates simplified `theme.lua` for themes vs full plugin scaffolding
-- `cdin-x/scripts/generate-manifest.lua` auto-generates catalog entries from `theme.lua` `name` fields
-- Theme creation is now ~30 lines instead of requiring 4 boilerplate files
+- Themes are **single-file**: each theme is just `theme.lua` — no `init.lua`,
+  `manifest.lua` or `README.md` needed.
+- `X/themes/<name>/theme.lua` is the only file required to define a theme —
+  a handful of lines instead of four boilerplate files.
+- `data/core/themes.lua` discovers them by scanning each root for
+  `<name>/theme.lua`, over the user themes directory, `EXEDIR/data/themes` and
+  any root an extension registered with `themes.add_root()` — earlier roots
+  win, so a user theme overrides a bundled one by name.
+- `cdin-x/scripts/new-plugin.lua` and `generate-manifest.lua` know a theme is a
+  single file and scaffold accordingly.
 - `cdin-x/docs/architecture/plugin-system.md` updated to reflect simplified theme structure
-
----
-
-### 🔧 Fixed
-
-- `data/core/project.lua`: Updated `require "plugins.treeview.cache"` → `require "X.core.treeview.cache"`
-- `data/core/rootview/empty_view.lua`: Updated `require "plugins.core.session"` → `require "X.core.session"`
-- `data/core/views/statusview.lua`: Updated `require "plugins.tab.manager"` → `require "X.core.tab.manager"`
-- `data/core/commands/core.lua`: `core:open-user-module` now opens `~/.config/cdin/user/init.lua` instead of `data/user/init.lua`
-- `src/lua/api.c`: Bootstrap now includes `data/core/x/`, `data/X/`, and `data/X/core/` in package.path for `require "core.x"` to work
-
-### 📝 Updated Documentation
-
-- `AGENTS.md`: Updated repo layout to reflect cdin/cdin-x separation, added Extension Architecture section
-- `CONTRIBUTING.md`: Updated directory listing, plugin development instructions now reference `cdin-x/X/<category>/`
-- `CHANGELOG.md`: This entry
-- `docs/guides/getting-started.md`: Updated directory structure, user config path
-- `docs/guides/plugins.md`: Rewritten for cdin-x extension ecosystem
-- `docs/guides/themes.md`: Updated theme locations and creation instructions
-- `docs/guides/configuration.md`: Updated config file path
-- `docs/guides/commands.md`: Updated `core:open-user-module` description
-- `docs/guides/troubleshooting.md`: Updated plugin disable instructions
-- `docs/architecture/overview.md`: Updated plugin loading description
-- `docs/architecture/internals.md`: Updated boot sequence and plugin loading sections
-- `docs/architecture/plugin-system.md`: Updated theme asset location
-- `website/src/consts/faqs.ts`: Updated all data/ references to cdin-x ecosystem
-- `website/src/pages/AboutUs.tsx`: Updated plugin and config path references
-- `website/src/components/Landing/Philosophy.tsx`: Updated plugin path reference
-
----
-
-## [0.1.0-beta.1] — 2025-12-27
-
-This is the first public release. It's a beta: the core editor is functional and usable day-to-day, but some things are still rough. APIs may change, a few documented features are stubs, and there are almost certainly bugs. Bug reports and patches are welcome.
-
-### Core editor
-
-- Windowed editor built on SDL3, with a custom title bar drawn entirely in Lua. No OS window decorations — cdin draws its own minimize/maximize/close buttons and handles the drag region via SDL's hit-test API.
-- Custom renderer backed by stb_truetype. Three bundled fonts: a proportional UI font, a monospace editor font, and an icon font.
-- Event loop running at a configurable FPS (default 60), with coroutine-based background threads for project scanning and similar tasks.
-- Document model with unlimited undo/redo (configurable cap, default 10,000 steps) and undo merging for consecutive edits within a short time window.
-- Project file scanner runs in a background thread and rescans every 5 seconds. Respects `config.ignore_files` (default: dot files).
-- Files dropped onto the window open as new documents. Directories dropped open a new editor instance.
-- Unsaved-changes dialog on quit.
-- On crash, dirty documents are saved to `<filename>~` and a stack trace is written to `error.txt`.
-
-### Vim mode
-
-- Modal editing with three modes: Normal, Insert, Visual.
-- Every buffer opens in Normal mode by default.
-- Current mode shown in the status bar as `[NORMAL]`, `[INSERT]`, or `[VISUAL]`.
-- Motions in Normal and Visual mode: `h j k l`, `w b e`, `0`, `$` (via `shift+4`), `^` (via `shift+6`), `gg`, `G`.
-- Operators: `d`, `dd`, `D`, `yy`, `cc`, `x`, `p`, `u` (undo), `r` (redo).
-- Mode transitions: `i`, `a`, `o`, `I`, `A`, `O`, `v`, `Escape`.
-- Tab in Normal mode cycles to the next open tab.
-- Ex command line opened with `:` (or `shift+;`).
-- Ex command history navigable with Up/Down while the command line is open.
-- Pending-key timeout of 600 ms for two-key sequences like `gg` and `dd`.
-
-### Ex commands
-
-`:w`, `:w!`, `:wa` — save current file / save all  
-`:q`, `:q!`, `:qa`, `:qa!` — close / force-close / quit  
-`:wq`, `:x`, `:wqa`, `:xa` — save-then-close variants  
-`:e <path>`, `:edit <path>` — open file  
-`:new <path>` — create and open a new file  
-`:mkdir <path>` — create directory tree  
-`:rm <path>`, `:delete <path>` — remove file or directory  
-`:rename <old> <new>`, `:copy <src> <dst>`, `:move <src> <dst>` — file operations  
-`:ls [path]` — list directory in a scratch buffer  
-`:pwd` — print working directory  
-`:cd <path>` — change working directory  
-`:<number>` — go to line  
-`:!<cmd>` — run shell command; output appears in a new scratch buffer  
-`:tree` — focus/toggle the project tree  
-`:help` — show ex command reference in a scratch buffer  
-
-File-path arguments to `:e`, `:new`, `:mkdir`, `:rm`, `:rename`, `:copy`, `:move`, `:cd` support tab-completion.
-
-### File manager menu (`m`)
-
-Pressing `m` in Normal mode (or via `vim-fmenu:open`) opens a context-sensitive action menu. The available actions depend on where focus is:
-
-- When the tree view is focused on a file: rename, delete, copy, move, open in editor, run shell command on it.
-- When the tree view is focused on a directory: new file, new directory, rename, delete, run shell command.
-- When a document is active: actions apply to that document's file.
-
-### Standard keybindings (non-vim)
-
-The full default keymap is documented in [Command Reference](docs/reference/commands.md). Highlights:
-
-`Ctrl+Shift+P` — command palette  
-`Ctrl+P` — fuzzy open file from project  
-`Ctrl+O` — open file by path  
-`Ctrl+N` — new document  
-`Ctrl+S` / `Ctrl+Shift+S` — save / save as  
-`Ctrl+F` / `Ctrl+R` — find / replace  
-`Ctrl+G` — go to line  
-`Ctrl+Z` / `Ctrl+Y` — undo / redo  
-`Alt+1`–`9` — switch to tab by index  
-
-### Plugins (bundled)
-
-- **treeview** — project tree panel. Shows git status markers (A/M/D/?) when `config.treeview_git_enabled` is true. Polls every 2 seconds by default. Toggle hidden files with `Ctrl+Shift+H` or via `config.show_hidden_files`.
-- **autocomplete** — word completion from all open documents. Shows up to 6 suggestions by default (`config.autocomplete_max_suggestions`).
-- **projectsearch** — search across all project files; results open in a dedicated view.
-- **autoreload** — detects when a file is changed on disk by another process and offers to reload it.
-- **trimwhitespace** — strips trailing whitespace from every line on save. Runs automatically; no configuration needed.
-
-### Build system
-
-- `make` / `make build` — release build
-- `make debug` — debug build (`-O0 -g3`)
-- `make run` — build and run
-- `make install` — install to `PREFIX` (default `/usr/local`)
-- `make clean` / `make distclean`
-- `make info` — print build configuration summary
-- Version is derived from the nearest git tag; falls back to `0.0.0+<commit>`.
-- Supports SDL3 (required) and Lua 5.3 or 5.4 (auto-detected via pkg-config).
-- Linux, macOS, and Windows (MinGW) are all supported platforms.
-
-### Known issues and limitations
-
-- The `docs/guides/` directory in the repository contains stubs for several planned guides (configuration, plugin development, vim keybindings, API reference). This release ships those documents.
-- No plugin package manager. Plugins are installed by dropping Lua files into `data/plugins/`.
-- The Windows build requires manual SDL3 setup (see [Building from Source](docs/guides/building.md)).
-- No LSP integration yet.
-- No multiple cursors.
-- Visual mode only supports character-wise selection. Line-wise and block-wise visual modes are not implemented.
-
-## [0.1.0-beta.2] — 2026-07-05
-
-This release focuses on a major internal refactor of the data layer and plugin architecture. While user-facing behavior remains largely unchanged, the internal structure has been significantly reorganized to improve modularity, maintainability, and future extensibility.
-
-No intentional breaking changes to core editor behavior were introduced, but due to the scope of the refactor, some instability or plugin-related regressions may occur.
-
-### Internal architecture
-
-* Major refactor of the internal `data/` structure into a cleaner, modular layout.
-* Improved separation of concerns across core systems without altering runtime behavior.
-* Reorganized initialization and data flow to better support future plugin and feature expansion.
-* Reduced coupling between subsystems for easier debugging and testing.
-* Enhanced plugin system foundation with clearer lifecycle handling and session isolation.
-
-### Plugins
-
-* Introduced a **session plugin system** to manage runtime session state in a structured and extensible way.
-### Tooling & Scripts
-
-* Added an automated **update script** to streamline project updates and maintenance workflows.
-
-### Stability notes
-
-* Core editor behavior remains unchanged from `0.1.0-beta.1`.
-
-### Versioning note
-
-* This release remains within the beta cycle.
-* APIs are still considered unstable and may change before the first stable release.
-
-## [0.1.0-beta.3] — 2026-07-05
-
-This release focuses on improving the startup experience and fixing several issues introduced during the previous internal refactor.
-
-### Features
-
-- Added a subtle background logo to the welcome/empty view for a cleaner visual appearance.
-
-### Bug Fixes
-
-- Fixed the Recent Files list not being displayed correctly in some situations.
-- Fixed an issue where certain terminal windows appeared unexpectedly when launching cdin.
-- Fixed a runtime error related to `_recent_rects` in the empty view.
-
-### Stability
-
-- Improved startup reliability following the internal architecture changes introduced in `0.1.0-beta.2`.
-
-## [0.1.0-beta.4] — 2026-07-05
-
-### Features
-
-- **macOS Build:** Added official macOS build support — cdin is now distributed for macOS alongside Linux and Windows. ([`9a76e3e`](../../commit/9a76e3e))
-- **Menu Navigation:** Navigate between options in the shell menu, fmenu (NerdTree-like file manager), and doc menu using `↑`/`↓` arrow keys, and confirm selection with `Tab`. ([`51c95a4`](../../commit/51c95a4))
-- **Logo:** Auto-generate logo backgrounds via the new `gen_logo_lua` scripts. ([`846297b`](../../commit/846297b))
-
-### Bug Fixes
-
-- **macOS:** Fixed incorrect bash version used in macOS builds. ([`5c83e07`](../../commit/5c83e07))
-- **File Open:** Fixed `Ctrl+O` shortcut not opening the file picker correctly. ([`900a092`](../../commit/900a092))
-
-### Refactoring
-
-- **Session:** Added a new option to automatically reopen the last active file on startup — disabled (`false`) by default. ([`29b11ae`](../../commit/29b11ae))
-
-## [0.1.0-beta.5] — 2026-07-10
-
-### Overview
-
-This release is a major architectural milestone for cdin.
-
-The focus of this release is not a large set of user-facing features, but a complete improvement of the internal foundation: the Lua layer has been simplified, core functionality has moved behind cleaner C-powered APIs, the event bus system has been removed, and several internal systems have been redesigned for better modularity and future extensibility.
-
-Filesystem operations, searching, Git integration, state handling, and lifecycle management are now organized around dedicated APIs and modules, creating a cleaner foundation for future plugins and editor features.
-
-Due to the scope of these changes, some internal Lua APIs and plugin behaviors may require updates.
-
----
-
-# Breaking Changes
-
-### Event system removal
-
-- Removed the old `eventbus` system from both C and Lua.
-- Plugins using `eventbus.emit(...)` or depending on event bus initialization must migrate to the new architecture.
-
-### Lua structure changes
-
-- Reorganized the `data/` Lua structure.
-- Removed redundant modules and moved functionality into cleaner core APIs.
-- Internal module paths may have changed.
-
-### Keymap changes
-
-- Centralized default keymap registration into `core/keymaps/default.lua`.
-- Plugins or user configurations that relied on previous startup ordering may require adjustments.
-
-### Document hooks
-
-- Replaced document method monkey-patching with a structured hook table system.
-- Plugins extending document behavior should migrate to the new hook mechanism.
-
----
-
-# New Features
-
-## Core Architecture
-
-### State and project management
-
-- Added `core.state` for centralized runtime state management.
-- Added `core.project` for project lifecycle and project-related operations.
-- Created a cleaner foundation for future session and workspace features.
-
-### Lifecycle system
-
-- Added Lua initialization and lifecycle management.
-- Plugins can now follow structured initialization phases instead of relying on implicit loading behavior.
-
-### Logging system
-
-- Added a unified logger available from both C and Lua.
-- Improved debugging and internal diagnostics.
-
-### Core helpers
-
-- Added `core.active_docview()` helper.
-- Reduced the need for plugins and internal components to manually traverse views.
-- Added shared utilities such as configuration helpers and copy utilities.
-
----
-
-# Public APIs
-
-## Filesystem API
-
-- Added a public `fs` API exposed to Lua.
-- Provides unified filesystem operations and path handling.
-- Reduces duplicated filesystem logic across plugins and core modules.
-
-## Search API
-
-- Added a public `search` API exposed to Lua.
-- Search functionality is now powered by the native C search engine.
-- Plugins can use the same search implementation as the editor core.
-
-## Git API
-
-- Added centralized `core.git` APIs.
-- Git operations are now shared between core components and plugins.
-- Removed duplicated Git command handling from individual modules.
-
----
-
-# Search Improvements
-
-- Reworked search around the native `search.c` engine.
-- Improved consistency between project search and internal search functionality.
-- Removed older duplicated Lua-based search logic.
-- Added a cleaner API layer for future search extensions.
-
----
-
-# Git Integration
-
-- Centralized Git status, branch, and repository operations.
-- Improved Git usage across treeview, statusbar, and plugins.
-- Git information is now provided through `core.git.status`.
-
-### Git UI improvements
-
-- Treeview Git badges now use centralized Git APIs.
-- Status bar Git information now reads from the Git API instead of executing commands directly.
-
----
-
-# UI & Editor Improvements
-
-## Status bar
-
-- Redesigned status bar layout.
-- Added Vim mode indicator/pill.
-- Git branch and status information are now integrated through the new Git API.
-
-## Project search
-
-- Improved search result presentation.
-- Added match context display.
-- Added highlighted matches.
-- Added progress indication during searches.
-
-## Tabs and windows
-
-- Added tab/window command support.
-- Improved tab and window management architecture.
-- Removed unnecessary tab abstractions by integrating logic directly into the tab system.
-
-## Theme
-
-- Added a new built-in theme.
-
-## Log view
-
-- Added copy and paste support for log entries.
-
----
-
-# Vim Improvements
-
-- Unified write/quit mappings through the `ex` command system.
-- Improved usage of `core.active_docview()`.
-- Reduced duplicated view lookup logic.
-
----
-
-# Configuration & Initialization
-
-- Added dedicated configuration and event modules.
-- Improved initialization order and module separation.
-- Boot sequence has been simplified.
-
----
-
-# Bug Fixes
-
-### Git
-
-- Fixed Linux Git ignored-file detection error:
-
-```bash
-git ls-files -i must be used with either -o or -c
-```
-
-- Fixed Git subprocess handling issues on Windows.
-
-### Editor behavior
-
-- Fixed insert mode `m` key incorrectly opening menus.
-- Fixed incorrect directory label rendering in empty views.
-
-### Build & Platform
-
-- Fixed several platform-specific build issues.
-- Improved consistency of Git and shell behavior across supported platforms.
-
----
-
-# Refactoring & Internal Changes
-
-- Removed event bus dependencies from the codebase.
-- Replaced document monkey-patching with hook tables.
-- Removed obsolete Lua files and duplicated logic.
-- Simplified core module boundaries.
-- Fixed C core submodule paths.
-- Updated Makefile and build structure.
-- Marked required build scripts as executable through Git attributes.
-- Improved internal synchronization between C and Lua layers.
-
----
-
-# Platform Notes
-
-| Platform | Status |
-|----------|--------|
-| Linux | Supported. Native APIs and Git integration improved. |
-| Windows | Supported. Git subprocess handling improved. |
-| macOS | Supported. Existing release pipeline improvements continue. |
-
----
-
-# Stability Notes
-
-This release focuses on architecture rather than major visual changes.
-
-The main goal is creating a cleaner and more maintainable foundation for future cdin development, including:
-
-- More powerful plugins
-- Better project management
-- Advanced editor automation
-- Improved language tooling support
-
-The beta cycle continues, and APIs may still change before the first stable release.
-
-## [0.1.0-beta.6] — 2026-07-13
-
-### Features
-
-- **Auto-update notifications:** cdin now includes a lightweight manual update checker that queries GitHub releases and notifies users when a newer version is available. The check runs asynchronously to avoid blocking the editor and displays an update badge in the status bar when a new release is found. ([`data/plugins/core/autoupdate.lua`](data/plugins/core/autoupdate.lua))
-
-- **In-editor update check command:** Added `autoupdate:check` to manually check for the latest cdin release from GitHub without leaving the editor. The command can be triggered from the command palette or bound to a key.
-
-- **Update notification dismissal:** Added `autoupdate:skip-version` to hide the current update badge for the active session.
-
-- **Desktop shortcut & default text editor registration:** The installer now creates a desktop shortcut and registers cdin as a default text editor handler on supported platforms. ([`710cb08`](../../commit/710cb08))
-
-- **Windows file icons:** Files associated with cdin (`.txt`, `.py`, `.lua`, and all registered extensions) now show the cdin icon in Explorer across all view modes — Details, Large Icons, Tiles. Previously the icon appeared only on the desktop/taskbar shortcut; files themselves kept the Windows default icon.
-
-- **Gen-logo / gen-icon integrated into cdin script:** `python3 scripts/cdin.py gen-logo` and `gen-icon` are now first-class subcommands — no need to call the generator scripts directly. ([`38af4ab`](../../commit/38af4ab))
-
-- **Git: show ignored files in tree:** The treeview now surfaces git-ignored files when `config.treeview_git_enabled` is true. ([`b3ce889`](../../commit/b3ce889))
-
-- **Screenshots & README:** Added new screenshots to the repository and updated README copy. ([`497202b`](../../commit/497202b))
-
-### Bug Fixes
-
-- **Keymaps:** Fixed `R` and `E` keys misbehaving in Normal and Insert mode. ([`ddfd78d`](../../commit/ddfd78d))
-
-- **macOS:** Fixed `realpath` not available in stdlib on macOS — now uses a compatible alternative. ([`3760e43`](../../commit/3760e43))
-
-- **macOS build:** Fixed incorrect build in macOS/Linux/Windows CI pipeline. ([`e1bf07d`](../../commit/e1bf07d))
-
-- **Icon:** Fixed `icon.inl` filename mismatch causing build failures. ([`f5ad624`](../../commit/f5ad624))
-
-- **CI:** Fixed SDL3 cache SDL3 dependency caching issues across Linux and macOS. ([`9002817`](../../commit/9002817), [`b99509f`](../../commit/b99509f))
-
-- **CI:** Fixed `rsvg-convert` installation step in the icon generation workflow. ([`0202de4`](../../commit/0202de4))
-
-- **Windows installer:** `--shortcut` now automatically implies `--register-filetypes` — previously the two flags had to be passed together or file-type associations were skipped entirely.
-
-- **Windows installer — locked DLL on reinstall:** Reinstalling over an existing installation raised `PermissionError: [WinError 32]` when trying to overwrite `SDL3.dll` or `lua*.dll`. The installer now terminates any running `cdin.exe` before touching the install directory, skips DLL copies whose size and modification time already match the source (the common case after a clean reinstall), and retries with back-off for transient locks from Windows Defender or the shell. ([`scripts/_cdin/install.py`](scripts/_cdin/install.py))
-
-- **Windows build — stale `data/` after source edits:** Changes to Lua files under `data/` (e.g. `data/core/init.lua`) were not reflected when running a freshly built binary. `make build` creates the `build/windows-release/data` entry only once (`[ ! -e ... ]` guard); on Windows, `ln -s` frequently produced an empty directory or a non-transparent junction instead of a working symlink, so all subsequent builds silently used the original copy. The build script now syncs `data/` into the build output directory after every successful `make build` when the existing entry is not a working junction. ([`scripts/_cdin/build.py`](scripts/_cdin/build.py))
-
-### Refactoring & Tooling
-
-- **Build & install scripts:** Removed the old shell-based scripts and replaced them with a unified Python codebase (`scripts/cdin.py`) in sync with GitHub Actions workflows. ([`c6dbd2c`](../../commit/c6dbd2c))
-
-- **CI:** Platform release workflows are now reusable via `workflow_call`, eliminating duplication across Linux, macOS, and Windows jobs. ([`3106531`](../../commit/3106531))
-
-- **CI:** Added SDL3 dependency caching to reduce build times. ([`cb30186`](../../commit/cb30186))
-
-- **Old update script removed:** The previous standalone update script has been removed; update checking is now handled by the `autoupdate` plugin. ([`a0fe22f`](../../commit/a0fe22f))
-
-### UI & Theme
-
-- **Theme contrast:** Increased contrast across the default theme for better readability. ([`7a6f42c`](../../commit/7a6f42c))
-
-- **Theme & syntax highlight:** Updated color palette and syntax highlighting rules. ([`82bd197`](../../commit/82bd197))
-
-- **Status bar:** Changed the modified-file indicator symbol for clarity. ([`85ac6ee`](../../commit/85ac6ee))
-
-### Documentation
-
-- Updated contributing guide. ([`7edd665`](../../commit/7edd665))
-- Added new documentation pages. ([`cf5fee4`](../../commit/cf5fee4), [`bbdea32`](../../commit/bbdea32), [`2a44eab`](../../commit/2a44eab))
-
-### Configuration
-
-The auto-update checker is a lightweight manual GitHub release checker.
-
-| Command | Default bind | Description |
-|---|---|---|
-| `autoupdate:check` | `Ctrl+Shift+U` | Check GitHub for a newer release |
-| `autoupdate:skip-version` | — | Dismiss the current update badge |
-
-### Stability
-
-- The update check runs asynchronously and never blocks the editor UI. If GitHub is unreachable the editor continues normally.
-- No new C code. The autoupdate plugin is implemented entirely in Lua and uses standard system process execution for GitHub API requests.
-- Beta cycle continues; APIs may still change before the first stable release.
-
-## [0.1.0-beta.7] — 2026-09-23
-
-Largest release so far: 102 commits, 218 files changed, +21,760 / −149. Headline features are full UTF-8/RTL/Arabic shaping support, a theme system with 10 built-in themes, an optional-plugin system, a Lua test suite, Docker images, and a complete documentation website. The beta cycle continues; APIs may still change before the first stable release.
-
-### Features
-
-- **UTF-8, bidi & Arabic shaping pipeline:** New text modules `data/core/text/utf8.lua` (decode/encode/length/sanitize, invalid bytes become U+FFFD), `data/core/text/bidi.lua` (base-direction detection, directional runs, visual reordering) and `data/core/text/shaper.lua` (contextual Arabic presentation forms, lam-alef ligatures, correct joining for Persian پ چ ژ گ ک ی). Persian/Arabic text such as «سلام» now renders shaped and right-to-left. ([`dd5ac5d`](../../commit/dd5ac5d))
-
-- **RTL rendering in the editor:** `DocView:draw_line_text` detects RTL lines, shapes the whole line and reorders it visually; pure-LTR lines keep the fast token-by-token path. (`data/core/views/docview.lua`)
-
-- **Font fallback chain:** Bundled `data/fonts/fallback.ttf` (Vazirmatn, OFL — `LICENSE-fallback.txt`) and `data/fonts/emoji.ttf` (`LICENSE-emoji.txt`). `style.lua` auto-attaches them to the UI, big and code fonts via `font:add_fallback`, so Arabic/Persian glyphs and emoji resolve through the fallback chain — the primary fonts themselves contain no Arabic. ([`00bc28e`](../../commit/00bc28e), [`fc42267`](../../commit/fc42267))
-
-- **Theme system:** New registry `data/core/themes.lua` plus 10 built-in themes under `data/themes/`: `default`, `catppuccin-mocha`, `dracula`, `github-light`, `gruvbox-dark`, `monokai`, `nord`, `solarized-dark`, `solarized-light`, `tokyo-night`. Selected with `config.theme`. ([`fc42267`](../../commit/fc42267), [`523a427`](../../commit/523a427))
-
-- **Optional plugins:** New directory `data/plugins/optional/` with 3 plugins, each individually switchable through `config.optional_plugins` and skipped by the loader when disabled, with deterministic (sorted) plugin load order:
-  - `rtl_toggle` — `rtl:toggle-direction` (`Ctrl+Alt+R`, cycles auto → ltr → rtl) and `rtl:toggle-shaping` (`Ctrl+Alt+S`).
-  - `theme_switcher` — `core:change-theme` (`Ctrl+Alt+T`), a fuzzy picker over all registered themes.
-  - `unicode_inspect` — `unicode:inspect` (`Ctrl+Alt+U`), shows the codepoints of the selection or caret. ([`dd6a781`](../../commit/dd6a781), [`4c62daa`](../../commit/4c62daa))
-
-- **New config keys:** `direction` (`"auto" | "ltr" | "rtl"`), `shaping_enabled`, `theme`, `theme_auto_reload`, `optional_plugins`. (`data/core/config.lua`, [`ff3de84`](../../commit/ff3de84))
-
-- **Lua test suite:** New `tests/lua/` suite — runner `run.lua`, shared `harness.lua`, 4 unit tests (`text_utf8`, `text_bidi`, `text_shaper`, `themes`) and 3 integration tests (`text_pipeline`, `doc_edit`, `config_style_theme`). Green run: `LUA TESTS OK (1587 asserts, 7 files)`; failures print a traceback and exit with code 1. Run from the repo root with `lua tests/lua/run.lua`. ([`c4ea56c`](../../commit/c4ea56c), [`d899198`](../../commit/d899198), [`a395dad`](../../commit/a395dad), [`b9ad541`](../../commit/b9ad541))
-
-- **Docker:** New root `Dockerfile` (multi-stage, `ubuntu:22.04`, SDL 3.2.14 built from source, non-root user `cdin` uid 1000), `docker-compose.yml` (X11 socket + `ipc: host` for MIT-SHM, optional GPU passthrough) and `.dockerignore`. ([`99fa1c3`](../../commit/99fa1c3), [`c4baefc`](../../commit/c4baefc))
-
-- **CI: Docker publishing:** New `.github/workflows/docker.yml` builds the image on every push/PR to `main`/`develop` without pushing (GHA cache, amd64); `release.yml` gained a `publish-docker` job that pushes `bitsgenix/cdin` to Docker Hub on tagged releases using `DOCKER_USERNAME`/`DOCKER_TOKEN`. ([`3a2641a`](../../commit/3a2641a))
-
-- **Dependabot:** New `.github/dependabot.yml` — weekly (Monday 09:00 `Asia/Tehran`) updates for `github-actions`, `docker` and the website's `npm` dependencies, with `chore(ci)`/`chore(docker)`/`chore(website)` commit prefixes. Several bumps already merged (ubuntu base, login-action, buildx, upload/download-artifact, configure-pages, eslint, @types/node, typescript-eslint, globals). ([`99fa1c3`](../../commit/99fa1c3))
-
-- **Website:** New `website/` — a full Vite + React + TypeScript + TailwindCSS + shadcn/ui site with react-router: responsive sticky navbar, hero, features, FAQs, philosophy, contributors (GitHub API), footer, light/dark theme toggle, Fira Code typography and the cdin color theme. Docs pages render the repository markdown with a grouped search dialog (`/` / `Cmd+K`), a shortcuts panel with heading navigation, breadcrumbs, a mobile header with sidebar, and a docs footer. Plus a download page with per-platform install instructions, an About us page, a designed 404 page (`404.html` for GitHub Pages), favicon, SEO fixes and a11y/lint fixes. Deployed through the new `.github/workflows/deploy-website.yml` (GitHub Pages). ([`e67df22`](../../commit/e67df22), [`f926891`](../../commit/f926891), [`a7327dd`](../../commit/a7327dd), [`0bb6828`](../../commit/0bb6828))
-
-- **Build: new make targets:** `check`, `size` and `tiny` (`make tiny` = `BUILD=tiny`: `-Os -DNDEBUG -ffunction-sections -fdata-sections -flto` + `-Wl,--gc-sections` for a size-optimized binary). ([`58e9fcd`](../../commit/58e9fcd))
-
-- **Repo tooling:** Conventional-commit validation via `.husky/commit-msg` (accepts `feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert` with optional scope/`!`, skips merge/revert/fixup/squash lines). `CODEOWNERS` (`* @m-mdy-m`), `AGENTS.md` with AI-agent rules and skills, and `.gix/config` describing the gix branch flow (bugfix/feature topics off `develop`, merge up/downstream, `delete_on_finish`). ([`5461b3e`](../../commit/5461b3e), [`21be047`](../../commit/21be047), [`926fa9a`](../../commit/926fa9a))
-
-### Bug Fixes
-
-- **UTF-8 renderer hardening:** The C decoder no longer over-reads buffers, rejects overlong/surrogate/`> U+10FFFF` sequences (returns U+FFFD), caps width/draw loops and is NULL-safe for fonts and text. ([`8d654e7`](../../commit/8d654e7))
-
-- **Invalid UTF-8 from disk must not poison the buffer:** Files with broken byte sequences are sanitized on load instead of corrupting document lines. ([`aaf4a67`](../../commit/aaf4a67))
-
-- **UTF-8 display:** Fixed text rendering for multibyte characters, added a visual column (`colxy`) offset so the caret and status bar show the correct column for UTF-8 text, and fixed invalid-UTF-8 display bugs. ([`17541a6`](../../commit/17541a6), [`17389c1`](../../commit/17389c1))
-
-- **Scroll performance:** Editor lag and slowdown while scrolling is resolved (dirty-rect handling in the renderer cache). ([`9ebf8b2`](../../commit/9ebf8b2))
-
-- **Treeview git status:** When cdin was installed (rather than run from the checkout), Git status no longer appeared in the treeview — git now runs against the project directory instead of the process cwd. ([`c586d50`](../../commit/c586d50))
-
-- **Lua 5.1 compatibility:** `unpack` is a global in Lua 5.1, not `table.unpack`. ([`8785d57`](../../commit/8785d57))
-
-- **Lint/build:** Removed unused or misplaced code flagged by linting. ([`4b97a5b`](../../commit/4b97a5b))
-
-### Refactoring & Tooling
-
-- **Makefile cleanup:** The `test` and `bench` targets were removed; `check` and `size` replaced them. (Note: `.PHONY`/`help` still list `test`/`bench` — see Known issues.) ([`43b3484`](../../commit/43b3484), [`d9c4774`](../../commit/d9c4774))
-
-- **Base image bumps:** Docker base moved `ubuntu 22.04 → 26.04` via Dependabot and then back to `22.04` for SDL/package availability; `libasound` package updated. ([`646fcc9`](../../commit/646fcc9), [`63ec90b`](../../commit/63ec90b), [`4c22c62`](../../commit/4c22c62))
-
-- **Dependency updates:** CI actions (`docker/login-action` 3→4, `docker/setup-buildx-action` 3→4, `actions/download-artifact` 4→8, `actions/upload-pages-artifact` 4→5, `actions/configure-pages` 5→6) and website deps (`eslint` 10.11, `@types/node` 26.6.2, `typescript-eslint` 8.70, `globals` 17.12).
-
-- **Test cleanup:** Removed the old shell-based test/bench leftovers from the build scripts. ([`43b3484`](../../commit/43b3484))
-
-### Documentation
-
-- **Themes guide:** New docs section explaining how to add a theme (`docs/guides/themes.md`). ([`1ba6348`](../../commit/1ba6348))
-
-- **README:** Rewritten. ([`427e9b7`](../../commit/427e9b7))
-
-- **Repo docs:** `docs/.gitkeep` removed now that `docs/` has content. ([`ed24e02`](../../commit/ed24e02))
-
-- **Website docs:** The whole `website/` documentation set (markdown-driven docs pages, search, shortcuts, download instructions).
-
-### Configuration
-
-New configuration keys (`data/core/config.lua`):
-
-| Key | Default | Description |
-|---|---|---|
-| `direction` | `"auto"` | Base text direction: `auto` (per-line detection), `ltr`, or `rtl` |
-| `shaping_enabled` | `true` | Contextual Arabic/Persian presentation-form shaping |
-| `theme` | `"default"` | Startup theme name from `data/themes/` |
-| `theme_auto_reload` | `true` | Reload theme files on change (defined; not yet consumed by a watcher) |
-| `optional_plugins` | all `true` | Per-plugin enable flags for `data/plugins/optional/` |
-
-New keybindings (only active when the corresponding optional plugin is enabled):
-
-| Command | Default bind | Description |
-|---|---|---|
-| `rtl:toggle-direction` | `Ctrl+Alt+R` | Cycle text direction auto → ltr → rtl |
-| `rtl:toggle-shaping` | `Ctrl+Alt+S` | Toggle Arabic/Persian shaping |
-| `core:change-theme` | `Ctrl+Alt+T` | Fuzzy-pick a theme |
-| `unicode:inspect` | `Ctrl+Alt+U` | Show codepoints under the caret/selection |
-
-### Known issues and limitations
-
-- **`make check` / `make size` are broken:** both call scripts that do not exist in the repository yet (`scripts/check.py`, `scripts/bench.py`). `make test` and `make bench` targets were removed but are still listed in `.PHONY` and `make help`.
-- **Shaping is Lua-level, not HarfBuzz:** presentation forms are applied in `shaper.lua` (`config.shaping_enabled = false` disables it); no GSUB/GPOS, so Arabic kerning/mark positioning is not covered. Arabic coverage comes from `fallback.ttf` (Vazirmatn), which covers all checked base letters, Forms-A/B presentation forms and lam-alef ligatures; `font.ttf`/`monospace.ttf`/`icons.ttf`/`emoji.ttf` contain no Arabic.
-- **C-level test tiers (unit/integration/e2e) do not exist yet** — only the Lua suite (`tests/lua/`).
-- **`config.theme_auto_reload` is declared but no file watcher consumes it yet.**
-
-### Stability
-
-- The RTL path degrades safely: if `core.text` fails to load, lines render as plain LTR tokens; if `direction = "ltr"` or a line has no RTL characters, the original per-token drawing path is used unchanged.
-- The whole test suite (1587 asserts) is green on the release commit.
-- Beta cycle continues; APIs may still change before the first stable release.
-
-## [0.1.0] — 2026-09-25
-
-First stable release. The beta cycle (`0.1.0-beta.1` through `0.1.0-beta.7`) is over — no functional changes since `0.1.0-beta.7` beyond what's listed below, but the API and on-disk config are now considered stable within the `0.1.x` line.
-
-### Packaging
-
-- **Linux `.deb`:** Native Debian/Ubuntu package, built with `fpm` from the same `make install` layout. SDL3 is bundled alongside the binary (rewritten `RPATH` via `patchelf`), so no separate SDL3 install is needed. Installs a `.desktop` entry and hicolor icons. `sudo apt install ./cdin_0.1.0_amd64.deb`.
-- **Windows installer:** Native Inno Setup installer (`cdin-0.1.0-setup.exe`) built alongside the existing portable zip. Standard wizard, optional desktop shortcut, optional PATH registration, Start Menu entry, clean uninstall via *Settings › Apps*.
-- Both are built and attached automatically in CI on every tagged release, next to the existing tarball (Linux), zip (Windows), and DMG (macOS).
-
-### Features
-
-* Load the previous session before starting cdin.
-* Restore the last session state across application restarts.
-* Persist the selected theme across restarts.
-
-### Bug Fixes
-
-* Fix `qa` and `qa!` behavior for closing tabs and quitting cdin.
-* Fix session and theme persistence issues.
-
-### Improvements
-
-* Add logging for debugging and troubleshooting.
-
-## [0.1.1] — 2026-09-25
-
-Patch release focused on fixing an issue with mode transitions.
-
-### Bug Fixes
-
-* Fix an issue where pressing `Esc` after entering insert mode would leave the bottom status bar visible instead of properly returning to normal mode.
-
-## [0.1.2] — 2026-09-25
-
-### Bug Fixes
-
-- **Treeview auto-refresh:** Automatically rescan the project after saving a newly-created file so new files appear in the project tree without a manual refresh.
-- **File manager menu on Home:** Fixed `m` in Normal mode so the file manager menu can be opened when no document is currently active, including from the Home/empty view.
-- **Vim Visual mode indicator:** Hardened the `[VISUAL]` status indicator to read the Vim mode from the same active document view used by Vim mode itself, keeping the displayed mode synchronized with the actual Vim state.
-
-## [0.1.3] — 2026-09-25
-
-### Bug Fixes
-
-* **File manager menu — stale TreeView paths after `:cd`:** Fixed an issue where the file manager menu could continue using a stale TreeView item from the previous working directory after changing directories with `:cd`. Creating a new file or directory from `m` could therefore place it in the old directory instead of the current working directory.
-
-* **Context path validation:** TreeView and active document paths are now validated against the current working directory before being used as the context for file manager operations. If a stale or unrelated path is detected, the current working directory is used as the authoritative fallback.
-
-* **Windows path handling:** Path containment checks now normalize case on Windows, preventing incorrectly rejected or accepted paths when directory names differ only by letter casing.
