@@ -7,6 +7,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+* **`pre-release.yml` — every push gets its own version.** A push to `main` that is not documentation-only now builds Windows and Linux, reads the next version off the tag history and publishes a GitHub **prerelease** for that exact commit: `v0.2.1-alpha` → `v0.2.1-beta.1` → `v0.2.1-beta.2`, with the stage promoted (`alpha → beta → rc`) when it runs out and a new patch cycle opened after that. It reuses `release-linux.yml` and `release-windows.yml` rather than duplicating a build, and it publishes neither macOS nor Docker.
+
+  The release body says, in Persian and English, that this is not the official build, carries the `[Unreleased]` changelog and every commit since the previous pre-release, and lists each asset with its size. `release.yml` (and the three per-platform workflows) now ignore tags with a hyphen (`'!v*-*'`), so a pre-release tag cannot trigger a stable release or a Docker Hub push.
+
+* **`release-linux.yml` / `release-windows.yml` take a `version` input.** Left empty, both still derive the version from the tag being built, which is what a tag push gets. `pre-release.yml` passes the version it computed, which is what makes the two build paths the same build.
+
+* **`docker.yml` runs on pull requests only.** It never pushed, but it built an image on every push to `main` — including every push that produces a pre-release. A published image still comes from `release.yml` on a stable `vX.Y.Z` tag.
+
+### Fixed
+
+* **A `.deb` built from a pre-release version was rejected by `dpkg-deb`.** Debian reads the last hyphen as the boundary between the upstream version and the Debian revision, so `0.2.1-beta.1` is `0.2.1` + revision `beta.1`. The version is now rewritten to `0.2.1~beta.1`, which is valid and — because `~` sorts before an absent segment — orders *before* `0.2.1`. Stable versions carry no hyphen and are unchanged.
+
 ## [0.2.1-alpha] — 2026-10-04
 
 ### Fixed

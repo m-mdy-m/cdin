@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      # A pre-release tag (v0.2.1-beta.1) is NOT a stable release: it is built
+      # and published by pre-release.yml, for Windows and Linux only, with no
+      # Docker. Excluding it here is what keeps this workflow — and therefore
+      # the Docker Hub tags — on stable versions alone.
+      - '!v*-*'
   workflow_dispatch: {}
 
 permissions:

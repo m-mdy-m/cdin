@@ -4,8 +4,17 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      # Pre-release tags (v0.2.1-beta.1) belong to pre-release.yml: they are
+      # published as GitHub prereleases, never through the stable path.
+      - '!v*-*'
   workflow_dispatch: {}
   workflow_call:
+    inputs:
+      version:
+        description: "Version to bake into the package names (empty = derive it from the ref)"
+        required: false
+        type: string
+        default: ''
     outputs:
       artifact-name:
         description: "Name of the uploaded artifact"
@@ -204,15 +213,23 @@ jobs:
           [[ -n "$LUA_DLL" ]] && { cp "$LUA_DLL" "$OUT_DIR/"; echo "lua dll: OK"; } \
                               || echo "::warning::Lua DLL not found"
 
+      # ── Version for the package names ────────────────────────────────────
+      # pre-release.yml passes the version it computed for this commit; a tag
+      # push takes it from the tag; anything else is a local dev build.
       - name: Determine version
         id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          if [[ -n "${REQUESTED_VERSION}" ]]; then
+            VER="${REQUESTED_VERSION}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VER="${GITHUB_REF#refs/tags/}"
           else
             VER="dev-$(git rev-parse --short HEAD)"
           fi
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "version=${VER}"
 
       - name: Package zip
         run: |

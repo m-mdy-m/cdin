@@ -224,8 +224,51 @@ the **assembled** `build/…/data`, never the source `data/`.
 
 Platforms: Linux x86-64, Windows x86-64, macOS arm64 (a DMG). `release.yml`
 collects the artifacts and publishes them, and separately runs the Docker matrix
-— `linux/amd64` and `linux/arm64` natively, no QEMU. `docker.yml` is the
-single-platform path and `deploy-website.yml` is unrelated.
+— `linux/amd64` and `linux/arm64` natively, no QEMU. `docker.yml` validates the
+`Dockerfile` on pull requests only and never pushes; a published image comes from
+`release.yml` on a stable tag. `deploy-website.yml` is unrelated.
+
+### Pre-release
+
+`pre-release.yml` runs on every push to `main` that is not documentation-only,
+and gives that commit **its own semantic version** and its own GitHub
+**prerelease**. It reuses `release-linux.yml` and `release-windows.yml` — the
+same build the stable release runs, with the version passed in — and publishes
+Windows and Linux only. No macOS, no Docker, and no `latest`-style rolling tag:
+every commit keeps its number, so the previous pre-release stays downloadable
+instead of being overwritten.
+
+The next version is read off the tag history, never off a counter stored in
+GitHub, so the history *is* the state:
+
+| Newest tag | Becomes | Rule |
+|---|---|---|
+| `v0.2.1-alpha` | `v0.2.1-beta.1` | stage promoted |
+| `v0.2.1-beta.9` | `v0.2.1-beta.10` | counter incremented, numerically |
+| `v0.2.1-beta` | `v0.2.1-rc.1` | stage promoted |
+| `v0.2.1-rc.2` | `v0.2.1-rc.3` | counter incremented |
+| *no pre-release tag* | `v<newest stable + 1>-beta.1` | a new cycle opens |
+
+`alpha → beta → rc → next patch` is the ladder; a stage that has run out is
+promoted, and `rc` running out means the base is the next stable, so the cycle
+after it starts one patch higher. With no tags at all the newest `CHANGELOG.md`
+heading plays the role of the previous version.
+
+Three things follow from it being a prerelease rather than a release:
+
+- The tag lands on the pushed commit, and `release.yml` ignores every tag with a
+  hyphen (`'!v*-*'`), so a pre-release tag can never reach the stable path — and
+  can never reach Docker Hub.
+- `python3 cdin.py update` reads `/releases/latest`, which GitHub keeps clear of
+  prereleases, so an installed cdin never upgrades itself into a pre-release.
+- The `.deb` version turns `-` into `~` (`0.2.1~beta.1`): Debian reads the last
+  hyphen as the boundary between the upstream version and the revision, and `~`
+  is valid *and* sorts before the plain release. A stable version has no hyphen
+  and is untouched.
+
+A push does not cancel a run that is already building — it queues behind it.
+GitHub keeps only the newest *pending* run per branch, so commits pushed in
+quick succession while a build is in flight collapse into the last one.
 
 ## What to do before opening a pull request
 

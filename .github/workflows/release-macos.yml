@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      # Pre-release tags (v0.2.1-beta.1) belong to pre-release.yml, which
+      # publishes Windows and Linux only — macOS waits for a stable tag.
+      - '!v*-*'
   workflow_dispatch: {}
   workflow_call:
     outputs:

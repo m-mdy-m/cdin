@@ -4,8 +4,17 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      # Pre-release tags (v0.2.1-beta.1) belong to pre-release.yml: they are
+      # published as GitHub prereleases, never through the stable path.
+      - '!v*-*'
   workflow_dispatch: {}
   workflow_call:
+    inputs:
+      version:
+        description: "Version to bake into the package names (empty = derive it from the ref)"
+        required: false
+        type: string
+        default: ''
     outputs:
       artifact-name:
         description: "Name of the uploaded artifact"
@@ -146,15 +155,39 @@ jobs:
           echo "Binary: $BIN  ($(du -sh "$BIN" | cut -f1))"
           echo "BIN_PATH=$BIN" >> "$GITHUB_ENV"
 
+      # ── Version for the package names ────────────────────────────────────
+      # pre-release.yml passes the version it computed for this commit; a tag
+      # push takes it from the tag; anything else is a local dev build.
       - name: Determine version
         id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          if [[ -n "${REQUESTED_VERSION}" ]]; then
+            VER="${REQUESTED_VERSION}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VER="${GITHUB_REF#refs/tags/}"
           else
             VER="dev-$(git rev-parse --short HEAD)"
           fi
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+          # Debian reads the last hyphen as the boundary between the upstream
+          # version and the Debian revision, so `0.2.1-beta.1` would be read as
+          # upstream 0.2.1 + revision beta.1. `~` is valid there and sorts
+          # *before* the plain release — the right way round for a
+          # pre-release. A stable version carries no hyphen and is untouched.
+          #
+          # sed, not ${VER//-/~}: bash expands a `~` that appears in a
+          # parameter substitution, which would quietly turn `~beta` into
+          # `~<username>` — and fpm would then be handed a home directory.
+          DEB_VER="$(printf '%s' "${VER#v}" | sed 's/-/~/')"
+
+          {
+            echo "version=${VER}"
+            echo "deb-version=${DEB_VER}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "version=${VER}  (deb ${DEB_VER})"
 
       - name: Package tarball
         run: |
@@ -234,8 +267,7 @@ jobs:
 
       - name: Build .deb package
         run: |
-          VER="${{ steps.version.outputs.version }}"
-          DEB_VER="${VER#v}"
+          DEB_VER="${{ steps.version.outputs.deb-version }}"
 
           fpm -s dir -t deb \
             -C "dist/deb-root" \
@@ -257,8 +289,7 @@ jobs:
 
       - name: Verify .deb installs cleanly
         run: |
-          VER="${{ steps.version.outputs.version }}"
-          DEB_VER="${VER#v}"
+          DEB_VER="${{ steps.version.outputs.deb-version }}"
           sudo apt-get install -y "./dist/cdin_${DEB_VER}_amd64.deb"
           command -v cdin
           dpkg -L cdin | head -20

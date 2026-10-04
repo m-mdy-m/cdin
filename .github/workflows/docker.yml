@@ -1,8 +1,10 @@
 name: Docker
 
+# Pull requests only. A push to main must not build an image:
+#   - pre-release.yml is the path that main takes, and it publishes Windows
+#     and Linux, never a container;
+#   - a stable image is built and published by release.yml on a vX.Y.Z tag.
 on:
-  push:
-    branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
@@ -10,8 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  # Job 1: build the image on every PR/push — never pushes;
-  #        tag releases are published to Docker Hub by release.yml
+  # Validates the Dockerfile (build only, `push: false`); tag releases are
+  # published to Docker Hub by release.yml.
   build:
     name: Build
     runs-on: ubuntu-latest
