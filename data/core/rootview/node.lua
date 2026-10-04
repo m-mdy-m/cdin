@@ -161,9 +161,11 @@ function Node:get_children(t)
   return t
 end
 
+local DIVIDER_GRAB_CELLS = 6
+
 function Node:get_divider_overlapping_point(px, py)
   if self.type == "leaf" then return nil end
-  local p = 6
+  local p = DIVIDER_GRAB_CELLS * SCALE
   local x, y, w, h = self:get_divider_rect()
   if px > x-p and py > y-p and px < x+w+p and py < y+h+p then
     return self
@@ -232,6 +234,48 @@ function Node:get_locked_size()
       return x1 + x2 + dsx, y1 + y2 + dsy
     end
   end
+end
+
+function Node:get_locked_leaf()
+  if self.type == "leaf" then
+    return self.locked and self or nil
+  end
+  return self.a:get_locked_leaf() or self.b:get_locked_leaf()
+end
+
+function Node:get_locked_pane()
+  if self.type == "leaf" then return nil end
+  local a = self.a:get_locked_leaf()
+  if a then return "a", a end
+  local b = self.b:get_locked_leaf()
+  if b then return "b", b end
+  return nil
+end
+
+local MIN_PANE_CELLS = 8
+
+function Node:drag_divider(dx, dy)
+  local axis  = (self.type == "hsplit") and "x" or "y"
+  local delta = (axis == "x") and dx or dy
+
+  local side, leaf = self:get_locked_pane()
+  local view = leaf and leaf.active_view or nil
+  if view and type(view.set_locked_size) == "function" then
+    -- "a" grows as the pointer moves right and "b" shrinks: the divider is one
+    -- edge shared by two panes, and only one of them can answer for it.
+    local width = view.size[axis] + (side == "a" and delta or -delta)
+    -- Both ends clamp. A pane narrower than its own edge cannot be grabbed
+    -- again, so an overshooting drag would have to be undone by disabling the
+    -- plugin rather than by dragging back; and `calc_split_sizes` will happily
+    -- hand the sibling a negative size if the pane claims the whole split.
+    local least = MIN_PANE_CELLS * SCALE
+    local most  = math.max(self.size[axis] - least - style.divider_size, least)
+    view:set_locked_size(axis, common.clamp(width, least, most))
+    return
+  end
+
+  local span = self.size[axis]
+  self.divider = common.clamp(self.divider + delta / span, 0.01, 0.99)
 end
 
 local function copy_pos_size(dst, src)

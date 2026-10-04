@@ -258,6 +258,13 @@ Also registered, unbound by default:
 | `root:shrink` / `root:grow` | move the divider 0.1 toward this pane |
 | `root:split-{left,right,up,down}` | the four splits, by name |
 
+**The mouse resizes any split, locked or not.** Drag a divider and the pointer
+turns into a resize arrow over it; drag it and the pane on the other side takes
+the width. For a locked pane there is no divider for the layout to move, so the
+drag is routed to the pane itself as `set_locked_size(axis, value)` — which is
+why `root:shrink` / `root:grow` are unbound for one and the mouse is not. See
+[side panels](../architecture/extension-contract.md#side-panels).
+
 **A pane holds several views; the layout is a tree.** `root:switch-to-pane-view-N`
 reaches view *N inside the active pane*, which is not the same as tab N —
 tabs are a cdin-x plugin with its own concept, and the two used to share a word.

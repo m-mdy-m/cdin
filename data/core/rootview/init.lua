@@ -190,13 +190,7 @@ end
 
 function RootView:on_mouse_moved(x, y, dx, dy)
   if self.dragged_divider then
-    local node = self.dragged_divider
-    if node.type == "hsplit" then
-      node.divider = node.divider + dx / node.size.x
-    else
-      node.divider = node.divider + dy / node.size.y
-    end
-    node.divider = common.clamp(node.divider, 0.01, 0.99)
+    self.dragged_divider:drag_divider(dx, dy)
     return
   end
 
