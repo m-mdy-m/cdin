@@ -330,6 +330,28 @@ lands in the content region.
 from its view, and each locked pane in a split is given the width it asked for —
 so two panels side by side are two columns, not one column and one remainder.
 
+**A locked pane is resized by dragging its edge, and the drag arrives as a method
+call.** `calc_split_sizes` reads a locked child's size and never reads
+`node.divider` when either child has one, so a splitter drag on such a split has
+no divider to move. The runtime therefore asks the pane instead:
+
+```lua
+function MyPanel:set_locked_size(axis, value)   -- axis is "x" or "y"
+  self.width = common.clamp(value, self.min_width, self:max_width())
+end
+```
+
+`value` is the new size **along `axis`**, already clamped by the runtime to eight
+cells and to whatever leaves the sibling eight; clamp it again against your own
+minimum, because the runtime does not know one. A vertical split asks about `"y"`,
+and the honest answer to that is to refuse the call rather than to resize anyway —
+a panel that quietly changed height when its horizontal edge was dragged is worse
+than one that does not resize. A locked pane whose view has no `set_locked_size`
+still drags, onto the divider, which is what happened before and is the honest
+outcome for a view that never implemented the write side.
+
+This is the pair of `get_locked_size`, which the layout reads on every frame.
+
 `detach_view` is the counterpart, and an extension that attaches should detach
 in `unload`: a disabled extension that leaves its pane behind is an empty column
 the user has no key to close. An emptied pane collapses into its sibling, unless
